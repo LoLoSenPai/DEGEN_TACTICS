@@ -1,0 +1,44 @@
+:root {
+  --void: #030609;
+  --surface-0: #0a1014;
+  --surface-1: #10181d;
+  --surface-2: #172229;
+  --surface-3: #223039;
+  --line: #2d3c44;
+  --line-bright: #596a73;
+  --ink: #f0eee7;
+  --ink-soft: #aab5ba;
+  --muted: #77858c;
+  --teal: #42dcca;
+  --teal-soft: #155d59;
+  --cyan: #51bfee;
+  --gold: #e2a92e;
+  --red: #f1534c;
+  --red-deep: #9f2d30;
+  --violet: #a75cf4;
+  --purple: #7634b8;
+  --paper-pale: #f0eee7;
+  --paper-deep: #aab5ba;
+  --wood: #11191e;
+  --wood-dark: #05090c;
+  --shadow-panel: 0 12px 30px rgba(0, 0, 0, 0.48);
+  --game-font-body: var(--font-barlow-condensed), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --game-font-display: var(--font-bangers), Impact, fantasy;
+  --game-font-mono: var(--font-barlow-condensed), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-void: var(--void);
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-teal: var(--teal);
+  --color-cyan: var(--cyan);
+  --color-gold: var(--gold);
+  --color-danger: var(--red);
+  --color-violet: var(--violet);
+}

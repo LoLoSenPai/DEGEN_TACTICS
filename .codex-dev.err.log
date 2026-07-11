@@ -1,0 +1,32 @@
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\loicd\Documents\DEGEN_TACTICS\.next\server\app-paths-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\loicd\\Documents\\DEGEN_TACTICS\\.next\\server\\app-paths-manifest.json',
+  page: '/'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\loicd\Documents\DEGEN_TACTICS\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\loicd\\Documents\\DEGEN_TACTICS\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\loicd\Documents\DEGEN_TACTICS\.next\server\app-paths-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\loicd\\Documents\\DEGEN_TACTICS\\.next\\server\\app-paths-manifest.json',
+  page: '/'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\loicd\Documents\DEGEN_TACTICS\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\loicd\\Documents\\DEGEN_TACTICS\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\loicd\Documents\DEGEN_TACTICS\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\loicd\\Documents\\DEGEN_TACTICS\\.next\\routes-manifest.json'
+}

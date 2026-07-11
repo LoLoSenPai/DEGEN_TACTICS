@@ -1,0 +1,40 @@
+
+> degen-tactics@0.1.0 dev C:\Users\loicd\Documents\DEGEN_TACTICS
+> next dev
+
+   ▲ Next.js 15.5.12
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.90:3000
+
+ ✓ Starting...
+ ✓ Ready in 6.2s
+ ○ Compiling / ...
+ ✓ Compiled / in 14.5s (9705 modules)
+ GET / 200 in 121ms
+ GET / 200 in 228ms
+ ○ Compiling /battle/protect-the-vault ...
+ ✓ Compiled /battle/protect-the-vault in 4s (9773 modules)
+ GET /battle/protect-the-vault 200 in 4574ms
+ GET /battle/protect-the-vault 200 in 92ms
+ GET / 200 in 146ms
+ GET /battle/protect-the-vault 200 in 128ms
+ GET / 200 in 136ms
+ GET /battle/protect-the-vault 200 in 84ms
+ GET /battle/protect-the-vault 200 in 207ms
+ GET / 200 in 144ms
+ GET /battle/protect-the-vault 200 in 152ms
+ GET / 200 in 82ms
+ GET /battle/protect-the-vault 200 in 141ms
+ GET /battle/protect-the-vault 200 in 93ms
+ GET / 200 in 102ms
+ GET /battle/protect-the-vault 200 in 95ms
+ GET / 200 in 76ms
+ GET /battle/protect-the-vault 200 in 82ms
+ GET /battle/protect-the-vault 200 in 61ms
+ GET / 200 in 76ms
+ GET /battle/protect-the-vault 200 in 76ms
+ ✓ Compiled in 3.1s (4820 modules)
+ GET / 200 in 109ms
+ GET / 200 in 174ms
+ GET / 200 in 150ms
+ GET /battle/protect-the-vault?intro=1 200 in 70ms
