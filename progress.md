@@ -34,6 +34,22 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Replayed a deliberate defeat into the redesigned results screen and confirmed score/outcome data, Retry/Title controls, and an empty console error log.
 - Final gates after the game-first asset and typography fixes: lint passed with zero warnings, strict typecheck passed, all 38 tests passed, and the Next.js production build generated all 9 static pages.
 
+## 2026-07-12 — Onboarding and sprite registration
+
+- Audited the transparent content bounds of every board sprite. The source files use incompatible square, portrait, and landscape canvases, which made a shared CSS scale impossible.
+- Added per-role scale and ground-anchor rules so Guardian, Sniper, Pusher, Ruggers, and Drainer remain inside their cells with consistent visual weight; raised the shared team bases and normalized the Vault, Data Block, Whale, and obstacle registrations.
+- Added player-attack damage effects so guided attacks now produce the same event-derived damage popup and heavy-hit hooks as enemy damage.
+- Implemented a persisted first-battle interactive tutorial: objective/intents overview, select Guardian D3, move to D2, choose Attack, strike Rugger D1, read exact intents, commit End Turn, watch resolution, then release control on Turn 2.
+- Tutorial input policy blocks unrelated tiles, buttons, Space, and Undo without hiding future actions. Skip persists immediately; Options can replay the guide on the next battle.
+- Extended `window.render_game_to_text()` with tutorial step, allowed coordinate, and allowed action for deterministic browser QA.
+- Added `docs/gpt-image-prompts-batch-01.md` with copy-paste prompts for a normalized Guardian master/idle sheet, a modular enemy-intent path kit, and a three-state action-button master.
+- Replayed the complete tutorial, persistence, replay, skip, keyboard blocking, 1280×720, 1024×768, and phone-notice flows with zero captured console errors.
+- Final gates passed: lint with zero warnings, strict typecheck, all 38 tests, and the 9-page Next.js production build.
+- Re-measured the baked 1254x1254 battlefield at source-pixel level after a reported interaction-layer drift. Replaced the approximate 2.55% inset with the authored rail bounds (x 59-1199, y 54-1183), exact seven-track proportions, and removed hover scaling that expanded tile outlines beyond their rails.
+- Added `output/grid-alignment-qa.mjs`, which projects the frozen source rail coordinates into browser space and asserts all eight horizontal/vertical boundaries at 1024x768, 1280x720, 1440x900, and 2048x1245. Maximum measured drift is 0.043 CSS px; diagnostic screenshots and console logs passed.
+- Replayed the complete interactive tutorial after grid calibration; D3 selection, D2 movement, D1 attack, enemy resolution, persistence, replay, and skip remain functional with zero captured console errors.
+- Post-calibration gates passed: lint with zero warnings, strict typecheck, all 38 tests, and a clean optimized production build of all 9 static pages.
+
 ## Final verification (original slice)
 
 - Passed `pnpm lint` with zero warnings, strict `pnpm typecheck`, all 38 `pnpm test` cases, and the optimized Next.js 15 production build.

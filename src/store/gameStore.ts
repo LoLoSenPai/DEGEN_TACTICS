@@ -219,6 +219,10 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
 function effectsFromEvents(events: readonly GameEvent[]): BattleEffect[] {
   const effects: BattleEffect[] = [];
   for (const event of events) {
+    if (event.type === "unit-attacked") {
+      effectId += 1;
+      effects.push({ id: effectId, kind: event.damage >= 4 ? "heavy" : "damage", targetId: event.enemyId, amount: event.damage });
+    }
     if (event.type === "damage") {
       effectId += 1;
       effects.push({ id: effectId, kind: event.amount >= 4 ? "heavy" : "damage", targetId: event.targetId, amount: event.amount });

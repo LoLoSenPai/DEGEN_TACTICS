@@ -16,7 +16,9 @@ import { useGameStore } from "@/store/gameStore";
 export function TitleScreen() {
   const router = useRouter();
   const hydrated = useGameStore((state) => state.hydrated);
+  const tutorialComplete = useGameStore((state) => state.settings.tutorialComplete);
   const startMission = useGameStore((state) => state.startMission);
+  const setTutorialComplete = useGameStore((state) => state.setTutorialComplete);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -82,6 +84,10 @@ export function TitleScreen() {
               <button type="button" className="option-row" onClick={() => setReducedMotion((value) => !value)} aria-pressed={reducedMotion}>
                 <span><strong>Motion</strong><small>Menu ambience and UI pulses</small></span>
                 <b>{reducedMotion ? "Reduced" : "On"}</b>
+              </button>
+              <button type="button" className="option-row" onClick={() => setTutorialComplete(false)} disabled={!tutorialComplete}>
+                <span><strong>Combat tutorial</strong><small>{tutorialComplete ? "Replay from the next battle" : "Ready for the next battle"}</small></span>
+                <b>{tutorialComplete ? "Replay" : "Ready"}</b>
               </button>
               <button type="button" className="option-row" onClick={toggleFullscreen}>
                 <span><strong>Fullscreen</strong><small>Keyboard shortcut: F</small></span>

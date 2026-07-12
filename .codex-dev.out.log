@@ -7,29 +7,52 @@
    - Network:      http://192.168.1.90:3000
 
  ✓ Starting...
- ✓ Ready in 3.3s
+ ✓ Ready in 2.8s
  ○ Compiling / ...
- ✓ Compiled / in 7.2s (9732 modules)
- GET / 200 in 82ms
- GET / 200 in 1055ms
+ ✓ Compiled / in 6.4s (9719 modules)
+ GET / 200 in 6803ms
  ○ Compiling /battle/protect-the-vault ...
- ✓ Compiled /battle/protect-the-vault in 3.4s (9800 modules)
- GET /battle/protect-the-vault?intro=1 200 in 3668ms
- GET /battle/protect-the-vault?intro=1 200 in 30ms
- ✓ Compiled in 1819ms (9800 modules)
- GET /battle/protect-the-vault 200 in 265ms
- ✓ Compiled in 1856ms (9787 modules)
- GET /battle/protect-the-vault 200 in 315ms
- ✓ Compiled in 1587ms (9800 modules)
- GET /battle/protect-the-vault 200 in 151ms
- GET /battle/protect-the-vault 200 in 100ms
- ✓ Compiled in 1919ms (9800 modules)
- GET /battle/protect-the-vault 200 in 329ms
- GET /battle/protect-the-vault 200 in 58ms
- GET / 200 in 84ms
- GET /battle/protect-the-vault?intro=1 200 in 32ms
+ ✓ Compiled /battle/protect-the-vault in 2.6s (9785 modules)
+ GET /battle/protect-the-vault 200 in 2979ms
+ ✓ Compiled in 1216ms (4823 modules)
+ GET /battle/protect-the-vault?intro=1 200 in 92ms
+ GET /battle/protect-the-vault?intro=1 200 in 64ms
+ ○ Compiling /icon.svg ...
+ ✓ Compiled /icon.svg in 1249ms (4979 modules)
+ GET /icon.svg?cef005b11d57efe0 200 in 1412ms
+ GET /battle/protect-the-vault 200 in 258ms
+ GET /battle/protect-the-vault 200 in 90ms
+ GET /battle/protect-the-vault 200 in 59ms
+ GET /battle/protect-the-vault 200 in 69ms
+ GET /battle/protect-the-vault?intro=1 200 in 46ms
+ GET /battle/protect-the-vault?intro=1 200 in 74ms
+ GET /icon.svg?cef005b11d57efe0 200 in 15ms
+ ✓ Compiled in 1841ms (9798 modules)
+ GET /battle/protect-the-vault?intro=1 200 in 233ms
+ GET /battle/protect-the-vault 200 in 240ms
+ GET /battle/protect-the-vault 200 in 72ms
+ GET /battle/protect-the-vault 200 in 65ms
+ GET /battle/protect-the-vault 200 in 71ms
+ GET /battle/protect-the-vault 200 in 71ms
+ GET /battle/protect-the-vault 200 in 62ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1037ms (4969 modules)
+ GET / 200 in 1369ms
+ GET / 200 in 67ms
+ GET /battle/protect-the-vault?intro=1 200 in 35ms
+ GET /battle/protect-the-vault 200 in 116ms
+ GET / 200 in 59ms
+ GET /battle/protect-the-vault?intro=1 200 in 33ms
+ ✓ Compiled in 1226ms (4823 modules)
+ GET /battle/protect-the-vault?intro=1 200 in 43ms
  ○ Compiling /_error ...
- ✓ Compiled /_error in 5.3s (10133 modules)
- GET / 500 in 9728ms
- ✓ Compiled in 2.6s (10146 modules)
+ ✓ Compiled /_error in 2.9s (10117 modules)
+ GET /battle/protect-the-vault 500 in 8222ms
+ GET /battle/protect-the-vault 500 in 439ms
+ GET /battle/protect-the-vault?intro=1 500 in 6487ms
+ GET /battle/protect-the-vault?intro=1 500 in 346ms
+ GET /battle/protect-the-vault?intro=1 500 in 1067ms
+ GET /battle/protect-the-vault?intro=1 500 in 282ms
+ GET /battle/protect-the-vault?intro=1 500 in 1139ms
+ GET /battle/protect-the-vault?intro=1 500 in 293ms
 [?25h

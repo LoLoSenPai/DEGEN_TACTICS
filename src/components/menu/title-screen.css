@@ -385,9 +385,14 @@
   cursor: pointer;
 }
 
-.option-row:hover {
+.option-row:hover:not(:disabled) {
   border-color: #4fcfbd;
   background-color: #111d21;
+}
+
+.option-row:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .option-row span,

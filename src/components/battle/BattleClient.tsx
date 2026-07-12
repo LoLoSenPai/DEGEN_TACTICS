@@ -31,6 +31,7 @@ import {
   type PushTarget,
 } from "@/lib/game";
 import { useGameStore, type ActionMode, type CombatLogEntry } from "@/store/gameStore";
+import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/BattleTutorial";
 
 declare global {
   interface Window {
@@ -58,6 +59,17 @@ type SpriteKind = keyof typeof SPRITE_ASSETS;
 const positionKey = ({ x, y }: Position) => `${x},${y}`;
 const samePosition = (left: Position, right: Position) => left.x === right.x && left.y === right.y;
 const coordinate = ({ x, y }: Position) => `${COLUMNS[x] ?? "?"}${y + 1}`;
+
+function tutorialCoordinate(step: BattleTutorialStep) {
+  if (step === "select-guardian") return "D3";
+  if (step === "move-guardian") return "D2";
+  if (step === "attack-rugger") return "D1";
+  return null;
+}
+
+function tutorialRestrictsInput(step: BattleTutorialStep) {
+  return step !== null && step !== "complete";
+}
 
 function entityName(game: GameState, id: string) {
   if (id === game.vault.id) return game.vault.name;
@@ -250,6 +262,7 @@ function Board({
   selectedUnitId,
   actionMode,
   inspectedId,
+  tutorialStep,
   disabled,
   onTile,
 }: {
@@ -258,6 +271,7 @@ function Board({
   selectedUnitId: string | null;
   actionMode: ActionMode;
   inspectedId: string | null;
+  tutorialStep: BattleTutorialStep;
   disabled: boolean;
   onTile: (position: Position) => void;
 }) {
@@ -323,9 +337,11 @@ function Board({
   const positions = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, index): Position => ({ x: index % BOARD_SIZE, y: Math.floor(index / BOARD_SIZE) }));
   const heavyImpact = effects.some((effect) => effect.kind === "heavy");
   const vaultThreatened = intentData.danger.has(positionKey(game.vault.position));
+  const tutorialTargetCoordinate = tutorialCoordinate(tutorialStep);
+  const tutorialRestricted = tutorialRestrictsInput(tutorialStep);
 
   return (
-    <div ref={boardRef} className={clsx("game-board-frame", heavyImpact && "is-shaking", vaultThreatened && "is-vault-threatened")} aria-label="Vault District tactical grid">
+    <div ref={boardRef} className={clsx("game-board-frame", heavyImpact && "is-shaking", vaultThreatened && "is-vault-threatened", tutorialStep === "read-intents" && "is-tutorial-intents")} aria-label="Vault District tactical grid">
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
         {positions.map((position) => {
           const key = positionKey(position);
@@ -345,6 +361,13 @@ function Board({
           const effect = entityId ? [...effects].reverse().find((candidate) => candidate.targetId === entityId) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
+          const tileCoordinate = coordinate(position);
+          const isTutorialFocus = tileCoordinate === tutorialTargetCoordinate;
+          const tutorialTileAllowed = isTutorialFocus && (
+            (tutorialStep === "select-guardian" && unit?.id === "guardian")
+            || (tutorialStep === "move-guardian" && !unit && !enemy && !object && !obstacle && !isVault)
+            || (tutorialStep === "attack-rugger" && enemy?.id === "rugger-north")
+          );
 
           return (
             <button
@@ -363,12 +386,14 @@ function Board({
                 isDanger && "is-danger",
                 intentData.locked.has(key) && "is-locked-danger",
                 pathMarkers.length > 0 && "is-intent-path",
+                isTutorialFocus && "is-tutorial-focus",
               )}
               onClick={() => onTile(position)}
-              disabled={disabled || game.phase !== "player"}
+              disabled={disabled || game.phase !== "player" || (tutorialRestricted && !tutorialTileAllowed)}
               aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, isDanger })}
               aria-selected={isSelected}
-              data-coordinate={coordinate(position)}
+              data-coordinate={tileCoordinate}
+              data-tutorial-target={isTutorialFocus ? tutorialStep ?? undefined : undefined}
             >
               <span className="game-tile-coordinate" aria-hidden="true">{coordinate(position)}</span>
               {isDanger ? <Warning className="game-danger-icon" weight="fill" aria-hidden="true" /> : null}
@@ -417,6 +442,7 @@ function ActionBar({
   selected,
   actionMode,
   hasUndo,
+  tutorialStep,
   disabled,
   log,
   onMode,
@@ -428,6 +454,7 @@ function ActionBar({
   selected?: PlayerUnit;
   actionMode: ActionMode;
   hasUndo: boolean;
+  tutorialStep: BattleTutorialStep;
   disabled: boolean;
   log: readonly CombatLogEntry[];
   onMode: (mode: ActionMode) => void;
@@ -439,6 +466,9 @@ function ActionBar({
   const canMove = Boolean(selected && selected.hp > 0 && !selected.hasMoved && !selected.hasActed);
   const canAct = Boolean(selected && selected.hp > 0 && !selected.hasActed);
   const canSignature = Boolean(selected?.signatureAvailable && canAct && (selected.role !== "sniper" || !selected.hasMoved));
+  const tutorialRestricted = tutorialRestrictsInput(tutorialStep);
+  const tutorialAllowsAttack = tutorialStep === "choose-attack" || tutorialStep === "attack-rugger";
+  const tutorialAllowsEndTurn = tutorialStep === "end-turn";
   const hint = !selected
     ? "Select a hero"
     : selected.hasActed
@@ -449,7 +479,13 @@ function ActionBar({
           ? "Choose a cyan enemy"
           : actionMode === "push" || actionMode === "ability"
             ? "Choose a highlighted target"
-            : "Move once, then act";
+            : selected.role === "guardian"
+              ? "Shield Wall lets nearby allies absorb one enemy hit"
+              : selected.role === "sniper" && !selected.hasMoved
+                ? "Deadeye deals 4 damage, but only before moving"
+                : selected.role === "pusher"
+                  ? "Shove enemies or the Data Block · blocked enemies take collision damage"
+                  : "Move once, then act";
   const lastLog = log.at(-1)?.text;
 
   return (
@@ -457,28 +493,28 @@ function ActionBar({
       <div className="game-action-hint" aria-live="polite">
         <span>{hint}</span>
         {lastLog ? <small>{lastLog}</small> : null}
-        {hasUndo ? <button type="button" onClick={onUndo} disabled={disabled}><ArrowUUpLeft weight="bold" /> Undo move</button> : null}
+        {hasUndo ? <button type="button" onClick={onUndo} disabled={disabled || tutorialRestricted}><ArrowUUpLeft weight="bold" /> Undo move</button> : null}
       </div>
       <nav className="game-action-bar" aria-label="Battle actions">
-        <button type="button" className={clsx("game-action-button action-move", actionMode === "move" && "is-active")} onClick={() => onMode("move")} disabled={disabled || !canMove} aria-keyshortcuts="1">
+        <button type="button" className={clsx("game-action-button action-move", actionMode === "move" && "is-active")} onClick={() => onMode("move")} disabled={disabled || !canMove || tutorialRestricted} aria-keyshortcuts="1">
           <Boot weight="fill" /><span>Move</span><kbd>1</kbd>
         </button>
-        <button type="button" className={clsx("game-action-button action-attack", actionMode === "attack" && "is-active")} onClick={() => onMode("attack")} disabled={disabled || !canAct} aria-keyshortcuts="2">
+        <button type="button" className={clsx("game-action-button action-attack", actionMode === "attack" && "is-active", tutorialStep === "choose-attack" && "is-tutorial-focus")} onClick={() => onMode("attack")} disabled={disabled || !canAct || (tutorialRestricted && !tutorialAllowsAttack)} aria-keyshortcuts="2" data-tutorial-target={tutorialStep === "choose-attack" ? "attack" : undefined}>
           <Sword weight="fill" /><span>Attack</span><kbd>2</kbd>
         </button>
         {selected?.role === "pusher" ? (
-          <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active")} onClick={() => onMode("push")} disabled={disabled || !canAct}>
+          <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active")} onClick={() => onMode("push")} disabled={disabled || !canAct || tutorialRestricted}>
             <HandGrabbing weight="fill" /><span>Shove</span><kbd>S</kbd>
           </button>
         ) : null}
-        <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active")} onClick={onAbility} disabled={disabled || !canSignature} aria-keyshortcuts="3">
+        <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active")} onClick={onAbility} disabled={disabled || !canSignature || tutorialRestricted} aria-keyshortcuts="3">
           {selected?.role === "guardian" ? <Shield weight="fill" /> : selected?.role === "pusher" ? <HandFist weight="fill" /> : <Target weight="fill" />}
           <span>{selected?.signatureName ?? "Ability"}</span><kbd>3</kbd>
         </button>
-        <button type="button" className="game-action-button action-wait" onClick={onWait} disabled={disabled || !canAct}>
+        <button type="button" className="game-action-button action-wait" onClick={onWait} disabled={disabled || !canAct || tutorialRestricted}>
           <Hourglass weight="fill" /><span>Wait</span><kbd>W</kbd>
         </button>
-        <button type="button" className="game-end-turn" onClick={onEndTurn} disabled={disabled} aria-keyshortcuts="Space">
+        <button type="button" className={clsx("game-end-turn", tutorialStep === "end-turn" && "is-tutorial-focus")} onClick={onEndTurn} disabled={disabled || (tutorialRestricted && !tutorialAllowsEndTurn)} aria-keyshortcuts="Space" data-tutorial-target={tutorialStep === "end-turn" ? "end-turn" : undefined}>
           <span>End turn</span><ArrowFatRight weight="fill" />
         </button>
       </nav>
@@ -500,6 +536,7 @@ function MobileNotice() {
 export function BattleClient() {
   const router = useRouter();
   const initialized = useRef(false);
+  const tutorialStarted = useRef(false);
   const virtualTime = useRef(0);
   const game = useGameStore((state) => state.game);
   const enemyPlan = useGameStore((state) => state.enemyPlan);
@@ -512,6 +549,7 @@ export function BattleClient() {
   const turnBanner = useGameStore((state) => state.turnBanner);
   const effects = useGameStore((state) => state.effects);
   const log = useGameStore((state) => state.log);
+  const tutorialComplete = useGameStore((state) => state.settings.tutorialComplete);
   const startMission = useGameStore((state) => state.startMission);
   const ensureIdentity = useGameStore((state) => state.ensureIdentity);
   const selectUnit = useGameStore((state) => state.selectUnit);
@@ -524,8 +562,10 @@ export function BattleClient() {
   const undoMove = useGameStore((state) => state.undoMove);
   const endTurn = useGameStore((state) => state.endTurn);
   const clearEffects = useGameStore((state) => state.clearEffects);
+  const setTutorialComplete = useGameStore((state) => state.setTutorialComplete);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [introVisible, setIntroVisible] = useState(true);
+  const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const controlsLocked = isResolving || introVisible;
@@ -551,6 +591,41 @@ export function BattleClient() {
     const timeout = window.setTimeout(() => setIntroVisible(false), 2050);
     return () => window.clearTimeout(timeout);
   }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || introVisible || !game || tutorialComplete || tutorialStarted.current || window.innerWidth < 1024) return;
+    const guardian = game.units.find((unit) => unit.id === "guardian");
+    const rugger = game.enemies.find((enemy) => enemy.id === "rugger-north");
+    const isCanonicalStart = game.turn === 1
+      && guardian?.position.x === 3
+      && guardian.position.y === 2
+      && rugger?.position.x === 3
+      && rugger.position.y === 0;
+    if (!isCanonicalStart) return;
+    tutorialStarted.current = true;
+    setTutorialStep("welcome");
+  }, [game, hydrated, introVisible, tutorialComplete]);
+
+  useEffect(() => {
+    if (!game || !tutorialStep) return;
+    const guardian = game.units.find((unit) => unit.id === "guardian");
+    const rugger = game.enemies.find((enemy) => enemy.id === "rugger-north");
+
+    if (tutorialStep === "select-guardian" && selectedUnitId === "guardian") {
+      setTutorialStep("move-guardian");
+    } else if (tutorialStep === "move-guardian" && guardian?.hasMoved && guardian.position.x === 3 && guardian.position.y === 1) {
+      setTutorialStep("choose-attack");
+    } else if (tutorialStep === "choose-attack" && actionMode === "attack") {
+      setTutorialStep("attack-rugger");
+    } else if (tutorialStep === "attack-rugger" && guardian?.hasActed && rugger?.hp === 4) {
+      setTutorialStep("read-intents");
+    } else if (tutorialStep === "end-turn" && isResolving) {
+      setTutorialStep("watch-enemy");
+    } else if (tutorialStep === "watch-enemy" && !isResolving && game.turn === 2 && turnBanner === null) {
+      setTutorialComplete(true);
+      setTutorialStep("complete");
+    }
+  }, [actionMode, game, isResolving, selectedUnitId, setTutorialComplete, turnBanner, tutorialStep]);
 
   useEffect(() => {
     if (effects.length === 0) return;
@@ -594,6 +669,12 @@ export function BattleClient() {
       enemies: game.enemies.map((enemy) => ({ id: enemy.id, kind: enemy.kind, at: coordinate(enemy.position), hp: enemy.hp, whaleState: enemy.whaleState })),
       objects: game.objects.map((object) => ({ id: object.id, at: coordinate(object.position) })),
       exactEnemyPlan: enemyPlan?.intents.map((intent) => ({ order: intent.order, enemyId: intent.enemyId, action: intent.action, path: intent.path.map(coordinate), destination: coordinate(intent.destination), target: intent.target?.id ?? null, area: intent.area.map(coordinate), damage: intent.damage, special: intent.special })) ?? [],
+      tutorial: {
+        running: tutorialStep !== null,
+        step: tutorialStep,
+        allowedCoordinate: tutorialCoordinate(tutorialStep),
+        allowedAction: tutorialStep === "choose-attack" ? "attack" : tutorialStep === "end-turn" ? "end-turn" : null,
+      },
     });
     window.advanceTime = (milliseconds) => {
       virtualTime.current += milliseconds;
@@ -603,16 +684,37 @@ export function BattleClient() {
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, enemyPlan, game, inspectedId, introVisible, isResolving, moves, pushTargets, selectedUnitId]);
+  }, [actionMode, attackTargets, enemyPlan, game, inspectedId, introVisible, isResolving, moves, pushTargets, selectedUnitId, tutorialStep]);
+
+  const continueTutorial = useCallback(() => {
+    if (tutorialStep === "welcome") setTutorialStep("select-guardian");
+    else if (tutorialStep === "read-intents") setTutorialStep("end-turn");
+    else if (tutorialStep === "complete") setTutorialStep(null);
+  }, [tutorialStep]);
+
+  const skipTutorial = useCallback(() => {
+    setTutorialComplete(true);
+    setTutorialStep(null);
+  }, [setTutorialComplete]);
+
+  const tutorialAllowsTile = useCallback((position: Position) => {
+    if (!tutorialRestrictsInput(tutorialStep)) return true;
+    const target = coordinate(position);
+    if (tutorialStep === "select-guardian") return target === "D3";
+    if (tutorialStep === "move-guardian") return target === "D2";
+    if (tutorialStep === "attack-rugger") return target === "D1";
+    return false;
+  }, [tutorialStep]);
 
   const activateAbility = useCallback(() => {
-    if (!selected || controlsLocked) return;
+    if (!selected || controlsLocked || tutorialRestrictsInput(tutorialStep)) return;
     if (selected.role === "guardian") shieldSelected();
     else setActionMode("ability");
-  }, [controlsLocked, selected, setActionMode, shieldSelected]);
+  }, [controlsLocked, selected, setActionMode, shieldSelected, tutorialStep]);
 
   const handleTile = useCallback((position: Position) => {
     if (!game || controlsLocked || game.phase !== "player") return;
+    if (!tutorialAllowsTile(position)) return;
     const unit = game.units.find((candidate) => candidate.hp > 0 && samePosition(candidate.position, position));
     const enemy = game.enemies.find((candidate) => candidate.hp > 0 && samePosition(candidate.position, position));
     const object = game.objects.find((candidate) => samePosition(candidate.position, position));
@@ -637,7 +739,12 @@ export function BattleClient() {
       return;
     }
     setInspectedId(enemy?.id ?? object?.id ?? (samePosition(game.vault.position, position) ? game.vault.id : null));
-  }, [actionMode, attackSelected, controlsLocked, game, highlights.attackIds, moveSelected, moves, pushSelected, pushTargets, selectUnit, selected]);
+  }, [actionMode, attackSelected, controlsLocked, game, highlights.attackIds, moveSelected, moves, pushSelected, pushTargets, selectUnit, selected, tutorialAllowsTile]);
+
+  const handleActionMode = useCallback((mode: ActionMode) => {
+    if (tutorialRestrictsInput(tutorialStep) && !(mode === "attack" && (tutorialStep === "choose-attack" || tutorialStep === "attack-rugger"))) return;
+    setActionMode(mode);
+  }, [setActionMode, tutorialStep]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -651,10 +758,19 @@ export function BattleClient() {
         return;
       }
       if (key === "escape") {
+        if (tutorialRestrictsInput(tutorialStep)) return;
         setActionMode(null);
         return;
       }
       if (event.repeat || controlsLocked || !game || game.phase !== "player") return;
+      if (tutorialRestrictsInput(tutorialStep)) {
+        if (tutorialStep === "choose-attack" && key === "2" && selected && !selected.hasActed) setActionMode("attack");
+        else if (tutorialStep === "end-turn" && key === " ") {
+          event.preventDefault();
+          endTurn();
+        }
+        return;
+      }
       if (key === " ") {
         event.preventDefault();
         endTurn();
@@ -664,27 +780,28 @@ export function BattleClient() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activateAbility, controlsLocked, endTurn, game, selected, setActionMode]);
+  }, [activateAbility, controlsLocked, endTurn, game, selected, setActionMode, tutorialStep]);
 
   return (
     <div className="game-battle-route">
       <MobileNotice />
-      <main className="game-battle-stage">
+      <main className={clsx("game-battle-stage", tutorialStep && "has-tutorial")}>
         {!game ? <div className="game-loading"><Hourglass weight="fill" /> Loading battle…</div> : (
           <>
             <GameHud game={game} />
             <Link href="/" className="battle-title-button" aria-label="Game menu — return to title screen"><List weight="bold" /></Link>
             <section className="game-board-zone" aria-label="Battlefield">
-              <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} disabled={controlsLocked} onTile={handleTile} />
+              <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} disabled={controlsLocked} onTile={handleTile} />
             </section>
             <SelectedInspector game={game} selectedUnitId={selectedUnitId} inspectedId={inspectedId} />
             <ActionBar
               selected={selected}
               actionMode={actionMode}
               hasUndo={Boolean(lastMove)}
+              tutorialStep={tutorialStep}
               disabled={controlsLocked || game.phase !== "player"}
               log={log}
-              onMode={setActionMode}
+              onMode={handleActionMode}
               onAbility={activateAbility}
               onWait={waitSelected}
               onUndo={undoMove}
@@ -695,6 +812,7 @@ export function BattleClient() {
         {introVisible && game ? <MissionIntro /> : null}
         {turnBanner && !introVisible ? <div className="game-turn-banner" role="status">{turnBanner}</div> : null}
         {isResolving && !introVisible ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
+        {tutorialStep && !introVisible ? <BattleTutorial step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
       </main>
     </div>
   );

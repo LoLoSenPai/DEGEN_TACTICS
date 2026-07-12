@@ -1,0 +1,263 @@
+.battle-tutorial-card {
+  position: fixed;
+  z-index: 165;
+  top: 145px;
+  left: 18px;
+  width: clamp(268px, 21vw, 340px);
+  border: 16px solid transparent;
+  border-image: url("/assets/hud/hud-frame-teal.png") 120 stretch;
+  border-image-width: 16px;
+  color: #edf7f4;
+  background-color: rgba(4, 10, 13, 0.97);
+  box-shadow: 0 0 0 3px rgba(1, 4, 6, 0.9), 0 18px 42px rgba(0, 0, 0, 0.72);
+  animation: tutorial-card-in 180ms ease-out both;
+}
+
+.battle-tutorial-card header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid #26383e;
+  padding: 4px 5px 10px;
+}
+
+.tutorial-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 2px solid #4cdfca;
+  color: #5de8d4;
+  background-color: #0d292a;
+  box-shadow: inset 0 0 12px rgba(76, 223, 202, 0.12), 0 0 14px rgba(76, 223, 202, 0.12);
+}
+
+.tutorial-icon svg {
+  width: 27px;
+  height: 27px;
+}
+
+.battle-tutorial-card header small {
+  display: block;
+  color: #61dacb;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.battle-tutorial-card h2 {
+  margin: 3px 0 0;
+  color: #f3f1e9;
+  font: 400 clamp(25px, 2vw, 34px)/0.94 var(--game-font-display);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.battle-tutorial-card > p {
+  margin: 13px 6px 0;
+  color: #b8c4c5;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.32;
+}
+
+.tutorial-prompt {
+  display: block;
+  margin: 12px 6px 0;
+  border-left: 3px solid #e2a92e;
+  padding: 6px 9px;
+  color: #f0cf76;
+  background-color: rgba(96, 66, 13, 0.24);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.battle-tutorial-card footer {
+  display: flex;
+  min-height: 42px;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 13px;
+  border-top: 1px solid #26383e;
+  padding: 10px 5px 4px;
+}
+
+.tutorial-skip,
+.tutorial-continue {
+  border: 0;
+  font-family: var(--game-font-body);
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tutorial-skip {
+  padding: 7px 4px;
+  color: #7f8e92;
+  background-color: transparent;
+  font-size: 10px;
+}
+
+.tutorial-skip:hover {
+  color: #d4dcde;
+}
+
+.tutorial-continue {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #4fe1ce;
+  padding: 7px 10px;
+  color: #061210;
+  background-color: #4bd7c4;
+  box-shadow: 0 4px 0 #155f57;
+  font-size: 12px;
+}
+
+.tutorial-continue:hover {
+  background-color: #68ebd8;
+  transform: translateY(-1px);
+}
+
+.tutorial-continue:active {
+  box-shadow: 0 1px 0 #155f57;
+  transform: translateY(2px);
+}
+
+.tutorial-continue svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tutorial-awaiting {
+  align-self: center;
+  color: #78878c;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.game-tile.is-tutorial-focus,
+.game-action-button.is-tutorial-focus,
+.game-end-turn.is-tutorial-focus {
+  z-index: 140;
+  outline: 4px solid #ffd061;
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 3px rgba(255, 217, 111, 0.36), 0 0 24px rgba(255, 194, 60, 0.72);
+  filter: none;
+  opacity: 1;
+  animation: tutorial-focus 850ms ease-in-out infinite alternate;
+}
+
+.game-board-frame.is-tutorial-intents {
+  outline: 3px solid rgba(255, 92, 83, 0.72);
+  outline-offset: 5px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.76), 0 0 42px rgba(241, 83, 76, 0.36);
+}
+
+.game-board-frame.is-tutorial-intents .game-intent-step,
+.game-board-frame.is-tutorial-intents .enemy-order,
+.game-board-frame.is-tutorial-intents .game-danger-icon {
+  filter: drop-shadow(0 0 8px rgba(255, 85, 76, 0.95));
+  transform: scale(1.12);
+}
+
+.tutorial-step-watch-enemy {
+  border-image-source: url("/assets/hud/action-frame-gold.png");
+}
+
+.tutorial-step-watch-enemy .tutorial-icon {
+  border-color: #f1534c;
+  color: #ff736b;
+  background-color: #321315;
+}
+
+.tutorial-step-complete {
+  top: 50%;
+  left: 50%;
+  width: min(430px, calc(100vw - 48px));
+  transform: translate(-50%, -50%);
+  animation-name: tutorial-complete-in;
+}
+
+@keyframes tutorial-focus {
+  from { outline-color: rgba(255, 208, 97, 0.62); }
+  to { outline-color: #ffe19a; box-shadow: inset 0 0 0 3px rgba(255, 225, 147, 0.5), 0 0 32px rgba(255, 194, 60, 0.92); }
+}
+
+@keyframes tutorial-card-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes tutorial-complete-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 1200px) and (min-width: 1024px) {
+  .battle-tutorial-card {
+    top: 133px;
+    left: 10px;
+    width: 220px;
+    border-width: 12px;
+    border-image-width: 12px;
+  }
+
+  .battle-tutorial-card header {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .tutorial-icon {
+    width: 37px;
+    height: 37px;
+  }
+
+  .tutorial-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .battle-tutorial-card h2 {
+    font-size: 23px;
+  }
+
+  .battle-tutorial-card > p {
+    margin-top: 9px;
+    font-size: 12px;
+  }
+
+  .tutorial-prompt {
+    margin-top: 8px;
+    font-size: 10px;
+  }
+
+  .battle-tutorial-card footer {
+    margin-top: 8px;
+    padding-top: 7px;
+  }
+
+  .tutorial-step-complete {
+    top: 50%;
+    left: 50%;
+    width: min(410px, calc(100vw - 48px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-tutorial-card,
+  .game-tile.is-tutorial-focus,
+  .game-action-button.is-tutorial-focus,
+  .game-end-turn.is-tutorial-focus {
+    animation: none !important;
+  }
+}
