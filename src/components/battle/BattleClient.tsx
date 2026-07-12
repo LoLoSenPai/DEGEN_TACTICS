@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowFatRight,
   ArrowUUpLeft,
@@ -36,7 +36,7 @@ import {
   type Position,
   type PushTarget,
 } from "@/lib/game";
-import { useGameStore, type ActionMode, type CombatLogEntry } from "@/store/gameStore";
+import { useGameStore, type ActionMode, type BattleEffect, type CombatCue, type CombatLogEntry } from "@/store/gameStore";
 import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/BattleTutorial";
 import { EnemyIntentPath } from "@/components/battle/EnemyIntentPath";
 import {
@@ -80,6 +80,56 @@ function entityName(game: GameState, id: string) {
     ?? game.enemies.find((enemy) => enemy.id === id)?.name
     ?? game.objects.find((object) => object.id === id)?.name
     ?? id;
+}
+
+function entityPosition(game: GameState, id: string): Position | null {
+  if (id === game.vault.id) return game.vault.position;
+  return game.units.find((unit) => unit.id === id)?.position
+    ?? game.enemies.find((enemy) => enemy.id === id)?.position
+    ?? game.objects.find((object) => object.id === id)?.position
+    ?? null;
+}
+
+function attackDirectionStyle(game: GameState, entityId: string, effect?: BattleEffect): CSSProperties | undefined {
+  if (!effect?.targetId) return undefined;
+  const source = entityPosition(game, entityId);
+  const target = entityPosition(game, effect.targetId);
+  if (!source || !target) return undefined;
+  return {
+    "--combat-x": `${Math.sign(target.x - source.x) * 16}%`,
+    "--combat-y": `${Math.sign(target.y - source.y) * 12}%`,
+  } as CSSProperties;
+}
+
+function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }) {
+  if (!cue || !["attack", "impact", "death", "shield"].includes(cue.stage)) return null;
+  const source = cue.sourceId ? entityName(game, cue.sourceId) : "Enemy";
+  const target = cue.targetId ? entityName(game, cue.targetId) : "Squad";
+  let kicker = "COMBAT";
+  let message = `${source} attacks ${target}`;
+
+  if (cue.stage === "shield") {
+    kicker = "ABILITY";
+    message = `Shield Wall · ${cue.amount ?? 2} armor applied`;
+  } else if (cue.stage === "impact") {
+    kicker = cue.absorbed ? "SHIELD HIT" : "IMPACT";
+    message = cue.absorbed
+      ? `${target} blocks ${cue.absorbed}${cue.amount ? ` · takes ${cue.amount}` : " · no HP lost"}`
+      : `${target} takes ${cue.amount ?? 0} damage`;
+  } else if (cue.stage === "death") {
+    kicker = game.units.some((unit) => unit.id === cue.targetId) ? "HERO KO" : "ENEMY DOWN";
+    message = `${target} is down`;
+  } else {
+    kicker = source.toUpperCase();
+    message = `Attacks ${target}`;
+  }
+
+  return (
+    <div key={cue.id} className={clsx("combat-callout", `is-${cue.stage}`, cue.absorbed && "is-blocked", cue.fatal && "is-fatal")} role="status" aria-live="assertive">
+      <small>{kicker}</small>
+      <strong>{message}</strong>
+    </div>
+  );
 }
 
 function SpriteArt({ kind, name, className, priority = false }: { kind: SpriteKind; name: string; className?: string; priority?: boolean }) {
@@ -283,6 +333,9 @@ function Board({
   const previousRects = useRef(new Map<string, DOMRect>());
   const moveKeys = useMemo(() => new Set(highlights.moves.map(positionKey)), [highlights.moves]);
   const pushIds = useMemo(() => new Set(highlights.pushTargets.map((target) => target.id)), [highlights.pushTargets]);
+  const visibleZeroHpIds = useMemo(() => new Set(effects
+    .filter((effect) => effect.targetId && ["damage", "heavy", "collision", "death"].includes(effect.kind))
+    .map((effect) => effect.targetId)), [effects]);
 
   const intentData = useMemo(() => {
     const danger = new Set<string>();
@@ -344,8 +397,8 @@ function Board({
         <EnemyIntentPath plan={enemyPlan} />
         {positions.map((position) => {
           const key = positionKey(position);
-          const unit = game.units.find((candidate) => candidate.hp > 0 && samePosition(candidate.position, position));
-          const enemy = game.enemies.find((candidate) => candidate.hp > 0 && samePosition(candidate.position, position));
+          const unit = game.units.find((candidate) => (candidate.hp > 0 || visibleZeroHpIds.has(candidate.id)) && samePosition(candidate.position, position));
+          const enemy = game.enemies.find((candidate) => (candidate.hp > 0 || visibleZeroHpIds.has(candidate.id)) && samePosition(candidate.position, position));
           const object = game.objects.find((candidate) => samePosition(candidate.position, position));
           const isVault = samePosition(game.vault.position, position);
           const obstacle = game.obstacles.some((candidate) => samePosition(candidate, position));
@@ -356,7 +409,14 @@ function Board({
           const isDanger = intentData.danger.has(key);
           const destinationOrders = intentData.destinations.get(key) ?? [];
           const entityId = unit?.id ?? enemy?.id ?? object?.id ?? (isVault ? game.vault.id : undefined);
-          const effect = entityId ? [...effects].reverse().find((candidate) => candidate.targetId === entityId) : undefined;
+          const targetEffects = entityId ? effects.filter((candidate) => candidate.targetId === entityId) : [];
+          const attackEffect = entityId ? effects.find((candidate) => candidate.kind === "attack" && candidate.sourceId === entityId) : undefined;
+          const damageEffect = [...targetEffects].reverse().find((candidate) => ["damage", "heavy", "collision"].includes(candidate.kind));
+          const shieldEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "shield" || candidate.kind === "shield-hit");
+          const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
+          const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
+          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying");
+          const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
           const tileCoordinate = coordinate(position);
@@ -394,22 +454,22 @@ function Board({
               {obstacle ? <SpriteArt kind="obstacle" name="Obstacle" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
               {isVault ? (
-                <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened")} data-game-piece={game.vault.id}>
+                <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={game.vault.id}>
                   <span className="piece-base" />
                   <SpriteArt kind="vault" name={game.vault.name} className="board-sprite" priority />
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (game.vault.hp / game.vault.maxHp) * 100)}%` }} /></span>
                 </span>
               ) : null}
               {unit ? (
-                <span className={clsx("game-piece ally-piece", `piece-${unit.role}`, unit.id === selectedUnitId && "is-active")} data-game-piece={unit.id}>
+                <span className={clsx("game-piece ally-piece", `piece-${unit.role}`, unit.id === selectedUnitId && "is-active", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={unit.id}>
                   <span className="piece-base" />
                   <SpriteArt kind={unit.role} name={unit.name} className="board-sprite" priority />
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
-                  {unit.shield ? <span className="piece-shield"><Shield weight="fill" />{unit.shield.value}</span> : null}
+                  {unit.shield ? <><span className="piece-shield-aura" aria-hidden="true" /><span className="piece-shield"><Shield weight="fill" />{unit.shield.value}</span></> : null}
                 </span>
               ) : null}
               {enemy ? (
-                <span className={clsx("game-piece enemy-piece", `piece-${enemy.kind}`, enemy.kind === "whale" && "is-whale")} data-game-piece={enemy.id}>
+                <span className={clsx("game-piece enemy-piece", `piece-${enemy.kind}`, enemy.kind === "whale" && "is-whale", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={enemy.id}>
                   <span className="piece-base" />
                   <SpriteArt kind={enemy.kind} name={enemy.name} className="board-sprite" priority />
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%` }} /></span>
@@ -417,7 +477,24 @@ function Board({
                 </span>
               ) : null}
               {object ? <span className="game-piece object-piece" data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
-              {effect?.amount ? <span key={effect.id} className="game-damage-popup">−{effect.amount}</span> : null}
+              {damageEffect ? (
+                <span key={`impact-${damageEffect.id}`} className={clsx("game-combat-vfx", damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "is-heavy" : "is-normal")} aria-hidden="true">
+                  <Image src={damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "/assets/vfx/big-hit.gif" : "/assets/vfx/small-hit.gif"} alt="" fill sizes="160px" unoptimized />
+                </span>
+              ) : null}
+              {shieldEffect ? (
+                <span key={`shield-${shieldEffect.id}`} className="game-combat-vfx is-shield" aria-hidden="true">
+                  <Image src="/assets/vfx/electric-shield.gif" alt="" fill sizes="160px" unoptimized />
+                </span>
+              ) : null}
+              {deathEffect ? (
+                <span key={`death-${deathEffect.id}`} className="game-combat-vfx is-death" aria-hidden="true">
+                  <Image src="/assets/vfx/anima-death.gif" alt="" fill sizes="180px" unoptimized />
+                </span>
+              ) : null}
+              {damageEffect && (damageEffect.amount ?? 0) > 0 ? <span key={`damage-${damageEffect.id}`} className="game-damage-popup">−{damageEffect.amount} HP</span> : null}
+              {shieldEffect?.kind === "shield-hit" && (shieldEffect.absorbed ?? 0) > 0 ? <span key={`block-${shieldEffect.id}`} className="game-block-popup">BLOCK {shieldEffect.absorbed}</span> : null}
+              {deathEffect ? <span key={`ko-${deathEffect.id}`} className="game-ko-popup">KO</span> : null}
             </button>
           );
         })}
@@ -533,6 +610,10 @@ export function BattleClient() {
   const lastMove = useGameStore((state) => state.lastMove);
   const lastResult = useGameStore((state) => state.lastResult);
   const isResolving = useGameStore((state) => state.isResolving);
+  const isAnimating = useGameStore((state) => state.isAnimating);
+  const combatCue = useGameStore((state) => state.combatCue);
+  const playbackIndex = useGameStore((state) => state.playbackIndex);
+  const queueRemaining = useGameStore((state) => state.queueRemaining);
   const turnBanner = useGameStore((state) => state.turnBanner);
   const effects = useGameStore((state) => state.effects);
   const lastEvents = useGameStore((state) => state.lastEvents);
@@ -558,7 +639,7 @@ export function BattleClient() {
   const missionId = game?.missionId;
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
-  const controlsLocked = isResolving || introVisible;
+  const controlsLocked = isResolving || isAnimating || introVisible;
   const moves = useMemo(() => game && selected && actionMode === "move" ? getValidMoves(game, selected.id) : [], [actionMode, game, selected]);
   const attackTargets = useMemo(() => {
     if (!game || !selected) return [];
@@ -604,8 +685,7 @@ export function BattleClient() {
     } else if (tutorialStep === "basics-end-turn" && isResolving) {
       setTutorialStep("basics-watch-enemy");
     } else if (tutorialStep === "basics-watch-enemy" && !isResolving && game.phase === "victory" && turnBanner === null) {
-      completeTrainingLesson(1);
-      setTutorialStep("basics-complete");
+      setTutorialStep("basics-hit-explained");
     } else if (tutorialStep === "squad-select-guardian" && selectedUnitId === "guardian") {
       setTutorialStep("squad-move-guardian");
     } else if (tutorialStep === "squad-move-guardian" && unitMovedTo("guardian", "D3")) {
@@ -621,8 +701,7 @@ export function BattleClient() {
     } else if (tutorialStep === "squad-end-turn" && isResolving) {
       setTutorialStep("squad-watch-shield");
     } else if (tutorialStep === "squad-watch-shield" && !isResolving && game.phase === "victory" && turnBanner === null) {
-      completeTrainingLesson(2);
-      setTutorialStep("squad-complete");
+      setTutorialStep("squad-shield-explained");
     } else if (tutorialStep === "push-select-pusher" && selectedUnitId === "pusher") {
       setTutorialStep("push-move-to-block");
     } else if (tutorialStep === "push-move-to-block" && unitMovedTo("pusher", "E6")) {
@@ -696,6 +775,17 @@ export function BattleClient() {
       inspectedId,
       actionMode,
       resolving: isResolving,
+      animating: isAnimating,
+      combatPlayback: combatCue ? {
+        index: playbackIndex,
+        stage: combatCue.stage,
+        sourceId: combatCue.sourceId ?? null,
+        targetId: combatCue.targetId ?? null,
+        amount: combatCue.amount ?? 0,
+        absorbed: combatCue.absorbed ?? 0,
+        fatal: combatCue.fatal ?? false,
+        queueRemaining,
+      } : null,
       highlights: {
         moves: moves.map(coordinate),
         attacks: attackTargets.map((target) => ({ id: target.id, at: coordinate(target.position) })),
@@ -722,16 +812,24 @@ export function BattleClient() {
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, enemyPlan, game, inspectedId, introVisible, isResolving, moves, pushTargets, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, combatCue, enemyPlan, game, inspectedId, introVisible, isAnimating, isResolving, moves, playbackIndex, pushTargets, queueRemaining, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
     else if (tutorialStep === "basics-read-intent") setTutorialStep("basics-end-turn");
+    else if (tutorialStep === "basics-hit-explained") {
+      completeTrainingLesson(1);
+      setTutorialStep("basics-complete");
+    }
     else if (tutorialStep === "basics-complete") {
       setTutorialStep(null);
       setInspectedId(null);
       startMission(TRAINING_SQUAD.id);
     } else if (tutorialStep === "squad-intro") setTutorialStep("squad-select-guardian");
+    else if (tutorialStep === "squad-shield-explained") {
+      completeTrainingLesson(2);
+      setTutorialStep("squad-complete");
+    }
     else if (tutorialStep === "squad-complete") {
       setTutorialStep(null);
       setInspectedId(null);
@@ -745,7 +843,7 @@ export function BattleClient() {
       setInspectedId(null);
       startMission(PROTECT_THE_VAULT.id);
     }
-  }, [startMission, tutorialStep]);
+  }, [completeTrainingLesson, startMission, tutorialStep]);
 
   const skipTutorial = useCallback(() => {
     setTutorialComplete(true);
@@ -856,6 +954,7 @@ export function BattleClient() {
             <section className="game-board-zone" aria-label="Battlefield">
               <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} disabled={controlsLocked} onTile={handleTile} />
             </section>
+            <CombatCallout game={game} cue={combatCue} />
             <SelectedInspector game={game} selectedUnitId={selectedUnitId} inspectedId={inspectedId} />
             <ActionBar
               selected={selected}
@@ -874,8 +973,8 @@ export function BattleClient() {
         )}
         {introVisible && game ? <MissionIntro game={game} /> : null}
         {turnBanner && !introVisible ? <div className={clsx("game-turn-banner", ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep ?? "") && "is-tutorial-watch")} role="status">{turnBanner}</div> : null}
-        {isResolving && !introVisible ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
-        {tutorialStep && !introVisible ? <BattleTutorial key={tutorialStep} step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
+        {isResolving && !introVisible && !combatCue ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
+        {tutorialStep && !introVisible && !isAnimating ? <BattleTutorial key={tutorialStep} step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
       </main>
     </div>
   );

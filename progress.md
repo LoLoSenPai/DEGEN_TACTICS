@@ -70,6 +70,16 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Final curriculum gates passed: ESLint with zero warnings, strict TypeScript, all 45 Vitest cases, `git diff --check`, and a clean optimized Next.js 15 production build of all 9 static pages.
 - Re-ran the main-battle and deliberate-defeat regressions after training integration; both remained playable with zero captured console errors. Grid registration still measures below 0.05 CSS px of authored rail drift at every supported viewport.
 
+## 2026-07-12 — Readable combat playback and VFX
+
+- Replaced the single-frame enemy-turn commit with a deterministic presentation queue compiled from the already locked `GameEvent` sequence. Enemy movement, attack anticipation, impact, shield absorption, damage, lethal KO, and the next actor now play in order without retargeting or changing the authoritative result.
+- Added the same readable beats to player attacks, Deadeye kills, Shield Wall and collision kills. Defeated enemies remain as temporary presentation ghosts through their KO animation, then leave the board.
+- Integrated only four lightweight 30 fps effects from CodeManu's Free VFX Asset Pack: normal hit, heavy hit, electric shield and energy death. The 96 MB source folder remains ignored; conservative attribution is documented beside the shipped effects.
+- Added combat callouts (`ATTACKS`, exact damage, `BLOCK`, `HERO KO` / `ENEMY DOWN`), persistent shield auras, HP popups, shield-break feedback and event-derived VFX. Reduced-motion mode keeps static explanatory labels while removing animated sprites and lunges.
+- Expanded Lessons 1 and 2 with explicit post-action explanations of HP loss, KO/defeat, one-hit shield consumption, absorbed damage and actual HP damage. Watch steps no longer dim the battlefield, and player-action tutorial cards temporarily clear while VFX play.
+- Added three pure playback tests. All 48 tests, strict typecheck and ESLint pass. Browser QA captured player attack, enemy attack, normal impact, Shield Wall cast, shield absorption, Deadeye enemy KO, ally KO, final defeat and the complete three-lesson flow with zero console errors.
+- Final responsive, grid-alignment and main-battle regressions passed after the VFX integration. The optimized Next.js 15 production build generated all 9 static pages, `git diff --check` is clean, and the local development server was restarted on port 3000.
+
 ## Final verification (original slice)
 
 - Passed `pnpm lint` with zero warnings, strict `pnpm typecheck`, all 38 `pnpm test` cases, and the optimized Next.js 15 production build.

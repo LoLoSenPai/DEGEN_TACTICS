@@ -6,6 +6,7 @@ import {
   applyShield,
   attackEnemy,
   calculateEnemyPlan,
+  compileEnemyPlayback,
   createInitialGameState,
   createMissionResult,
   getMissionDefinition,
@@ -16,6 +17,8 @@ import {
   activateDeadeye,
   waitUnit,
   type EnemyTurnPlan,
+  type CombatPlaybackBeat,
+  type CombatPlaybackStage,
   type GameEvent,
   type GameState,
   type MissionResult,
@@ -34,9 +37,21 @@ export interface CombatLogEntry {
 
 export interface BattleEffect {
   id: number;
-  kind: "damage" | "shield" | "collision" | "heavy";
+  kind: "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death";
+  sourceId?: string;
   targetId?: string;
   amount?: number;
+  absorbed?: number;
+}
+
+export interface CombatCue {
+  id: number;
+  stage: CombatPlaybackStage;
+  sourceId?: string;
+  targetId?: string;
+  amount?: number;
+  absorbed?: number;
+  fatal?: boolean;
 }
 
 interface LastMoveSnapshot {
@@ -60,6 +75,10 @@ interface GameStore {
   effects: BattleEffect[];
   lastEvents: readonly GameEvent[];
   isResolving: boolean;
+  isAnimating: boolean;
+  combatCue: CombatCue | null;
+  playbackIndex: number;
+  queueRemaining: number;
   turnBanner: string | null;
   profile: PlayerIdentity;
   bestScores: Record<string, number>;
@@ -91,15 +110,28 @@ const initialProfile: PlayerIdentity = {
 
 let logId = 0;
 let effectId = 0;
+let cueId = 0;
 let sessionGeneration = 0;
 let bannerTimer: number | null = null;
 let resolutionTimer: number | null = null;
+let presentationTimers: number[] = [];
 
 function clearSessionTimers() {
   if (bannerTimer !== null) window.clearTimeout(bannerTimer);
   if (resolutionTimer !== null) window.clearTimeout(resolutionTimer);
   bannerTimer = null;
   resolutionTimer = null;
+  presentationTimers.forEach((timer) => window.clearTimeout(timer));
+  presentationTimers = [];
+}
+
+function schedulePresentation(callback: () => void, delay: number) {
+  const timer = window.setTimeout(() => {
+    presentationTimers = presentationTimers.filter((candidate) => candidate !== timer);
+    callback();
+  }, delay);
+  presentationTimers.push(timer);
+  return timer;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -221,27 +253,77 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
   return { id: logId, turn, tone, text };
 }
 
-function effectsFromEvents(events: readonly GameEvent[]): BattleEffect[] {
+function nextEffect(effect: Omit<BattleEffect, "id">): BattleEffect {
+  effectId += 1;
+  return { id: effectId, ...effect };
+}
+
+function nextCue(stage: CombatPlaybackStage, data: Omit<CombatCue, "id" | "stage"> = {}): CombatCue {
+  cueId += 1;
+  return { id: cueId, stage, ...data };
+}
+
+function isDefeated(state: GameState, id: string) {
+  if (id === state.vault.id) return state.vault.hp <= 0;
+  return state.units.some((unit) => unit.id === id && unit.hp <= 0)
+    || state.enemies.some((enemy) => enemy.id === id && enemy.hp <= 0);
+}
+
+function withDefeatedEnemyGhost(previous: GameState, next: GameState, enemyId: string): GameState {
+  if (next.enemies.some((enemy) => enemy.id === enemyId)) return next;
+  const defeated = previous.enemies.find((enemy) => enemy.id === enemyId);
+  return defeated ? { ...next, enemies: [...next.enemies, { ...defeated, hp: 0 }] } : next;
+}
+
+function effectsFromEvents(events: readonly GameEvent[], state: GameState): BattleEffect[] {
   const effects: BattleEffect[] = [];
+  const defeatedIds = new Set(events
+    .filter((event): event is Extract<GameEvent, { type: "enemy-defeated" }> => event.type === "enemy-defeated")
+    .map((event) => event.enemyId));
   for (const event of events) {
     if (event.type === "unit-attacked") {
-      effectId += 1;
-      effects.push({ id: effectId, kind: event.damage >= 4 ? "heavy" : "damage", targetId: event.enemyId, amount: event.damage });
+      effects.push(nextEffect({ kind: event.damage >= 4 ? "heavy" : "damage", sourceId: event.unitId, targetId: event.enemyId, amount: event.damage }));
+      if (defeatedIds.has(event.enemyId) || isDefeated(state, event.enemyId)) effects.push(nextEffect({ kind: "death", sourceId: event.unitId, targetId: event.enemyId }));
     }
     if (event.type === "damage") {
-      effectId += 1;
-      effects.push({ id: effectId, kind: event.amount >= 4 ? "heavy" : "damage", targetId: event.targetId, amount: event.amount });
+      effects.push(nextEffect({ kind: event.amount >= 4 ? "heavy" : "damage", sourceId: event.sourceId, targetId: event.targetId, amount: event.amount, absorbed: event.absorbed }));
+      if (event.absorbed > 0) effects.push(nextEffect({ kind: "shield-hit", sourceId: event.sourceId, targetId: event.targetId, absorbed: event.absorbed }));
+      if (defeatedIds.has(event.targetId) || isDefeated(state, event.targetId)) effects.push(nextEffect({ kind: "death", sourceId: event.sourceId, targetId: event.targetId }));
     }
     if (event.type === "collision") {
-      effectId += 1;
-      effects.push({ id: effectId, kind: "collision", targetId: event.targetId, amount: event.damage });
+      effects.push(nextEffect({ kind: "collision", sourceId: event.sourceId, targetId: event.targetId, amount: event.damage }));
+      if (defeatedIds.has(event.targetId) || isDefeated(state, event.targetId)) effects.push(nextEffect({ kind: "death", sourceId: event.sourceId, targetId: event.targetId }));
     }
     if (event.type === "shield-applied") {
-      effectId += 1;
-      effects.push({ id: effectId, kind: "shield" });
+      for (const unitId of event.unitIds) effects.push(nextEffect({ kind: "shield", sourceId: event.sourceId, targetId: unitId, amount: event.value }));
     }
   }
   return effects;
+}
+
+function effectsForBeat(beat: CombatPlaybackBeat): BattleEffect[] {
+  if (beat.stage === "attack") {
+    return [nextEffect({ kind: "attack", sourceId: beat.sourceId, targetId: beat.targetId })];
+  }
+  if (beat.stage === "impact") {
+    const effects: BattleEffect[] = [nextEffect({
+      kind: (beat.amount ?? 0) >= 4 ? "heavy" : "damage",
+      sourceId: beat.sourceId,
+      targetId: beat.targetId,
+      amount: beat.amount,
+      absorbed: beat.absorbed,
+    })];
+    if ((beat.absorbed ?? 0) > 0) effects.push(nextEffect({ kind: "shield-hit", sourceId: beat.sourceId, targetId: beat.targetId, absorbed: beat.absorbed }));
+    return effects;
+  }
+  if (beat.stage === "death") {
+    return [nextEffect({ kind: "death", sourceId: beat.sourceId, targetId: beat.targetId, amount: beat.amount })];
+  }
+  return [];
+}
+
+function attackEvent(events: readonly GameEvent[]) {
+  return events.find((event): event is Extract<GameEvent, { type: "unit-attacked" }> => event.type === "unit-attacked");
 }
 
 function hasRejected(events: readonly GameEvent[]) {
@@ -268,6 +350,10 @@ export const useGameStore = create<GameStore>()(
       effects: [],
       lastEvents: [],
       isResolving: false,
+      isAnimating: false,
+      combatCue: null,
+      playbackIndex: -1,
+      queueRemaining: 0,
       turnBanner: null,
       profile: initialProfile,
       bestScores: {},
@@ -292,6 +378,10 @@ export const useGameStore = create<GameStore>()(
           effects: [],
           lastEvents: [],
           isResolving: false,
+          isAnimating: false,
+          combatCue: null,
+          playbackIndex: -1,
+          queueRemaining: 0,
           turnBanner: "PLAYER PHASE // 01",
           lastResult: null,
         });
@@ -312,20 +402,20 @@ export const useGameStore = create<GameStore>()(
 
       selectUnit: (unitId) => {
         const game = get().game;
-        if (!game || get().isResolving || game.phase !== "player") return;
+        if (!game || get().isResolving || get().isAnimating || game.phase !== "player") return;
         if (unitId && !game.units.some((unit) => unit.id === unitId && unit.hp > 0)) return;
         const unit = game.units.find((candidate) => candidate.id === unitId);
         set({ selectedUnitId: unitId, actionMode: unit && !unit.hasMoved && !unit.hasActed ? "move" : null });
       },
 
       setActionMode: (actionMode) => {
-        if (!get().selectedUnitId || get().isResolving) return;
+        if (!get().selectedUnitId || get().isResolving || get().isAnimating) return;
         set({ actionMode });
       },
 
       moveSelected: (to) => {
         const { game, selectedUnitId, log } = get();
-        if (!game || !selectedUnitId || get().isResolving) return;
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = moveUnit(game, selectedUnitId, to);
         const rejected = hasRejected(transition.events);
         set({
@@ -334,62 +424,136 @@ export const useGameStore = create<GameStore>()(
           actionMode: rejected ? "move" : null,
           lastMove: rejected ? get().lastMove : { state: game, unitId: selectedUnitId },
           log: appendEvents(log, transition.events, game.turn),
-          effects: effectsFromEvents(transition.events),
+          effects: effectsFromEvents(transition.events, transition.state),
           lastEvents: transition.events,
         });
       },
 
       attackSelected: (enemyId, deadeye = false) => {
         const { game, selectedUnitId, log } = get();
-        if (!game || !selectedUnitId || get().isResolving) return;
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = deadeye ? activateDeadeye(game, selectedUnitId, enemyId) : attackEnemy(game, selectedUnitId, enemyId);
         const rejected = hasRejected(transition.events);
+        const attack = attackEvent(transition.events);
+        if (rejected || !attack) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: rejected ? get().actionMode : null,
+            lastMove: rejected ? get().lastMove : null,
+            log: appendEvents(log, transition.events, game.turn),
+            effects: effectsFromEvents(transition.events, transition.state),
+            lastEvents: transition.events,
+          });
+          return;
+        }
+
+        const generation = sessionGeneration;
+        const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === attack.enemyId)
+          || isDefeated(transition.state, attack.enemyId);
+        const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
         set({
-          game: transition.state,
-          enemyPlan: planFor(transition.state),
-          actionMode: rejected ? get().actionMode : null,
-          lastMove: rejected ? get().lastMove : null,
-          log: appendEvents(log, transition.events, game.turn),
-          effects: effectsFromEvents(transition.events),
-          lastEvents: transition.events,
+          actionMode: null,
+          lastMove: null,
+          isAnimating: true,
+          effects: [nextEffect({ kind: "attack", sourceId: attack.unitId, targetId: attack.enemyId })],
+          combatCue: nextCue("attack", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal }),
+          lastEvents: [],
         });
+
+        schedulePresentation(() => {
+          if (generation !== sessionGeneration) return;
+          const impactEffects = effectsFromEvents(transition.events, impactState).filter((effect) => effect.kind !== "death");
+          set({
+            game: impactState,
+            enemyPlan: planFor(transition.state),
+            log: appendEvents(log, transition.events, game.turn),
+            effects: impactEffects,
+            combatCue: nextCue("impact", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal }),
+          });
+
+          const finish = () => {
+            if (generation !== sessionGeneration) return;
+            set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+          };
+
+          if (fatal) {
+            schedulePresentation(() => {
+              if (generation !== sessionGeneration) return;
+              set({
+                effects: [nextEffect({ kind: "death", sourceId: attack.unitId, targetId: attack.enemyId })],
+                combatCue: nextCue("death", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal: true }),
+              });
+              schedulePresentation(finish, 560);
+            }, 330);
+          } else {
+            schedulePresentation(finish, 460);
+          }
+        }, deadeye ? 320 : 230);
       },
 
       shieldSelected: () => {
         const { game, selectedUnitId, log } = get();
-        if (!game || !selectedUnitId || get().isResolving) return;
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = applyShield(game, selectedUnitId);
         const rejected = hasRejected(transition.events);
+        if (rejected) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: "ability",
+            log: appendEvents(log, transition.events, game.turn),
+            lastEvents: transition.events,
+          });
+          return;
+        }
+        const generation = sessionGeneration;
         set({
           game: transition.state,
           enemyPlan: planFor(transition.state),
-          actionMode: rejected ? "ability" : null,
-          lastMove: rejected ? get().lastMove : null,
+          actionMode: null,
+          lastMove: null,
           log: appendEvents(log, transition.events, game.turn),
-          effects: effectsFromEvents(transition.events),
-          lastEvents: transition.events,
+          effects: effectsFromEvents(transition.events, transition.state),
+          isAnimating: true,
+          combatCue: nextCue("shield", { sourceId: selectedUnitId, amount: 2 }),
+          lastEvents: [],
         });
+        schedulePresentation(() => {
+          if (generation === sessionGeneration) set({ isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+        }, 720);
       },
 
       pushSelected: (targetId, batterUp = false) => {
         const { game, selectedUnitId, log } = get();
-        if (!game || !selectedUnitId || get().isResolving) return;
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = pushTarget(game, selectedUnitId, targetId, batterUp ? "batter-up" : "shove");
         const rejected = hasRejected(transition.events);
+        const effects = effectsFromEvents(transition.events, transition.state);
+        const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === targetId)
+          || isDefeated(transition.state, targetId);
+        const presentationState = fatal ? withDefeatedEnemyGhost(game, transition.state, targetId) : transition.state;
+        const animated = !rejected && effects.length > 0;
+        const generation = sessionGeneration;
         set({
-          game: transition.state,
+          game: presentationState,
           enemyPlan: planFor(transition.state),
           actionMode: rejected ? get().actionMode : null,
           lastMove: rejected ? get().lastMove : null,
           log: appendEvents(log, transition.events, game.turn),
-          effects: effectsFromEvents(transition.events),
-          lastEvents: transition.events,
+          effects,
+          isAnimating: animated,
+          combatCue: animated ? nextCue(fatal ? "death" : "impact", { sourceId: selectedUnitId, targetId, fatal }) : null,
+          lastEvents: animated ? [] : transition.events,
         });
+        if (animated) schedulePresentation(() => {
+          if (generation === sessionGeneration) set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+        }, fatal ? 650 : 480);
       },
 
       waitSelected: () => {
         const { game, selectedUnitId, log } = get();
-        if (!game || !selectedUnitId || get().isResolving) return;
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = waitUnit(game, selectedUnitId);
         const rejected = hasRejected(transition.events);
         set({
@@ -405,7 +569,7 @@ export const useGameStore = create<GameStore>()(
 
       undoMove: () => {
         const snapshot = get().lastMove;
-        if (!snapshot || get().isResolving) return;
+        if (!snapshot || get().isResolving || get().isAnimating) return;
         logId += 1;
         set({
           game: snapshot.state,
@@ -420,7 +584,7 @@ export const useGameStore = create<GameStore>()(
 
       endTurn: () => {
         const { game, enemyPlan, log } = get();
-        if (!game || game.phase !== "player" || get().isResolving) return;
+        if (!game || game.phase !== "player" || get().isResolving || get().isAnimating) return;
         const snapshot = enemyPlan ?? calculateEnemyPlan(game);
         const generation = sessionGeneration;
         if (bannerTimer !== null) window.clearTimeout(bannerTimer);
@@ -431,6 +595,10 @@ export const useGameStore = create<GameStore>()(
           actionMode: null,
           lastMove: null,
           lastEvents: [],
+          effects: [],
+          combatCue: null,
+          playbackIndex: -1,
+          queueRemaining: 0,
           turnBanner: "ENEMY PHASE",
           log: [...log, { id: logId, turn: game.turn, tone: "warning", text: "Enemy plan committed. Resolving exact intents." } as CombatLogEntry].slice(-32),
         });
@@ -439,38 +607,72 @@ export const useGameStore = create<GameStore>()(
           if (generation !== sessionGeneration) return;
           const transition = resolveEnemyTurn(game, snapshot);
           const nextState = transition.state;
-          const nextLog = appendEvents(get().log, transition.events, game.turn);
-          const terminal = nextState.phase === "victory" || nextState.phase === "defeat";
-          const training = isTrainingMissionId(nextState.missionId);
-          let result = get().lastResult;
-          let bestScores = get().bestScores;
-
-          if (terminal && !training) {
-            result = createMissionResult(nextState, nextState.phase);
-            if (result.completed) {
-              bestScores = {
-                ...bestScores,
-                [result.missionId]: Math.max(bestScores[result.missionId] ?? 0, result.score.total),
-              };
-            }
-          }
-
-          set({
-            game: nextState,
-            enemyPlan: planFor(nextState),
-            isResolving: false,
-            turnBanner: terminal ? (training ? (nextState.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN") : nextState.phase === "victory" ? "VAULT SECURED" : "MISSION FAILED") : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
-            log: nextLog,
-            effects: effectsFromEvents(transition.events),
-            lastEvents: transition.events,
-            lastResult: result,
-            bestScores,
-          });
+          const beats = compileEnemyPlayback(game, nextState, transition.events);
           resolutionTimer = null;
-          bannerTimer = window.setTimeout(() => {
-            if (generation === sessionGeneration) set({ turnBanner: null });
-            bannerTimer = null;
-          }, terminal ? 1000 : 650);
+          set({ turnBanner: null, queueRemaining: beats.length });
+
+          const finishPlayback = () => {
+            if (generation !== sessionGeneration) return;
+            const terminal = nextState.phase === "victory" || nextState.phase === "defeat";
+            const training = isTrainingMissionId(nextState.missionId);
+            let result = get().lastResult;
+            let bestScores = get().bestScores;
+
+            if (terminal && !training) {
+              result = createMissionResult(nextState, nextState.phase);
+              if (result.completed) {
+                bestScores = {
+                  ...bestScores,
+                  [result.missionId]: Math.max(bestScores[result.missionId] ?? 0, result.score.total),
+                };
+              }
+            }
+
+            set({
+              game: nextState,
+              enemyPlan: planFor(nextState),
+              isResolving: false,
+              combatCue: null,
+              playbackIndex: beats.length,
+              queueRemaining: 0,
+              turnBanner: terminal ? (training ? (nextState.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN") : nextState.phase === "victory" ? "VAULT SECURED" : "MISSION FAILED") : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
+              log: appendEvents(get().log, transition.events, game.turn),
+              effects: [],
+              lastEvents: transition.events,
+              lastResult: result,
+              bestScores,
+            });
+            bannerTimer = window.setTimeout(() => {
+              if (generation === sessionGeneration) set({ turnBanner: null });
+              bannerTimer = null;
+            }, terminal ? 1000 : 650);
+          };
+
+          const playBeat = (index: number) => {
+            if (generation !== sessionGeneration) return;
+            const beat = beats[index];
+            if (!beat) {
+              finishPlayback();
+              return;
+            }
+            set({
+              game: beat.state,
+              effects: effectsForBeat(beat),
+              combatCue: nextCue(beat.stage, {
+                sourceId: beat.sourceId,
+                targetId: beat.targetId,
+                amount: beat.amount,
+                absorbed: beat.absorbed,
+                fatal: beat.fatal,
+              }),
+              playbackIndex: index,
+              queueRemaining: beats.length - index - 1,
+              lastEvents: [beat.event],
+            });
+            schedulePresentation(() => playBeat(index + 1), beat.duration);
+          };
+
+          playBeat(0);
         }, 420);
       },
 

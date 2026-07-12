@@ -23,6 +23,7 @@ export type BattleTutorialStep =
   | "basics-read-intent"
   | "basics-end-turn"
   | "basics-watch-enemy"
+  | "basics-hit-explained"
   | "basics-complete"
   | "squad-intro"
   | "squad-select-guardian"
@@ -33,6 +34,7 @@ export type BattleTutorialStep =
   | "squad-target-drainer"
   | "squad-end-turn"
   | "squad-watch-shield"
+  | "squad-shield-explained"
   | "squad-complete"
   | "push-intro"
   | "push-select-pusher"
@@ -84,6 +86,7 @@ const BASICS_STEPS = [
   "basics-read-intent",
   "basics-end-turn",
   "basics-watch-enemy",
+  "basics-hit-explained",
   "basics-complete",
 ] as const;
 
@@ -97,6 +100,7 @@ const SQUAD_STEPS = [
   "squad-target-drainer",
   "squad-end-turn",
   "squad-watch-shield",
+  "squad-shield-explained",
   "squad-complete",
 ] as const;
 
@@ -182,11 +186,18 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     icon: "intent",
   },
   "basics-watch-enemy": {
-    title: "Watch the order",
-    prompt: "Watch the numbered enemies act.",
-    body: "They execute the same routes and targets you just inspected.",
+    title: "Watch the attack",
+    prompt: "Follow the Rugger from movement to impact.",
+    body: "The attacker moves first, winds up, then the hit removes HP. The previewed route and target stay exact.",
     awaiting: "Enemy phase in progress",
     icon: "intent",
+  },
+  "basics-hit-explained": {
+    title: "You were attacked",
+    prompt: "Rugger moved, struck Guardian, and removed 3 HP.",
+    body: "The red impact and −3 HP show the result. At 0 HP a hero is KO and leaves the board. Lose all three heroes and the mission fails.",
+    action: "Got it",
+    icon: "warning",
   },
   "basics-complete": {
     title: "Turn loop complete",
@@ -256,6 +267,13 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     prompt: "Watch Shield Wall absorb one hit.",
     body: "The shield absorbs up to 2 damage from one hit, then expires.",
     awaiting: "Enemy phase in progress",
+    icon: "shield",
+  },
+  "squad-shield-explained": {
+    title: "The shield broke",
+    prompt: "2 damage was blocked. Only 1 reached Guardian.",
+    body: "A shield absorbs one hit, then expires. Cyan BLOCK is armor absorbed; the red number is HP actually lost.",
+    action: "Got it",
     icon: "shield",
   },
   "squad-complete": {
@@ -430,10 +448,18 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
 
 const INTRO_STEPS = new Set<Exclude<BattleTutorialStep, null>>(["basics-intro", "squad-intro", "push-intro"]);
 
+const OBSERVE_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
+  "basics-watch-enemy",
+  "squad-watch-shield",
+  "push-watch-charge",
+]);
+
 const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
   "basics-intro",
+  "basics-hit-explained",
   "basics-complete",
   "squad-intro",
+  "squad-shield-explained",
   "squad-complete",
   "push-intro",
   "push-breach-warning",
@@ -543,6 +569,7 @@ export function BattleTutorial({
   const progress = lessonProgress(step);
   const isIntro = isTutorialIntroStep(step);
   const isCentered = isTutorialCenteredStep(step);
+  const isObserving = OBSERVE_STEPS.has(step);
   const spotlight = useTutorialSpotlight(step);
   const titleId = `tutorial-title-${step}`;
   const bodyId = `tutorial-body-${step}`;
@@ -555,9 +582,9 @@ export function BattleTutorial({
 
   return (
     <>
-      {spotlight ? <span className="tutorial-spotlight" style={spotlightStyle} aria-hidden="true" /> : <span className="tutorial-modal-scrim" aria-hidden="true" />}
+      {!isObserving && (spotlight ? <span className="tutorial-spotlight" style={spotlightStyle} aria-hidden="true" /> : <span className="tutorial-modal-scrim" aria-hidden="true" />)}
       <aside
-        className={`battle-tutorial-card tutorial-step-${step}${isCentered ? " is-centered" : " is-contextual"}`}
+        className={`battle-tutorial-card tutorial-step-${step}${isCentered ? " is-centered" : " is-contextual"}${isObserving ? " is-observing" : ""}`}
         data-tutorial-step={step}
         role={isCentered ? "dialog" : "status"}
         aria-modal={isCentered || undefined}
