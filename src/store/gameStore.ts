@@ -8,6 +8,8 @@ import {
   calculateEnemyPlan,
   createInitialGameState,
   createMissionResult,
+  getMissionDefinition,
+  isTrainingMissionId,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
@@ -45,6 +47,7 @@ interface LastMoveSnapshot {
 interface PersistentSettings {
   soundMuted: boolean;
   tutorialComplete: boolean;
+  trainingCompleted: 0 | 1 | 2 | 3;
 }
 
 interface GameStore {
@@ -55,6 +58,7 @@ interface GameStore {
   lastMove: LastMoveSnapshot | null;
   log: CombatLogEntry[];
   effects: BattleEffect[];
+  lastEvents: readonly GameEvent[];
   isResolving: boolean;
   turnBanner: string | null;
   profile: PlayerIdentity;
@@ -62,7 +66,7 @@ interface GameStore {
   lastResult: MissionResult | null;
   settings: PersistentSettings;
   hydrated: boolean;
-  startMission: () => void;
+  startMission: (missionId?: string) => void;
   ensureIdentity: () => void;
   setHydrated: (hydrated: boolean) => void;
   selectUnit: (unitId: string | null) => void;
@@ -77,6 +81,7 @@ interface GameStore {
   clearEffects: () => void;
   clearResult: () => void;
   setTutorialComplete: (completed: boolean) => void;
+  completeTrainingLesson: (lesson: 1 | 2 | 3) => void;
 }
 
 const initialProfile: PlayerIdentity = {
@@ -261,19 +266,21 @@ export const useGameStore = create<GameStore>()(
       lastMove: null,
       log: [],
       effects: [],
+      lastEvents: [],
       isResolving: false,
       turnBanner: null,
       profile: initialProfile,
       bestScores: {},
       lastResult: null,
-      settings: { soundMuted: true, tutorialComplete: false },
+      settings: { soundMuted: true, tutorialComplete: false, trainingCompleted: 0 },
       hydrated: false,
 
-      startMission: () => {
+      startMission: (missionId) => {
         clearSessionTimers();
         sessionGeneration += 1;
         const generation = sessionGeneration;
-        const game = createInitialGameState();
+        const definition = getMissionDefinition(missionId);
+        const game = createInitialGameState(definition);
         logId += 1;
         set({
           game,
@@ -281,8 +288,9 @@ export const useGameStore = create<GameStore>()(
           selectedUnitId: null,
           actionMode: null,
           lastMove: null,
-          log: [{ id: logId, turn: 1, tone: "neutral", text: "Mission live. Enemy intents are exact." }],
+          log: [{ id: logId, turn: 1, tone: "neutral", text: `${definition.name} live. Enemy intents are exact.` }],
           effects: [],
+          lastEvents: [],
           isResolving: false,
           turnBanner: "PLAYER PHASE // 01",
           lastResult: null,
@@ -327,6 +335,7 @@ export const useGameStore = create<GameStore>()(
           lastMove: rejected ? get().lastMove : { state: game, unitId: selectedUnitId },
           log: appendEvents(log, transition.events, game.turn),
           effects: effectsFromEvents(transition.events),
+          lastEvents: transition.events,
         });
       },
 
@@ -342,6 +351,7 @@ export const useGameStore = create<GameStore>()(
           lastMove: rejected ? get().lastMove : null,
           log: appendEvents(log, transition.events, game.turn),
           effects: effectsFromEvents(transition.events),
+          lastEvents: transition.events,
         });
       },
 
@@ -357,6 +367,7 @@ export const useGameStore = create<GameStore>()(
           lastMove: rejected ? get().lastMove : null,
           log: appendEvents(log, transition.events, game.turn),
           effects: effectsFromEvents(transition.events),
+          lastEvents: transition.events,
         });
       },
 
@@ -372,6 +383,7 @@ export const useGameStore = create<GameStore>()(
           lastMove: rejected ? get().lastMove : null,
           log: appendEvents(log, transition.events, game.turn),
           effects: effectsFromEvents(transition.events),
+          lastEvents: transition.events,
         });
       },
 
@@ -387,6 +399,7 @@ export const useGameStore = create<GameStore>()(
           lastMove: rejected ? get().lastMove : null,
           log: appendEvents(log, transition.events, game.turn),
           effects: [],
+          lastEvents: transition.events,
         });
       },
 
@@ -401,6 +414,7 @@ export const useGameStore = create<GameStore>()(
           actionMode: "move",
           lastMove: null,
           log: [...get().log, { id: logId, turn: snapshot.state.turn, tone: "neutral", text: "Last movement reversed. Enemy plan restored." } as CombatLogEntry].slice(-32),
+          lastEvents: [],
         });
       },
 
@@ -416,6 +430,7 @@ export const useGameStore = create<GameStore>()(
           selectedUnitId: null,
           actionMode: null,
           lastMove: null,
+          lastEvents: [],
           turnBanner: "ENEMY PHASE",
           log: [...log, { id: logId, turn: game.turn, tone: "warning", text: "Enemy plan committed. Resolving exact intents." } as CombatLogEntry].slice(-32),
         });
@@ -426,10 +441,11 @@ export const useGameStore = create<GameStore>()(
           const nextState = transition.state;
           const nextLog = appendEvents(get().log, transition.events, game.turn);
           const terminal = nextState.phase === "victory" || nextState.phase === "defeat";
+          const training = isTrainingMissionId(nextState.missionId);
           let result = get().lastResult;
           let bestScores = get().bestScores;
 
-          if (terminal) {
+          if (terminal && !training) {
             result = createMissionResult(nextState, nextState.phase);
             if (result.completed) {
               bestScores = {
@@ -443,9 +459,10 @@ export const useGameStore = create<GameStore>()(
             game: nextState,
             enemyPlan: planFor(nextState),
             isResolving: false,
-            turnBanner: terminal ? (nextState.phase === "victory" ? "VAULT SECURED" : "MISSION FAILED") : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
+            turnBanner: terminal ? (training ? (nextState.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN") : nextState.phase === "victory" ? "VAULT SECURED" : "MISSION FAILED") : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
             log: nextLog,
             effects: effectsFromEvents(transition.events),
+            lastEvents: transition.events,
             lastResult: result,
             bestScores,
           });
@@ -463,8 +480,19 @@ export const useGameStore = create<GameStore>()(
         settings: {
           ...state.settings,
           tutorialComplete: completed,
+          trainingCompleted: completed ? 3 : 0,
         },
       })),
+      completeTrainingLesson: (lesson) => set((state) => {
+        const trainingCompleted = Math.max(state.settings.trainingCompleted, lesson) as 0 | 1 | 2 | 3;
+        return {
+          settings: {
+            ...state.settings,
+            trainingCompleted,
+            tutorialComplete: trainingCompleted === 3,
+          },
+        };
+      }),
     }),
     {
       name: "degen-tactics:v1",
@@ -479,6 +507,12 @@ export const useGameStore = create<GameStore>()(
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<GameStore>;
         const persistedSettings = persisted.settings as Partial<PersistentSettings> | undefined;
+        const persistedTraining = typeof persistedSettings?.trainingCompleted === "number"
+          && Number.isInteger(persistedSettings.trainingCompleted)
+          && persistedSettings.trainingCompleted >= 0
+          && persistedSettings.trainingCompleted <= 3
+          ? persistedSettings.trainingCompleted as 0 | 1 | 2 | 3
+          : 0;
         const validProfile = persisted.profile && typeof persisted.profile.guestId === "string" && typeof persisted.profile.displayName === "string";
         const validScores = Boolean(
           persisted.bestScores
@@ -496,9 +530,8 @@ export const useGameStore = create<GameStore>()(
             soundMuted: typeof persistedSettings?.soundMuted === "boolean"
               ? persistedSettings.soundMuted
               : currentState.settings.soundMuted,
-            tutorialComplete: typeof persistedSettings?.tutorialComplete === "boolean"
-              ? persistedSettings.tutorialComplete
-              : currentState.settings.tutorialComplete,
+            tutorialComplete: persistedTraining === 3,
+            trainingCompleted: persistedTraining,
           },
         };
       },

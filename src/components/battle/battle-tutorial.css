@@ -1,127 +1,222 @@
+.tutorial-modal-scrim,
+.tutorial-spotlight {
+  position: fixed;
+  z-index: 150;
+  pointer-events: none;
+}
+
+.tutorial-modal-scrim {
+  inset: 0;
+  background-color: rgba(1, 4, 6, 0.58);
+  backdrop-filter: brightness(0.68) saturate(0.72);
+  animation: tutorial-scrim-in 180ms ease-out both;
+}
+
+.tutorial-spotlight {
+  top: var(--tutorial-spotlight-top);
+  left: var(--tutorial-spotlight-left);
+  width: var(--tutorial-spotlight-width);
+  height: var(--tutorial-spotlight-height);
+  border: 3px solid #ffd061;
+  background-color: transparent;
+  box-shadow:
+    0 0 0 9999px rgba(1, 4, 6, 0.68),
+    inset 0 0 0 2px rgba(255, 230, 163, 0.34),
+    0 0 30px rgba(255, 194, 60, 0.88);
+  animation: tutorial-spotlight-in 180ms ease-out both, tutorial-spotlight-pulse 900ms 180ms ease-in-out infinite alternate;
+}
+
 .battle-tutorial-card {
   position: fixed;
   z-index: 165;
   top: 145px;
   left: 18px;
-  width: clamp(268px, 21vw, 340px);
+  box-sizing: border-box;
+  width: clamp(340px, 25vw, 380px);
   border: 16px solid transparent;
   border-image: url("/assets/hud/hud-frame-teal.png") 120 stretch;
   border-image-width: 16px;
   color: #edf7f4;
-  background-color: rgba(4, 10, 13, 0.97);
-  box-shadow: 0 0 0 3px rgba(1, 4, 6, 0.9), 0 18px 42px rgba(0, 0, 0, 0.72);
+  background-color: rgba(4, 10, 13, 0.985);
+  box-shadow: 0 0 0 3px rgba(1, 4, 6, 0.92), 0 20px 48px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
   animation: tutorial-card-in 180ms ease-out both;
+}
+
+.battle-tutorial-card.is-centered {
+  top: 50%;
+  left: 50%;
+  width: clamp(480px, 40vw, 560px);
+  transform: translate(-50%, -50%);
+  animation-name: tutorial-centered-in;
+}
+
+.tutorial-progress {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #26383e;
+  padding: 2px 5px 8px;
+  color: #61dacb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tutorial-progress span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-progress b {
+  flex: none;
+  color: #f0cf76;
+  font-variant-numeric: tabular-nums;
 }
 
 .battle-tutorial-card header {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  border-bottom: 1px solid #26383e;
-  padding: 4px 5px 10px;
+  padding: 13px 5px 4px;
 }
 
 .tutorial-icon {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   place-items: center;
   border: 2px solid #4cdfca;
   color: #5de8d4;
   background-color: #0d292a;
-  box-shadow: inset 0 0 12px rgba(76, 223, 202, 0.12), 0 0 14px rgba(76, 223, 202, 0.12);
+  box-shadow: inset 0 0 12px rgba(76, 223, 202, 0.12), 0 0 14px rgba(76, 223, 202, 0.15);
 }
 
 .tutorial-icon svg {
-  width: 27px;
-  height: 27px;
-}
-
-.battle-tutorial-card header small {
-  display: block;
-  color: #61dacb;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  width: 28px;
+  height: 28px;
 }
 
 .battle-tutorial-card h2 {
-  margin: 3px 0 0;
+  margin: 0;
   color: #f3f1e9;
-  font: 400 clamp(25px, 2vw, 34px)/0.94 var(--game-font-display);
-  letter-spacing: 0.045em;
+  font: 400 clamp(29px, 2.2vw, 35px)/0.98 var(--game-font-display);
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
-.battle-tutorial-card > p {
-  margin: 13px 6px 0;
-  color: #b8c4c5;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.32;
+.battle-tutorial-card.is-centered header {
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 15px;
+  padding-top: 17px;
+}
+
+.battle-tutorial-card.is-centered .tutorial-icon {
+  width: 58px;
+  height: 58px;
+}
+
+.battle-tutorial-card.is-centered .tutorial-icon svg {
+  width: 34px;
+  height: 34px;
+}
+
+.battle-tutorial-card.is-centered h2 {
+  font-size: clamp(38px, 3vw, 46px);
 }
 
 .tutorial-prompt {
   display: block;
-  margin: 12px 6px 0;
-  border-left: 3px solid #e2a92e;
-  padding: 6px 9px;
-  color: #f0cf76;
-  background-color: rgba(96, 66, 13, 0.24);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.25;
+  margin: 15px 5px 0;
+  border-left: 4px solid #e2a92e;
+  padding: 10px 12px;
+  color: #f4d47e;
+  background-color: rgba(96, 66, 13, 0.3);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.32;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
+}
+
+.battle-tutorial-card > p {
+  margin: 12px 6px 0;
+  color: #c5d0d0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.42;
+}
+
+.battle-tutorial-card.is-centered .tutorial-prompt {
+  margin-top: 18px;
+  padding: 12px 14px;
+  font-size: 18px;
+}
+
+.battle-tutorial-card.is-centered > p {
+  margin-top: 14px;
+  font-size: 18px;
+  line-height: 1.48;
 }
 
 .battle-tutorial-card footer {
   display: flex;
-  min-height: 42px;
+  min-height: 58px;
   align-items: end;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 13px;
+  gap: 10px;
+  margin-top: 16px;
   border-top: 1px solid #26383e;
-  padding: 10px 5px 4px;
+  padding: 11px 5px 4px;
 }
 
 .tutorial-skip,
 .tutorial-continue {
+  min-height: 44px;
   border: 0;
   font-family: var(--game-font-body);
   font-weight: 900;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.065em;
   text-transform: uppercase;
   cursor: pointer;
 }
 
 .tutorial-skip {
-  padding: 7px 4px;
-  color: #7f8e92;
+  min-width: 92px;
+  padding: 8px 9px;
+  color: #9aa7aa;
   background-color: transparent;
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.tutorial-skip:hover {
-  color: #d4dcde;
+.tutorial-skip:hover,
+.tutorial-skip:focus-visible {
+  color: #eef4f3;
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .tutorial-continue {
   display: inline-flex;
-  min-height: 38px;
+  min-width: 138px;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   border: 2px solid #4fe1ce;
-  padding: 7px 10px;
+  padding: 9px 14px;
   color: #061210;
   background-color: #4bd7c4;
   box-shadow: 0 4px 0 #155f57;
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.tutorial-continue:hover {
+.tutorial-continue:hover,
+.tutorial-continue:focus-visible {
   background-color: #68ebd8;
   transform: translateY(-1px);
 }
@@ -132,65 +227,94 @@
 }
 
 .tutorial-continue svg {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
 }
 
 .tutorial-awaiting {
   align-self: center;
-  color: #78878c;
-  font-size: 9px;
+  margin-left: auto;
+  color: #d8c782;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  line-height: 1.25;
+  letter-spacing: 0.075em;
+  text-align: right;
   text-transform: uppercase;
 }
 
 .game-tile.is-tutorial-focus,
 .game-action-button.is-tutorial-focus,
 .game-end-turn.is-tutorial-focus {
-  z-index: 140;
+  z-index: 155;
   outline: 4px solid #ffd061;
   outline-offset: -4px;
-  box-shadow: inset 0 0 0 3px rgba(255, 217, 111, 0.36), 0 0 24px rgba(255, 194, 60, 0.72);
+  box-shadow: inset 0 0 0 3px rgba(255, 217, 111, 0.42), 0 0 28px rgba(255, 194, 60, 0.86);
   filter: none;
   opacity: 1;
   animation: tutorial-focus 850ms ease-in-out infinite alternate;
 }
 
 .game-board-frame.is-tutorial-intents {
-  outline: 3px solid rgba(255, 92, 83, 0.72);
+  z-index: 151;
+  outline: 3px solid rgba(255, 92, 83, 0.82);
   outline-offset: 5px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.76), 0 0 42px rgba(241, 83, 76, 0.36);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.76), 0 0 44px rgba(241, 83, 76, 0.45);
 }
 
-.game-board-frame.is-tutorial-intents .game-intent-step,
+.game-board-frame.is-tutorial-intents [data-enemy-intent-overlay="true"],
 .game-board-frame.is-tutorial-intents .enemy-order,
 .game-board-frame.is-tutorial-intents .game-danger-icon {
-  filter: drop-shadow(0 0 8px rgba(255, 85, 76, 0.95));
+  filter: drop-shadow(0 0 9px rgba(255, 85, 76, 1));
   transform: scale(1.12);
 }
 
-.tutorial-step-watch-enemy {
+.tutorial-step-basics-watch-enemy,
+.tutorial-step-squad-watch-shield,
+.tutorial-step-push-watch-charge,
+.tutorial-step-push-locked-cone,
+.tutorial-step-push-breach-warning,
+.tutorial-step-push-whale-arrives {
   border-image-source: url("/assets/hud/action-frame-gold.png");
 }
 
-.tutorial-step-watch-enemy .tutorial-icon {
+.tutorial-step-basics-watch-enemy .tutorial-icon,
+.tutorial-step-squad-watch-shield .tutorial-icon,
+.tutorial-step-push-watch-charge .tutorial-icon,
+.tutorial-step-push-locked-cone .tutorial-icon,
+.tutorial-step-push-breach-warning .tutorial-icon,
+.tutorial-step-push-whale-arrives .tutorial-icon {
   border-color: #f1534c;
   color: #ff736b;
   background-color: #321315;
 }
 
-.tutorial-step-complete {
-  top: 50%;
-  left: 50%;
-  width: min(430px, calc(100vw - 48px));
-  transform: translate(-50%, -50%);
-  animation-name: tutorial-complete-in;
+.tutorial-step-basics-complete .tutorial-icon,
+.tutorial-step-squad-complete .tutorial-icon,
+.tutorial-step-training-complete .tutorial-icon {
+  border-color: #f0bd48;
+  color: #ffd66e;
+  background-color: #322610;
 }
 
 @keyframes tutorial-focus {
-  from { outline-color: rgba(255, 208, 97, 0.62); }
-  to { outline-color: #ffe19a; box-shadow: inset 0 0 0 3px rgba(255, 225, 147, 0.5), 0 0 32px rgba(255, 194, 60, 0.92); }
+  from { outline-color: rgba(255, 208, 97, 0.68); }
+  to { outline-color: #ffe19a; box-shadow: inset 0 0 0 3px rgba(255, 225, 147, 0.55), 0 0 34px rgba(255, 194, 60, 1); }
+}
+
+@keyframes tutorial-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tutorial-spotlight-in {
+  from { opacity: 0; transform: scale(1.06); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes tutorial-spotlight-pulse {
+  from { border-color: rgba(255, 208, 97, 0.72); }
+  to { border-color: #ffe5a6; }
 }
 
 @keyframes tutorial-card-in {
@@ -198,63 +322,126 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes tutorial-complete-in {
-  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)) scale(0.96); }
+@keyframes tutorial-centered-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(0.96); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 @media (max-width: 1200px) and (min-width: 1024px) {
-  .battle-tutorial-card {
+  .battle-tutorial-card.is-contextual {
     top: 133px;
-    left: 10px;
-    width: 220px;
+    left: 8px;
+    width: clamp(228px, 23vw, 240px);
+    max-height: calc(100svh - 252px);
     border-width: 12px;
     border-image-width: 12px;
   }
 
-  .battle-tutorial-card header {
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: 7px;
+  .battle-tutorial-card.is-centered {
+    width: clamp(480px, 52vw, 540px);
+    border-width: 14px;
+    border-image-width: 14px;
   }
 
-  .tutorial-icon {
-    width: 37px;
-    height: 37px;
+  .tutorial-progress {
+    gap: 6px;
+    padding-right: 2px;
+    padding-left: 2px;
+    font-size: 11px;
+    letter-spacing: 0.075em;
   }
 
-  .tutorial-icon svg {
-    width: 22px;
-    height: 22px;
+  .battle-tutorial-card.is-contextual header {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+    padding-top: 10px;
   }
 
-  .battle-tutorial-card h2 {
-    font-size: 23px;
+  .battle-tutorial-card.is-contextual .tutorial-icon {
+    width: 39px;
+    height: 39px;
   }
 
-  .battle-tutorial-card > p {
+  .battle-tutorial-card.is-contextual .tutorial-icon svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .battle-tutorial-card.is-contextual h2 {
+    font-size: 26px;
+  }
+
+  .battle-tutorial-card.is-contextual .tutorial-prompt {
+    margin-top: 11px;
+    padding: 8px 9px;
+    font-size: 13px;
+    line-height: 1.32;
+  }
+
+  .battle-tutorial-card.is-contextual > p {
     margin-top: 9px;
-    font-size: 12px;
+    font-size: 14px;
+    line-height: 1.4;
   }
 
-  .tutorial-prompt {
-    margin-top: 8px;
+  .battle-tutorial-card.is-contextual footer {
+    min-height: 48px;
+    margin-top: 10px;
+    padding-top: 8px;
+  }
+
+  .battle-tutorial-card.is-contextual .tutorial-awaiting {
     font-size: 10px;
   }
 
-  .battle-tutorial-card footer {
-    margin-top: 8px;
+  .battle-tutorial-card.is-centered h2 {
+    font-size: 38px;
+  }
+
+  .battle-tutorial-card.is-centered .tutorial-prompt {
+    font-size: 16px;
+  }
+
+  .battle-tutorial-card.is-centered > p {
+    font-size: 15px;
+  }
+}
+
+@media (max-height: 740px) and (min-width: 1024px) {
+  .battle-tutorial-card.is-contextual {
+    top: 108px;
+    max-height: calc(100svh - 226px);
+  }
+
+  .battle-tutorial-card.is-contextual .tutorial-progress {
+    padding-bottom: 6px;
+  }
+
+  .battle-tutorial-card.is-contextual header {
     padding-top: 7px;
   }
 
-  .tutorial-step-complete {
-    top: 50%;
-    left: 50%;
-    width: min(410px, calc(100vw - 48px));
+  .battle-tutorial-card.is-contextual .tutorial-prompt {
+    margin-top: 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .battle-tutorial-card.is-contextual > p {
+    margin-top: 7px;
+  }
+
+  .battle-tutorial-card.is-contextual footer {
+    min-height: 44px;
+    margin-top: 7px;
+    padding-top: 6px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .battle-tutorial-card,
+  .tutorial-modal-scrim,
+  .tutorial-spotlight,
   .game-tile.is-tutorial-focus,
   .game-action-button.is-tutorial-focus,
   .game-end-turn.is-tutorial-focus {

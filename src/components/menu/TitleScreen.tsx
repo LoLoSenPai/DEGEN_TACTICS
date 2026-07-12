@@ -16,14 +16,12 @@ import { useGameStore } from "@/store/gameStore";
 export function TitleScreen() {
   const router = useRouter();
   const hydrated = useGameStore((state) => state.hydrated);
-  const tutorialComplete = useGameStore((state) => state.settings.tutorialComplete);
-  const startMission = useGameStore((state) => state.startMission);
+  const trainingCompleted = useGameStore((state) => state.settings.trainingCompleted);
   const setTutorialComplete = useGameStore((state) => state.setTutorialComplete);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   const play = () => {
-    startMission();
     router.push("/battle/protect-the-vault?intro=1");
   };
 
@@ -50,7 +48,7 @@ export function TitleScreen() {
         <div className="title-actions">
           <button type="button" className="title-button title-button-primary" onClick={play} disabled={!hydrated}>
             <Play weight="fill" aria-hidden="true" />
-            <span>{hydrated ? "Play as Guest" : "Loading…"}</span>
+            <span>{hydrated ? (trainingCompleted > 0 && trainingCompleted < 3 ? "Continue Training" : "Play as Guest") : "Loading…"}</span>
           </button>
           <button type="button" className="title-button title-button-wallet" disabled title="Coming soon">
             <Wallet weight="fill" aria-hidden="true" />
@@ -85,9 +83,9 @@ export function TitleScreen() {
                 <span><strong>Motion</strong><small>Menu ambience and UI pulses</small></span>
                 <b>{reducedMotion ? "Reduced" : "On"}</b>
               </button>
-              <button type="button" className="option-row" onClick={() => setTutorialComplete(false)} disabled={!tutorialComplete}>
-                <span><strong>Combat tutorial</strong><small>{tutorialComplete ? "Replay from the next battle" : "Ready for the next battle"}</small></span>
-                <b>{tutorialComplete ? "Replay" : "Ready"}</b>
+              <button type="button" className="option-row" onClick={() => setTutorialComplete(false)} disabled={trainingCompleted === 0}>
+                <span><strong>Field training</strong><small>{trainingCompleted === 3 ? "Replay all three lessons" : trainingCompleted > 0 ? `Restart from lesson 1 · ${trainingCompleted}/3 cleared` : "Starts before the mission"}</small></span>
+                <b>{trainingCompleted === 3 ? "Replay" : trainingCompleted > 0 ? "Restart" : "Ready"}</b>
               </button>
               <button type="button" className="option-row" onClick={toggleFullscreen}>
                 <span><strong>Fullscreen</strong><small>Keyboard shortcut: F</small></span>
@@ -95,7 +93,7 @@ export function TitleScreen() {
               </button>
               <div className="option-controls">
                 <strong>Battle controls</strong>
-                <span>1 Move · 2 Attack · 3 Ability · Space End turn · Esc Cancel</span>
+                <span>1 Move · 2 Attack · 3 Ability · S Shove · W Wait · Space End turn</span>
               </div>
             </div>
           </section>

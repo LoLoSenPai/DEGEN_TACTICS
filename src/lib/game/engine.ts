@@ -1,4 +1,4 @@
-import { DEFAULT_MISSION, PROTECT_THE_VAULT } from "./mission";
+import { DEFAULT_MISSION, getMissionDefinition } from "./mission";
 import {
   CARDINAL_DIRECTIONS,
   addPositions,
@@ -1161,8 +1161,7 @@ export const calculateEnemyPlan = (state: GameState): EnemyTurnPlan => {
 };
 
 const getMissionForState = (state: GameState): MissionDefinition => {
-  if (state.missionId === PROTECT_THE_VAULT.id) return PROTECT_THE_VAULT;
-  return DEFAULT_MISSION;
+  return getMissionDefinition(state.missionId);
 };
 
 export const resolveEnemyTurn = (

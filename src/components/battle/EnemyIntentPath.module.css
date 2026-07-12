@@ -1,0 +1,158 @@
+.root {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  shape-rendering: geometricprecision;
+  user-select: none;
+}
+
+.intent {
+  pointer-events: none;
+}
+
+.routeOuter,
+.routeInner,
+.attackOuter,
+.attackInner {
+  fill: none;
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.routeOuter {
+  stroke: #26070b;
+  stroke-width: 22;
+  opacity: 0.96;
+}
+
+.routeInner {
+  stroke: #ff514f;
+  stroke-width: 9;
+  filter: drop-shadow(0 0 7px rgba(255, 67, 64, 0.9));
+  animation: intent-route-pulse 1.3s ease-in-out infinite;
+}
+
+.arrowOuter {
+  fill: #26070b;
+}
+
+.arrowInner {
+  fill: #ff514f;
+  filter: drop-shadow(0 0 5px rgba(255, 67, 64, 0.85));
+}
+
+.routeStartOuter {
+  fill: #26070b;
+}
+
+.routeStartInner {
+  fill: #ff514f;
+  filter: drop-shadow(0 0 5px rgba(255, 67, 64, 0.85));
+}
+
+.orderBadge circle {
+  fill: #72191d;
+  stroke: #ff6b62;
+  stroke-width: 4;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.8));
+}
+
+.orderBadge text {
+  fill: #fff6e7;
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  font-size: 17px;
+  font-weight: 900;
+  text-anchor: middle;
+}
+
+.attackOuter {
+  stroke: #26070b;
+  stroke-width: 15;
+}
+
+.attackInner {
+  stroke: #ff6760;
+  stroke-dasharray: 17 12;
+  stroke-width: 6;
+  filter: drop-shadow(0 0 5px rgba(255, 67, 64, 0.75));
+  animation: intent-attack-flow 0.8s linear infinite;
+}
+
+.targetHalo {
+  fill: rgba(117, 15, 21, 0.18);
+  stroke: rgba(255, 77, 74, 0.34);
+  stroke-width: 7;
+  animation: intent-target-pulse 1.15s ease-in-out infinite;
+}
+
+.targetRing {
+  fill: rgba(34, 5, 8, 0.44);
+  stroke: #ff514f;
+  stroke-width: 7;
+  filter: drop-shadow(0 0 8px rgba(255, 67, 64, 0.86));
+}
+
+.targetCrosshair {
+  fill: none;
+  stroke: #ffaaa1;
+  stroke-linecap: square;
+  stroke-width: 7;
+}
+
+.targetCore {
+  fill: #fff0df;
+}
+
+.damage {
+  fill: #fff2df;
+  paint-order: stroke;
+  stroke: #4a0b0e;
+  stroke-linejoin: round;
+  stroke-width: 7;
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+@keyframes intent-route-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes intent-attack-flow {
+  to {
+    stroke-dashoffset: -29;
+  }
+}
+
+@keyframes intent-target-pulse {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeInner,
+  .attackInner,
+  .targetHalo {
+    animation: none;
+  }
+}

@@ -21,9 +21,15 @@ import {
 } from "@phosphor-icons/react";
 import {
   BOARD_SIZE,
+  PROTECT_THE_VAULT,
+  TRAINING_LESSONS,
+  TRAINING_MOMENTUM,
+  TRAINING_SQUAD,
+  getMissionDefinition,
   getAttackableTargets,
   getPushTargets,
   getValidMoves,
+  isTrainingMissionId,
   type Enemy,
   type GameState,
   type PlayerUnit,
@@ -32,6 +38,14 @@ import {
 } from "@/lib/game";
 import { useGameStore, type ActionMode, type CombatLogEntry } from "@/store/gameStore";
 import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/BattleTutorial";
+import { EnemyIntentPath } from "@/components/battle/EnemyIntentPath";
+import {
+  initialTutorialStep,
+  trainingMissionForProgress,
+  tutorialAction,
+  tutorialCoordinate,
+  tutorialRestrictsInput,
+} from "@/components/battle/BattleTraining";
 
 declare global {
   interface Window {
@@ -60,30 +74,12 @@ const positionKey = ({ x, y }: Position) => `${x},${y}`;
 const samePosition = (left: Position, right: Position) => left.x === right.x && left.y === right.y;
 const coordinate = ({ x, y }: Position) => `${COLUMNS[x] ?? "?"}${y + 1}`;
 
-function tutorialCoordinate(step: BattleTutorialStep) {
-  if (step === "select-guardian") return "D3";
-  if (step === "move-guardian") return "D2";
-  if (step === "attack-rugger") return "D1";
-  return null;
-}
-
-function tutorialRestrictsInput(step: BattleTutorialStep) {
-  return step !== null && step !== "complete";
-}
-
 function entityName(game: GameState, id: string) {
   if (id === game.vault.id) return game.vault.name;
   return game.units.find((unit) => unit.id === id)?.name
     ?? game.enemies.find((enemy) => enemy.id === id)?.name
     ?? game.objects.find((object) => object.id === id)?.name
     ?? id;
-}
-
-function directionForStep(from: Position, to: Position) {
-  if (to.x > from.x) return "east";
-  if (to.x < from.x) return "west";
-  if (to.y > from.y) return "south";
-  return "north";
 }
 
 function SpriteArt({ kind, name, className, priority = false }: { kind: SpriteKind; name: string; className?: string; priority?: boolean }) {
@@ -101,20 +97,25 @@ type HighlightState = {
   pushTargets: readonly PushTarget[];
 };
 
-type PathMarker = {
-  order: number;
-  step: number;
-  direction: "north" | "east" | "south" | "west";
-};
+function missionPresentation(missionId: string) {
+  const definition = getMissionDefinition(missionId);
+  const lesson = TRAINING_LESSONS.find((candidate) => candidate.missionId === missionId);
+  return {
+    title: definition.name,
+    eyebrow: lesson ? `Training ${lesson.order} / 3` : "Mission 01",
+    objective: lesson?.objective ?? "Survive 5 turns",
+  };
+}
 
 function GameHud({ game }: { game: GameState }) {
   const vaultPercent = Math.max(0, Math.min(100, (game.vault.hp / game.vault.maxHp) * 100));
+  const presentation = missionPresentation(game.missionId);
 
   return (
     <header className="game-hud" aria-label="Mission status">
       <div className="hud-objective">
         <span className="hud-shield"><Shield weight="fill" /></span>
-        <div><strong>Protect the Vault</strong><small>Survive 5 turns</small></div>
+        <div><strong>{presentation.title}</strong><small>{presentation.eyebrow} · {presentation.objective}</small></div>
       </div>
       <div className="hud-turn"><span>Turn</span><strong>{game.turn} / {game.maxTurns}</strong></div>
       <div className="hud-vault">
@@ -125,12 +126,13 @@ function GameHud({ game }: { game: GameState }) {
   );
 }
 
-function MissionIntro() {
+function MissionIntro({ game }: { game: GameState }) {
+  const presentation = missionPresentation(game.missionId);
   return (
     <div className="mission-intro" role="status" aria-live="assertive">
-      <span>Mission 01</span>
-      <h1>Protect the Vault</h1>
-      <p>Survive 5 turns</p>
+      <span>{presentation.eyebrow}</span>
+      <h1>{presentation.title}</h1>
+      <p>{presentation.objective}</p>
     </div>
   );
 }
@@ -285,7 +287,6 @@ function Board({
   const intentData = useMemo(() => {
     const danger = new Set<string>();
     const locked = new Set<string>();
-    const paths = new Map<string, PathMarker[]>();
     const destinations = new Map<string, number[]>();
     const orders = new Map<string, number>();
     for (const intent of enemyPlan?.intents ?? []) {
@@ -294,18 +295,10 @@ function Board({
       intent.targets.forEach((target) => danger.add(positionKey(target.position)));
       if (intent.target) danger.add(positionKey(intent.target.position));
       if (intent.action === "slam" || intent.special === "ground-slam") intent.area.forEach((position) => locked.add(positionKey(position)));
-      let previous = intent.from;
-      intent.path.forEach((position, index) => {
-        const key = positionKey(position);
-        const markers = paths.get(key) ?? [];
-        markers.push({ order: intent.order, step: index + 1, direction: directionForStep(previous, position) });
-        paths.set(key, markers);
-        previous = position;
-      });
       const destinationKey = positionKey(intent.destination);
       destinations.set(destinationKey, [...(destinations.get(destinationKey) ?? []), intent.order]);
     }
-    return { danger, locked, paths, destinations, orders };
+    return { danger, locked, destinations, orders };
   }, [enemyPlan]);
 
   const entityFingerprint = [
@@ -341,8 +334,14 @@ function Board({
   const tutorialRestricted = tutorialRestrictsInput(tutorialStep);
 
   return (
-    <div ref={boardRef} className={clsx("game-board-frame", heavyImpact && "is-shaking", vaultThreatened && "is-vault-threatened", tutorialStep === "read-intents" && "is-tutorial-intents")} aria-label="Vault District tactical grid">
+    <div
+      ref={boardRef}
+      className={clsx("game-board-frame", heavyImpact && "is-shaking", vaultThreatened && "is-vault-threatened", tutorialStep === "basics-read-intent" && "is-tutorial-intents")}
+      aria-label="Vault District tactical grid"
+      data-tutorial-target={tutorialStep === "basics-read-intent" ? tutorialStep : undefined}
+    >
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
+        <EnemyIntentPath plan={enemyPlan} />
         {positions.map((position) => {
           const key = positionKey(position);
           const unit = game.units.find((candidate) => candidate.hp > 0 && samePosition(candidate.position, position));
@@ -355,7 +354,6 @@ function Board({
           const isAttack = Boolean(enemy && highlights.attackIds.has(enemy.id));
           const isPush = Boolean((enemy || object) && pushIds.has((enemy ?? object)?.id ?? ""));
           const isDanger = intentData.danger.has(key);
-          const pathMarkers = intentData.paths.get(key) ?? [];
           const destinationOrders = intentData.destinations.get(key) ?? [];
           const entityId = unit?.id ?? enemy?.id ?? object?.id ?? (isVault ? game.vault.id : undefined);
           const effect = entityId ? [...effects].reverse().find((candidate) => candidate.targetId === entityId) : undefined;
@@ -363,11 +361,7 @@ function Board({
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
           const tileCoordinate = coordinate(position);
           const isTutorialFocus = tileCoordinate === tutorialTargetCoordinate;
-          const tutorialTileAllowed = isTutorialFocus && (
-            (tutorialStep === "select-guardian" && unit?.id === "guardian")
-            || (tutorialStep === "move-guardian" && !unit && !enemy && !object && !obstacle && !isVault)
-            || (tutorialStep === "attack-rugger" && enemy?.id === "rugger-north")
-          );
+          const tutorialTileAllowed = isTutorialFocus;
 
           return (
             <button
@@ -385,7 +379,6 @@ function Board({
                 isPush && (actionMode === "push" || actionMode === "ability") && "is-push",
                 isDanger && "is-danger",
                 intentData.locked.has(key) && "is-locked-danger",
-                pathMarkers.length > 0 && "is-intent-path",
                 isTutorialFocus && "is-tutorial-focus",
               )}
               onClick={() => onTile(position)}
@@ -397,11 +390,6 @@ function Board({
             >
               <span className="game-tile-coordinate" aria-hidden="true">{coordinate(position)}</span>
               {isDanger ? <Warning className="game-danger-icon" weight="fill" aria-hidden="true" /> : null}
-              {pathMarkers.slice(0, 2).map((marker) => (
-                <span key={`${marker.order}-${marker.step}`} className={clsx("game-intent-step", `is-${marker.direction}`)} aria-hidden="true">
-                  <ArrowFatRight weight="fill" /><small>{marker.order}</small>
-                </span>
-              ))}
               {destinationOrders.length > 0 ? <span className="game-intent-land">{destinationOrders.join("/")}</span> : null}
               {obstacle ? <SpriteArt kind="obstacle" name="Obstacle" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
@@ -467,8 +455,7 @@ function ActionBar({
   const canAct = Boolean(selected && selected.hp > 0 && !selected.hasActed);
   const canSignature = Boolean(selected?.signatureAvailable && canAct && (selected.role !== "sniper" || !selected.hasMoved));
   const tutorialRestricted = tutorialRestrictsInput(tutorialStep);
-  const tutorialAllowsAttack = tutorialStep === "choose-attack" || tutorialStep === "attack-rugger";
-  const tutorialAllowsEndTurn = tutorialStep === "end-turn";
+  const allowedTutorialAction = tutorialAction(tutorialStep);
   const hint = !selected
     ? "Select a hero"
     : selected.hasActed
@@ -499,22 +486,22 @@ function ActionBar({
         <button type="button" className={clsx("game-action-button action-move", actionMode === "move" && "is-active")} onClick={() => onMode("move")} disabled={disabled || !canMove || tutorialRestricted} aria-keyshortcuts="1">
           <Boot weight="fill" /><span>Move</span><kbd>1</kbd>
         </button>
-        <button type="button" className={clsx("game-action-button action-attack", actionMode === "attack" && "is-active", tutorialStep === "choose-attack" && "is-tutorial-focus")} onClick={() => onMode("attack")} disabled={disabled || !canAct || (tutorialRestricted && !tutorialAllowsAttack)} aria-keyshortcuts="2" data-tutorial-target={tutorialStep === "choose-attack" ? "attack" : undefined}>
+        <button type="button" className={clsx("game-action-button action-attack", actionMode === "attack" && "is-active", allowedTutorialAction === "attack" && "is-tutorial-focus")} onClick={() => onMode("attack")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "attack")} aria-keyshortcuts="2" data-tutorial-target={allowedTutorialAction === "attack" ? tutorialStep ?? undefined : undefined}>
           <Sword weight="fill" /><span>Attack</span><kbd>2</kbd>
         </button>
         {selected?.role === "pusher" ? (
-          <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active")} onClick={() => onMode("push")} disabled={disabled || !canAct || tutorialRestricted}>
+          <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active", allowedTutorialAction === "push" && "is-tutorial-focus")} onClick={() => onMode("push")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "push")} data-tutorial-target={allowedTutorialAction === "push" ? tutorialStep ?? undefined : undefined}>
             <HandGrabbing weight="fill" /><span>Shove</span><kbd>S</kbd>
           </button>
         ) : null}
-        <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active")} onClick={onAbility} disabled={disabled || !canSignature || tutorialRestricted} aria-keyshortcuts="3">
+        <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active", allowedTutorialAction === "ability" && "is-tutorial-focus")} onClick={onAbility} disabled={disabled || !canSignature || (tutorialRestricted && allowedTutorialAction !== "ability")} aria-keyshortcuts="3" data-tutorial-target={allowedTutorialAction === "ability" ? tutorialStep ?? undefined : undefined}>
           {selected?.role === "guardian" ? <Shield weight="fill" /> : selected?.role === "pusher" ? <HandFist weight="fill" /> : <Target weight="fill" />}
           <span>{selected?.signatureName ?? "Ability"}</span><kbd>3</kbd>
         </button>
-        <button type="button" className="game-action-button action-wait" onClick={onWait} disabled={disabled || !canAct || tutorialRestricted}>
+        <button type="button" className={clsx("game-action-button action-wait", allowedTutorialAction === "wait" && "is-tutorial-focus")} onClick={onWait} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "wait")} data-tutorial-target={allowedTutorialAction === "wait" ? tutorialStep ?? undefined : undefined}>
           <Hourglass weight="fill" /><span>Wait</span><kbd>W</kbd>
         </button>
-        <button type="button" className={clsx("game-end-turn", tutorialStep === "end-turn" && "is-tutorial-focus")} onClick={onEndTurn} disabled={disabled || (tutorialRestricted && !tutorialAllowsEndTurn)} aria-keyshortcuts="Space" data-tutorial-target={tutorialStep === "end-turn" ? "end-turn" : undefined}>
+        <button type="button" className={clsx("game-end-turn", allowedTutorialAction === "end-turn" && "is-tutorial-focus")} onClick={onEndTurn} disabled={disabled || (tutorialRestricted && allowedTutorialAction !== "end-turn")} aria-keyshortcuts="Space" data-tutorial-target={allowedTutorialAction === "end-turn" ? tutorialStep ?? undefined : undefined}>
           <span>End turn</span><ArrowFatRight weight="fill" />
         </button>
       </nav>
@@ -536,7 +523,7 @@ function MobileNotice() {
 export function BattleClient() {
   const router = useRouter();
   const initialized = useRef(false);
-  const tutorialStarted = useRef(false);
+  const tutorialStarted = useRef<string | null>(null);
   const virtualTime = useRef(0);
   const game = useGameStore((state) => state.game);
   const enemyPlan = useGameStore((state) => state.enemyPlan);
@@ -548,8 +535,9 @@ export function BattleClient() {
   const isResolving = useGameStore((state) => state.isResolving);
   const turnBanner = useGameStore((state) => state.turnBanner);
   const effects = useGameStore((state) => state.effects);
+  const lastEvents = useGameStore((state) => state.lastEvents);
   const log = useGameStore((state) => state.log);
-  const tutorialComplete = useGameStore((state) => state.settings.tutorialComplete);
+  const trainingCompleted = useGameStore((state) => state.settings.trainingCompleted);
   const startMission = useGameStore((state) => state.startMission);
   const ensureIdentity = useGameStore((state) => state.ensureIdentity);
   const selectUnit = useGameStore((state) => state.selectUnit);
@@ -563,9 +551,11 @@ export function BattleClient() {
   const endTurn = useGameStore((state) => state.endTurn);
   const clearEffects = useGameStore((state) => state.clearEffects);
   const setTutorialComplete = useGameStore((state) => state.setTutorialComplete);
+  const completeTrainingLesson = useGameStore((state) => state.completeTrainingLesson);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [introVisible, setIntroVisible] = useState(true);
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
+  const missionId = game?.missionId;
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const controlsLocked = isResolving || introVisible;
@@ -583,49 +573,95 @@ export function BattleClient() {
     if (!hydrated || initialized.current) return;
     initialized.current = true;
     ensureIdentity();
-    startMission();
-  }, [ensureIdentity, hydrated, startMission]);
+    startMission(trainingMissionForProgress(trainingCompleted) ?? PROTECT_THE_VAULT.id);
+  }, [ensureIdentity, hydrated, startMission, trainingCompleted]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !missionId) return;
+    setIntroVisible(true);
     const timeout = window.setTimeout(() => setIntroVisible(false), 2050);
     return () => window.clearTimeout(timeout);
-  }, [hydrated]);
+  }, [hydrated, missionId]);
 
   useEffect(() => {
-    if (!hydrated || introVisible || !game || tutorialComplete || tutorialStarted.current || window.innerWidth < 1024) return;
-    const guardian = game.units.find((unit) => unit.id === "guardian");
-    const rugger = game.enemies.find((enemy) => enemy.id === "rugger-north");
-    const isCanonicalStart = game.turn === 1
-      && guardian?.position.x === 3
-      && guardian.position.y === 2
-      && rugger?.position.x === 3
-      && rugger.position.y === 0;
-    if (!isCanonicalStart) return;
-    tutorialStarted.current = true;
-    setTutorialStep("welcome");
-  }, [game, hydrated, introVisible, tutorialComplete]);
+    if (!hydrated || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
+    tutorialStarted.current = game.missionId;
+    setTutorialStep(initialTutorialStep(game.missionId));
+  }, [game, hydrated, introVisible]);
 
   useEffect(() => {
     if (!game || !tutorialStep) return;
-    const guardian = game.units.find((unit) => unit.id === "guardian");
-    const rugger = game.enemies.find((enemy) => enemy.id === "rugger-north");
+    const unitMovedTo = (unitId: string, target: string) => lastEvents.some((event) => event.type === "unit-moved" && event.unitId === unitId && coordinate(event.to) === target);
 
-    if (tutorialStep === "select-guardian" && selectedUnitId === "guardian") {
-      setTutorialStep("move-guardian");
-    } else if (tutorialStep === "move-guardian" && guardian?.hasMoved && guardian.position.x === 3 && guardian.position.y === 1) {
-      setTutorialStep("choose-attack");
-    } else if (tutorialStep === "choose-attack" && actionMode === "attack") {
-      setTutorialStep("attack-rugger");
-    } else if (tutorialStep === "attack-rugger" && guardian?.hasActed && rugger?.hp === 4) {
-      setTutorialStep("read-intents");
-    } else if (tutorialStep === "end-turn" && isResolving) {
-      setTutorialStep("watch-enemy");
-    } else if (tutorialStep === "watch-enemy" && !isResolving && game.turn === 2 && turnBanner === null) {
-      setTutorialComplete(true);
-      setTutorialStep("complete");
+    if (tutorialStep === "basics-select-guardian" && selectedUnitId === "guardian") {
+      setTutorialStep("basics-move-guardian");
+    } else if (tutorialStep === "basics-move-guardian" && unitMovedTo("guardian", "D2")) {
+      setTutorialStep("basics-choose-attack");
+    } else if (tutorialStep === "basics-choose-attack" && actionMode === "attack") {
+      setTutorialStep("basics-attack-rugger");
+    } else if (tutorialStep === "basics-attack-rugger" && lastEvents.some((event) => event.type === "unit-attacked" && event.enemyId === "rugger-training")) {
+      setTutorialStep("basics-read-intent");
+    } else if (tutorialStep === "basics-end-turn" && isResolving) {
+      setTutorialStep("basics-watch-enemy");
+    } else if (tutorialStep === "basics-watch-enemy" && !isResolving && game.phase === "victory" && turnBanner === null) {
+      completeTrainingLesson(1);
+      setTutorialStep("basics-complete");
+    } else if (tutorialStep === "squad-select-guardian" && selectedUnitId === "guardian") {
+      setTutorialStep("squad-move-guardian");
+    } else if (tutorialStep === "squad-move-guardian" && unitMovedTo("guardian", "D3")) {
+      setTutorialStep("squad-shield-wall");
+    } else if (tutorialStep === "squad-shield-wall" && lastEvents.some((event) => event.type === "shield-applied")) {
+      setTutorialStep("squad-select-sniper");
+    } else if (tutorialStep === "squad-select-sniper" && selectedUnitId === "sniper") {
+      setTutorialStep("squad-deadeye");
+    } else if (tutorialStep === "squad-deadeye" && actionMode === "ability") {
+      setTutorialStep("squad-target-drainer");
+    } else if (tutorialStep === "squad-target-drainer" && lastEvents.some((event) => event.type === "unit-attacked" && event.enemyId === "drainer-training" && event.deadeye)) {
+      setTutorialStep("squad-end-turn");
+    } else if (tutorialStep === "squad-end-turn" && isResolving) {
+      setTutorialStep("squad-watch-shield");
+    } else if (tutorialStep === "squad-watch-shield" && !isResolving && game.phase === "victory" && turnBanner === null) {
+      completeTrainingLesson(2);
+      setTutorialStep("squad-complete");
+    } else if (tutorialStep === "push-select-pusher" && selectedUnitId === "pusher") {
+      setTutorialStep("push-move-to-block");
+    } else if (tutorialStep === "push-move-to-block" && unitMovedTo("pusher", "E6")) {
+      setTutorialStep("push-choose-shove-block");
+    } else if (tutorialStep === "push-choose-shove-block" && actionMode === "push") {
+      setTutorialStep("push-data-block");
+    } else if (tutorialStep === "push-data-block" && lastEvents.some((event) => event.type === "target-pushed" && event.targetId === "data-block")) {
+      setTutorialStep("push-end-turn-one");
+    } else if (tutorialStep === "push-end-turn-one" && !isResolving && game.turn === 2 && turnBanner === null) {
+      setTutorialStep("push-breach-warning");
+    } else if (tutorialStep === "push-select-collision" && selectedUnitId === "pusher") {
+      setTutorialStep("push-move-to-collision");
+    } else if (tutorialStep === "push-move-to-collision" && unitMovedTo("pusher", "E5")) {
+      setTutorialStep("push-choose-shove-enemy");
+    } else if (tutorialStep === "push-choose-shove-enemy" && actionMode === "push") {
+      setTutorialStep("push-collision");
+    } else if (tutorialStep === "push-collision" && lastEvents.some((event) => event.type === "collision" && event.targetId === "rugger-dummy")) {
+      setTutorialStep("push-end-turn-two");
+    } else if (tutorialStep === "push-end-turn-two" && !isResolving && game.turn === 3 && turnBanner === null) {
+      setTutorialStep("push-whale-arrives");
+    } else if (tutorialStep === "push-select-for-whale" && selectedUnitId === "pusher") {
+      setTutorialStep("push-wait");
+    } else if (tutorialStep === "push-wait" && lastEvents.some((event) => event.type === "unit-waited" && event.unitId === "pusher")) {
+      setTutorialStep("push-end-turn-three");
+    } else if (tutorialStep === "push-end-turn-three" && isResolving) {
+      setTutorialStep("push-watch-charge");
+    } else if (tutorialStep === "push-watch-charge" && !isResolving && game.turn === 4 && game.enemies.some((enemy) => enemy.id === "whale-training" && enemy.whaleState === "charging") && turnBanner === null) {
+      setTutorialStep("push-locked-cone");
+    } else if (tutorialStep === "push-select-charging" && selectedUnitId === "pusher") {
+      setTutorialStep("push-move-for-whale");
+    } else if (tutorialStep === "push-move-for-whale" && unitMovedTo("pusher", "F5")) {
+      setTutorialStep("push-choose-shove-whale");
+    } else if (tutorialStep === "push-choose-shove-whale" && actionMode === "push") {
+      setTutorialStep("push-cancel-whale");
+    } else if (tutorialStep === "push-cancel-whale" && lastEvents.some((event) => event.type === "whale-charge-cancelled" && event.enemyId === "whale-training")) {
+      completeTrainingLesson(3);
+      setTutorialStep("training-complete");
     }
-  }, [actionMode, game, isResolving, selectedUnitId, setTutorialComplete, turnBanner, tutorialStep]);
+  }, [actionMode, completeTrainingLesson, game, isResolving, lastEvents, selectedUnitId, turnBanner, tutorialStep]);
 
   useEffect(() => {
     if (effects.length === 0) return;
@@ -634,7 +670,7 @@ export function BattleClient() {
   }, [clearEffects, effects]);
 
   useEffect(() => {
-    if (!game || !lastResult || (game.phase !== "victory" && game.phase !== "defeat")) return;
+    if (!game || isTrainingMissionId(game.missionId) || !lastResult || (game.phase !== "victory" && game.phase !== "defeat")) return;
     const timeout = window.setTimeout(() => router.replace("/results"), 950);
     return () => window.clearTimeout(timeout);
   }, [game, lastResult, router]);
@@ -653,6 +689,7 @@ export function BattleClient() {
     window.render_game_to_text = () => JSON.stringify({
       coordinateSystem: "A1 is top-left. Columns A-G increase right; rows 1-7 increase down.",
       screen: introVisible ? "mission-intro" : "battle",
+      missionId: game.missionId,
       phase: game.phase,
       turn: game.turn,
       selectedUnitId,
@@ -672,8 +709,9 @@ export function BattleClient() {
       tutorial: {
         running: tutorialStep !== null,
         step: tutorialStep,
+        lessonsCompleted: trainingCompleted,
         allowedCoordinate: tutorialCoordinate(tutorialStep),
-        allowedAction: tutorialStep === "choose-attack" ? "attack" : tutorialStep === "end-turn" ? "end-turn" : null,
+        allowedAction: tutorialAction(tutorialStep),
       },
     });
     window.advanceTime = (milliseconds) => {
@@ -684,30 +722,45 @@ export function BattleClient() {
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, enemyPlan, game, inspectedId, introVisible, isResolving, moves, pushTargets, selectedUnitId, tutorialStep]);
+  }, [actionMode, attackTargets, enemyPlan, game, inspectedId, introVisible, isResolving, moves, pushTargets, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
-    if (tutorialStep === "welcome") setTutorialStep("select-guardian");
-    else if (tutorialStep === "read-intents") setTutorialStep("end-turn");
-    else if (tutorialStep === "complete") setTutorialStep(null);
-  }, [tutorialStep]);
+    if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
+    else if (tutorialStep === "basics-read-intent") setTutorialStep("basics-end-turn");
+    else if (tutorialStep === "basics-complete") {
+      setTutorialStep(null);
+      setInspectedId(null);
+      startMission(TRAINING_SQUAD.id);
+    } else if (tutorialStep === "squad-intro") setTutorialStep("squad-select-guardian");
+    else if (tutorialStep === "squad-complete") {
+      setTutorialStep(null);
+      setInspectedId(null);
+      startMission(TRAINING_MOMENTUM.id);
+    } else if (tutorialStep === "push-intro") setTutorialStep("push-select-pusher");
+    else if (tutorialStep === "push-breach-warning") setTutorialStep("push-select-collision");
+    else if (tutorialStep === "push-whale-arrives") setTutorialStep("push-select-for-whale");
+    else if (tutorialStep === "push-locked-cone") setTutorialStep("push-select-charging");
+    else if (tutorialStep === "training-complete") {
+      setTutorialStep(null);
+      setInspectedId(null);
+      startMission(PROTECT_THE_VAULT.id);
+    }
+  }, [startMission, tutorialStep]);
 
   const skipTutorial = useCallback(() => {
     setTutorialComplete(true);
     setTutorialStep(null);
-  }, [setTutorialComplete]);
+    setInspectedId(null);
+    startMission(PROTECT_THE_VAULT.id);
+  }, [setTutorialComplete, startMission]);
 
   const tutorialAllowsTile = useCallback((position: Position) => {
     if (!tutorialRestrictsInput(tutorialStep)) return true;
-    const target = coordinate(position);
-    if (tutorialStep === "select-guardian") return target === "D3";
-    if (tutorialStep === "move-guardian") return target === "D2";
-    if (tutorialStep === "attack-rugger") return target === "D1";
-    return false;
+    return coordinate(position) === tutorialCoordinate(tutorialStep);
   }, [tutorialStep]);
 
   const activateAbility = useCallback(() => {
-    if (!selected || controlsLocked || tutorialRestrictsInput(tutorialStep)) return;
+    if (!selected || controlsLocked || (tutorialRestrictsInput(tutorialStep) && tutorialAction(tutorialStep) !== "ability")) return;
     if (selected.role === "guardian") shieldSelected();
     else setActionMode("ability");
   }, [controlsLocked, selected, setActionMode, shieldSelected, tutorialStep]);
@@ -742,7 +795,11 @@ export function BattleClient() {
   }, [actionMode, attackSelected, controlsLocked, game, highlights.attackIds, moveSelected, moves, pushSelected, pushTargets, selectUnit, selected, tutorialAllowsTile]);
 
   const handleActionMode = useCallback((mode: ActionMode) => {
-    if (tutorialRestrictsInput(tutorialStep) && !(mode === "attack" && (tutorialStep === "choose-attack" || tutorialStep === "attack-rugger"))) return;
+    if (tutorialRestrictsInput(tutorialStep)) {
+      const allowed = tutorialAction(tutorialStep);
+      if ((mode === "attack" && allowed !== "attack") || (mode === "push" && allowed !== "push")) return;
+      if (mode !== "attack" && mode !== "push") return;
+    }
     setActionMode(mode);
   }, [setActionMode, tutorialStep]);
 
@@ -764,8 +821,12 @@ export function BattleClient() {
       }
       if (event.repeat || controlsLocked || !game || game.phase !== "player") return;
       if (tutorialRestrictsInput(tutorialStep)) {
-        if (tutorialStep === "choose-attack" && key === "2" && selected && !selected.hasActed) setActionMode("attack");
-        else if (tutorialStep === "end-turn" && key === " ") {
+        const allowed = tutorialAction(tutorialStep);
+        if (allowed === "attack" && key === "2" && selected && !selected.hasActed) setActionMode("attack");
+        else if (allowed === "ability" && key === "3") activateAbility();
+        else if (allowed === "push" && key === "s" && selected?.role === "pusher" && !selected.hasActed) setActionMode("push");
+        else if (allowed === "wait" && key === "w" && selected && !selected.hasActed) waitSelected();
+        else if (allowed === "end-turn" && key === " ") {
           event.preventDefault();
           endTurn();
         }
@@ -777,10 +838,12 @@ export function BattleClient() {
       } else if (key === "1" && selected && !selected.hasMoved && !selected.hasActed) setActionMode("move");
       else if (key === "2" && selected && !selected.hasActed) setActionMode("attack");
       else if (key === "3" && selected && !selected.hasActed && selected.signatureAvailable && (selected.role !== "sniper" || !selected.hasMoved)) activateAbility();
+      else if (key === "s" && selected?.role === "pusher" && !selected.hasActed) setActionMode("push");
+      else if (key === "w" && selected && !selected.hasActed) waitSelected();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activateAbility, controlsLocked, endTurn, game, selected, setActionMode, tutorialStep]);
+  }, [activateAbility, controlsLocked, endTurn, game, selected, setActionMode, tutorialStep, waitSelected]);
 
   return (
     <div className="game-battle-route">
@@ -809,10 +872,10 @@ export function BattleClient() {
             />
           </>
         )}
-        {introVisible && game ? <MissionIntro /> : null}
-        {turnBanner && !introVisible ? <div className="game-turn-banner" role="status">{turnBanner}</div> : null}
+        {introVisible && game ? <MissionIntro game={game} /> : null}
+        {turnBanner && !introVisible ? <div className={clsx("game-turn-banner", ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep ?? "") && "is-tutorial-watch")} role="status">{turnBanner}</div> : null}
         {isResolving && !introVisible ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
-        {tutorialStep && !introVisible ? <BattleTutorial step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
+        {tutorialStep && !introVisible ? <BattleTutorial key={tutorialStep} step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
       </main>
     </div>
   );

@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROTECT_THE_VAULT,
+  TRAINING_BASICS,
+  TRAINING_LESSONS,
+  TRAINING_MOMENTUM,
+  TRAINING_SQUAD,
   activateDeadeye,
   applyShield,
   attackEnemy,
   calculateEnemyPlan,
   createInitialGameState,
+  getMissionDefinition,
   getAttackableTargets,
   getPushTargets,
   getValidMoves,
+  isTrainingMissionId,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
@@ -55,6 +61,247 @@ const whaleTurnThreeState = (): GameState => ({
   completedEnemyPhases: 2,
   enemies: [whaleEnemy()],
   breach: { position: at(6, 3), status: "spawned" },
+});
+
+describe("engine-valid training missions", () => {
+  it("registers the three ordered lessons and safely falls back for unknown IDs", () => {
+    expect(TRAINING_LESSONS.map((lesson) => [lesson.order, lesson.missionId])).toEqual([
+      [1, "training-basics"],
+      [2, "training-squad"],
+      [3, "training-momentum"],
+    ]);
+    expect(getMissionDefinition("training-basics")).toBe(TRAINING_BASICS);
+    expect(getMissionDefinition("training-squad")).toBe(TRAINING_SQUAD);
+    expect(getMissionDefinition("training-momentum")).toBe(TRAINING_MOMENTUM);
+    expect(getMissionDefinition("unknown-mission")).toBe(PROTECT_THE_VAULT);
+    expect(isTrainingMissionId("training-momentum")).toBe(true);
+    expect(isTrainingMissionId("protect-the-vault")).toBe(false);
+  });
+
+  it("teaches movement, attack, and an exact resolved intent in First Contact", () => {
+    const initial = createInitialGameState(TRAINING_BASICS);
+    expect(initial).toMatchObject({ missionId: "training-basics", maxTurns: 1 });
+    expect(initial.vault.position).toEqual(at(3, 5));
+    expect(initial.units.map((unit) => [unit.id, unit.position])).toEqual([
+      ["guardian", at(3, 3)],
+    ]);
+
+    const moved = moveUnit(initial, "guardian", at(3, 1));
+    expect(moved.events).toContainEqual({
+      type: "unit-moved",
+      unitId: "guardian",
+      from: at(3, 3),
+      to: at(3, 1),
+    });
+    const attacked = attackEnemy(moved.state, "guardian", "rugger-training");
+    expect(attacked.state.enemies[0]).toMatchObject({ hp: 4, position: at(3, 0) });
+
+    const plan = calculateEnemyPlan(attacked.state);
+    expect(plan.intents).toHaveLength(1);
+    expect(plan.intents[0]).toMatchObject({
+      enemyId: "rugger-training",
+      order: 1,
+      action: "attack",
+      path: [],
+      destination: at(3, 0),
+      target: { id: "guardian", expectedDamage: 3 },
+      damage: 3,
+    });
+
+    const resolved = resolveEnemyTurn(attacked.state, plan);
+    expect(resolved.state).toMatchObject({
+      phase: "victory",
+      completedEnemyPhases: 1,
+    });
+    expect(resolved.state.units[0].hp).toBe(9);
+    expect(resolved.events).toContainEqual({
+      type: "damage",
+      sourceId: "rugger-training",
+      targetId: "guardian",
+      amount: 3,
+      absorbed: 0,
+    });
+  });
+
+  it("teaches independent activations, Shield Wall, and Deadeye in Action Economy", () => {
+    let state = createInitialGameState(TRAINING_SQUAD);
+    state = moveUnit(state, "guardian", at(3, 2)).state;
+
+    const shielded = applyShield(state, "guardian");
+    expect(shielded.events).toContainEqual({
+      type: "shield-applied",
+      sourceId: "guardian",
+      unitIds: ["guardian", "sniper"],
+      value: 2,
+    });
+    expect(
+      shielded.state.units.find((unit) => unit.id === "guardian"),
+    ).toMatchObject({ hasMoved: true, hasActed: true, signatureAvailable: false });
+    expect(
+      shielded.state.units.find((unit) => unit.id === "sniper"),
+    ).toMatchObject({ hasMoved: false, hasActed: false, shield: { value: 2 } });
+
+    const deadeye = activateDeadeye(
+      shielded.state,
+      "sniper",
+      "drainer-training",
+    );
+    expect(deadeye.state.enemies.some((enemy) => enemy.id === "drainer-training")).toBe(false);
+    expect(deadeye.state.units.find((unit) => unit.id === "sniper")).toMatchObject({
+      hasMoved: true,
+      hasActed: true,
+      signatureAvailable: false,
+    });
+
+    const plan = calculateEnemyPlan(deadeye.state);
+    expect(plan.intents).toHaveLength(1);
+    expect(plan.intents[0]).toMatchObject({
+      enemyId: "rugger-training",
+      action: "attack",
+      path: [at(3, 1)],
+      target: { id: "guardian", expectedDamage: 1 },
+      damage: 3,
+    });
+
+    const resolved = resolveEnemyTurn(deadeye.state, plan);
+    expect(resolved.state.phase).toBe("victory");
+    expect(resolved.state.units.find((unit) => unit.id === "guardian")).toMatchObject({
+      hp: 11,
+      shield: null,
+    });
+    expect(resolved.events).toContainEqual({
+      type: "damage",
+      sourceId: "rugger-training",
+      targetId: "guardian",
+      amount: 1,
+      absorbed: 2,
+    });
+  });
+
+  it("teaches object push, enemy-only collision, Whale lock, cancellation, and stagger", () => {
+    let state = createInitialGameState(TRAINING_MOMENTUM);
+    expect(state).toMatchObject({ missionId: "training-momentum", maxTurns: 5 });
+    expect(state.vault.position).toEqual(at(3, 2));
+    expect(state.obstacles).toEqual([at(4, 2)]);
+
+    state = moveUnit(state, "pusher", at(4, 5)).state;
+    const blockPush = pushTarget(state, "pusher", "data-block", "shove");
+    expect(blockPush.state.objects[0].position).toEqual(at(2, 5));
+    expect(blockPush.events).toContainEqual({
+      type: "target-pushed",
+      sourceId: "pusher",
+      targetId: "data-block",
+      targetKind: "object",
+      from: at(3, 5),
+      to: at(2, 5),
+      distance: 1,
+      ability: "shove",
+    });
+
+    let resolved = resolveEnemyTurn(
+      blockPush.state,
+      calculateEnemyPlan(blockPush.state),
+    );
+    state = resolved.state;
+    expect(state).toMatchObject({ turn: 2, phase: "player" });
+    expect(state.breach.status).toBe("incoming");
+    expect(state.enemies.some((enemy) => enemy.kind === "whale")).toBe(false);
+
+    state = moveUnit(state, "pusher", at(4, 4)).state;
+    const collision = pushTarget(state, "pusher", "rugger-dummy", "shove");
+    expect(collision.events).toContainEqual({
+      type: "collision",
+      sourceId: "pusher",
+      targetId: "rugger-dummy",
+      targetKind: "enemy",
+      damage: 1,
+      ability: "shove",
+    });
+    expect(collision.events).toContainEqual({
+      type: "enemy-defeated",
+      enemyId: "rugger-dummy",
+    });
+    expect(collision.state.enemies).toEqual([]);
+    expect(collision.state.units[0].hp).toBe(9);
+    expect(collision.state.vault.hp).toBe(10);
+
+    resolved = resolveEnemyTurn(
+      collision.state,
+      calculateEnemyPlan(collision.state),
+    );
+    state = resolved.state;
+    expect(state).toMatchObject({ turn: 3, phase: "player" });
+    expect(state.breach.status).toBe("spawned");
+    expect(state.enemies).toContainEqual(expect.objectContaining({
+      id: "whale-training",
+      position: at(6, 3),
+      whaleState: "ready",
+    }));
+
+    const chargePlan = calculateEnemyPlan(state);
+    expect(chargePlan.intents).toHaveLength(1);
+    expect(chargePlan.intents[0]).toMatchObject({
+      enemyId: "whale-training",
+      action: "charge",
+      path: [at(5, 3)],
+      destination: at(5, 3),
+      area: [at(4, 3), at(3, 2), at(3, 3), at(3, 4)],
+      damage: 0,
+      special: "lock-cone",
+      facing: "west",
+    });
+    resolved = resolveEnemyTurn(state, chargePlan);
+    state = resolved.state;
+    expect(state).toMatchObject({ turn: 4, phase: "player" });
+    expect(resolved.events).toContainEqual({
+      type: "whale-cone-locked",
+      enemyId: "whale-training",
+      area: [at(4, 3), at(3, 2), at(3, 3), at(3, 4)],
+      facing: "west",
+    });
+    expect(state.enemies[0]).toMatchObject({
+      id: "whale-training",
+      position: at(5, 3),
+      whaleState: "charging",
+    });
+
+    state = moveUnit(state, "pusher", at(5, 4)).state;
+    const interrupted = pushTarget(state, "pusher", "whale-training", "shove");
+    expect(interrupted.events).toContainEqual({
+      type: "target-pushed",
+      sourceId: "pusher",
+      targetId: "whale-training",
+      targetKind: "enemy",
+      from: at(5, 3),
+      to: at(5, 2),
+      distance: 1,
+      ability: "shove",
+    });
+    expect(interrupted.events).toContainEqual({
+      type: "whale-charge-cancelled",
+      enemyId: "whale-training",
+    });
+    expect(interrupted.state.enemies[0]).toMatchObject({
+      position: at(5, 2),
+      whaleState: "staggered",
+      lockedArea: [],
+    });
+
+    const staggerPlan = calculateEnemyPlan(interrupted.state);
+    expect(staggerPlan.intents[0]).toMatchObject({
+      enemyId: "whale-training",
+      action: "staggered",
+      area: [],
+      damage: 0,
+      special: "stagger-skip",
+    });
+    resolved = resolveEnemyTurn(interrupted.state, staggerPlan);
+    expect(resolved.events).toContainEqual({
+      type: "whale-staggered",
+      enemyId: "whale-training",
+    });
+    expect(resolved.state.enemies[0].whaleState).toBe("ready");
+  });
 });
 
 describe("mission state and player movement", () => {

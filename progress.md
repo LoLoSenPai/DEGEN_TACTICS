@@ -50,6 +50,26 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Replayed the complete interactive tutorial after grid calibration; D3 selection, D2 movement, D1 attack, enemy resolution, persistence, replay, and skip remain functional with zero captured console errors.
 - Post-calibration gates passed: lint with zero warnings, strict typecheck, all 38 tests, and a clean optimized production build of all 9 static pages.
 
+## 2026-07-12 — Incoming generated-asset audit
+
+- Audited the four files under `public/art/incoming` for source dimensions, real alpha, opaque bounds, frame geometry, anchors, and fit with the live board/HUD. All four have genuine transparent RGBA backgrounds, but none is safe to integrate raw.
+- Guardian master is 1536x1024 rather than 1024x1024. Its isolated 577x636 silhouette is technically clean and can be recanvased/reanchored, but the helmeted chibi redesign conflicts with the current expressive human squad and needs art-direction approval before replacement.
+- Guardian idle is a centered 1024x1024 area containing four ~512x512 poses inside a 1536x1024 file, not the requested 2048x2048 equal-frame sheet. Frames bleed by one pixel, their foot anchors shift 14–15 source pixels, and independent redrawing will create animation shimmer. It is prototype-salvageable only after extraction and registration.
+- Teal action buttons are three irregular bands inside a 500x500 file rather than three aligned 1536x512 rows. The frames are extractable and could seed one teal 9-slice button, but do not cover current aspect ratios, disabled/focus/selected states, or blue/violet/gold families.
+- Intent kit is 707x353 and cannot tile: its nominal 4x2 slots are unequal, all path connectors stop well before slot edges, capped segments create gaps/double joints, and danger plates obscure the floor. Keep only isolated marker/decal ideas; reject it for exact enemy paths.
+- TODO: if the Guardian redesign is accepted, normalize its static master locally. For animation, request one strict transparent 1024x1024 edited frame at a time and assemble/register the sheet in code; do not ask Image Gen to compose the spritesheet.
+
+## 2026-07-12 — Progressive training and exact SVG intents
+
+- Replaced the disconnected per-cell intent arrows with a deterministic SVG overlay built from the exact `EnemyTurnPlan`. It follows the calibrated nonuniform board rails and renders continuous movement routes, corners, directional arrowheads, ordered badges, dashed attack links, target reticles, and exact damage without raster assets.
+- Added pure geometry tests for calibrated tile centers, continuous corner paths, target deduplication, and trimmed attack links. Typecheck and the focused Vitest suite pass; the official browser client captured the new routes with serialized intent state and no console error artifact.
+- Added three engine-valid first-time training missions that run directly inside the battle route: First Contact (move/attack/intent/commit), Action Economy (independent activations, Shield Wall, line of sight and Deadeye), and Momentum (Wait, Data Block push, enemy-only collision, Whale warning/lock/cancel/stagger).
+- Rebuilt onboarding presentation around large centered lesson intros, 1/3 progress, readable imperative-first copy, contextual coach cards, dynamic target spotlights, a dimmed attention layer, responsive 1024px typography, and replay/skip controls. The player is no longer released until all core rules have been performed in real deterministic states.
+- Added persisted `trainingCompleted` progress. Partial curricula continue from the next lesson, completion starts a fresh Protect the Vault mission, Options can replay all lessons, Skip Training safely unlocks the final mission, and old boolean tutorial storage falls back to the new curriculum.
+- Added four deterministic curriculum engine tests plus a third SVG area-intent test. The complete semantic browser pass now executes every tutorial input, validates exact damage/shield/object/collision/Whale state, reload persistence, replay, skip, and final mission handoff with zero captured console errors.
+- Final curriculum gates passed: ESLint with zero warnings, strict TypeScript, all 45 Vitest cases, `git diff --check`, and a clean optimized Next.js 15 production build of all 9 static pages.
+- Re-ran the main-battle and deliberate-defeat regressions after training integration; both remained playable with zero captured console errors. Grid registration still measures below 0.05 CSS px of authored rail drift at every supported viewport.
+
 ## Final verification (original slice)
 
 - Passed `pnpm lint` with zero warnings, strict `pnpm typecheck`, all 38 `pnpm test` cases, and the optimized Next.js 15 production build.
