@@ -201,6 +201,32 @@
   box-shadow: 0 8px 0 #146a62, 0 0 36px rgba(65, 222, 199, 0.28);
 }
 
+.title-button-primary small,
+.title-button-training small {
+  display: block;
+  margin-top: 5px;
+  font: 800 11px/1 var(--game-font-body);
+  letter-spacing: 0.12em;
+}
+
+.title-button-primary small {
+  color: #176a60;
+}
+
+.title-button-training {
+  border-color: #b879ef;
+  color: #ead7fb;
+  background-color: #28183a;
+}
+
+.title-button-training::after {
+  background-color: #9c57d8;
+}
+
+.title-button-training small {
+  color: #bca5cf;
+}
+
 .title-button-wallet {
   color: #878f94;
 }
@@ -426,6 +452,89 @@
   width: 22px;
   height: 22px;
   color: #55ddc9;
+}
+
+.launch-warning {
+  width: min(100%, 560px);
+  border-color: #c48b36;
+}
+
+.launch-warning-body {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin: 14px;
+  border: 1px solid #65491c;
+  padding: 18px;
+  background-color: #211908;
+}
+
+.launch-warning-body > svg {
+  width: 52px;
+  height: 52px;
+  color: #ffc857;
+}
+
+.launch-warning-body strong {
+  color: #ffdc86;
+  font-size: 18px;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.launch-warning-body p {
+  margin: 8px 0 0;
+  color: #d4d8d5;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.launch-warning-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.launch-warning-actions button {
+  min-height: 52px;
+  border: 2px solid #48575e;
+  padding: 9px 14px;
+  color: #e5eceb;
+  background-color: #111a1e;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.launch-warning-actions button:hover,
+.launch-warning-actions button:focus-visible {
+  border-color: #68e6d3;
+  outline: none;
+  background-color: #17262a;
+}
+
+.launch-warning-actions .launch-continue {
+  border-color: #4bdcca;
+  color: #04110f;
+  background-color: #4bd7c4;
+}
+
+.launch-warning-actions .launch-anyway {
+  border-color: #c48b36;
+  color: #ffda7d;
+  background-color: #31230d;
+}
+
+.launch-warning-actions .launch-cancel {
+  grid-column: 1 / -1;
+  min-height: 40px;
+  color: #9aa7ab;
+  background-color: transparent;
 }
 
 @keyframes title-camera {

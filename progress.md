@@ -95,3 +95,15 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Extended the text serializer with movement previews, combat variants, exact areas, multi-target hits, and enemy-plan targets for deterministic browser assertions.
 - Added pure tests for route calculation, calibrated preview geometry, Whale multi-target playback, and effect grouping. The suite now contains 52 passing tests.
 - Replayed the complete three-lesson training, Drainer siphon/heal, Whale charge/slam, main battle, results/defeat, responsive layout, and source-pixel grid registration with zero captured console errors.
+
+## 2026-07-13 — Player-paced training and activation clarity
+
+- Replaced the forced three-lesson tunnel with a dedicated `/training` hub. The three playable chapters now show their purpose, skills, duration, locked/available/completed state and persisted `0/3` progress; completed chapters can be replayed without resetting progress.
+- The title screen now separates `Play as Guest` from `Field Training`. Launching the mission before all chapters are complete shows an explicit choice to continue training, play anyway or cancel; playing early preserves the real training progress.
+- Each chapter returns to the hub instead of auto-starting the next one. Every interactive coach step offers `Exit lesson`, training intros are shorter, and the former intimidating 10/11/22 microstep counts are presented as four understandable milestones per chapter.
+- Added a clickable squad readiness rail and on-board `READY`, `ACTION`, and `DONE` badges. A moved hero remains visibly actionable, completed heroes are muted without hiding HP/status, and End Turn displays the exact number of unfinished activations.
+- Added a shared End Turn confirmation for mouse and keyboard. It lists every unfinished hero as `Move + action remaining` or `Action remaining`, can return directly to the first pending hero, and is skipped when every living hero has acted or during authored training commits.
+- Expanded selected-hero information with exact one-mission charge state, ability effect and restrictions. Deadeye explains its no-movement lock, Pusher distinguishes reusable Shove from one-charge Batter Up, and spent charges remain visible as `0/1`.
+- Raised core battle, inspector, action-hint, tutorial and training-hub text sizes. The 1024px coach now stays above 310px wide with 16px imperative/body text, a visible `NEXT MOVE` rail and clearer chapter progress.
+- Added semantic browser coverage for chapter choice/exit/persistence, unfinished-training deployment, activation states, End Turn cancel/confirm, charge spending, reusable actions, Deadeye blocking, zero-warning full activation, and computed 1024px readability. Updated all existing curriculum, combat, results, responsive and grid-registration regressions for the new flow.
+- Final gates passed: ESLint with zero warnings, strict TypeScript, all 52 Vitest cases, `git diff --check`, the complete browser suite with zero captured console errors, and a clean Next.js 15 production build including the new training route.

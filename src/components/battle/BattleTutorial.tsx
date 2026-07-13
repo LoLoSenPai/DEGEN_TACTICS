@@ -130,9 +130,9 @@ const PUSH_STEPS = [
 ] as const;
 
 const LESSONS: readonly LessonMeta[] = [
-  { label: "Lesson 1 / 3 · The Turn Loop", steps: BASICS_STEPS },
-  { label: "Lesson 2 / 3 · Squad Tactics", steps: SQUAD_STEPS },
-  { label: "Lesson 3 / 3 · Push Control", steps: PUSH_STEPS },
+  { label: "Chapter 1 / 3 · The Turn Loop", steps: BASICS_STEPS },
+  { label: "Chapter 2 / 3 · Squad Tactics", steps: SQUAD_STEPS },
+  { label: "Chapter 3 / 3 · Push Control", steps: PUSH_STEPS },
 ];
 
 const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
@@ -202,8 +202,8 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "basics-complete": {
     title: "Turn loop complete",
     prompt: "Move, act, read, then commit.",
-    body: "You completed one full turn. Next, use positioning, abilities and line of sight.",
-    action: "Next lesson",
+    body: "Chapter cleared. Return to training now, or start the next chapter whenever you are ready.",
+    action: "Back to training",
     icon: "complete",
   },
   "squad-intro": {
@@ -279,8 +279,8 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "squad-complete": {
     title: "Squad tactics complete",
     prompt: "Position first. Spend abilities with purpose.",
-    body: "You learned activation order, adjacency, line of sight and one-charge signatures.",
-    action: "Next lesson",
+    body: "Chapter cleared. Your progress is saved; continue with board control when you want.",
+    action: "Back to training",
     icon: "complete",
   },
   "push-intro": {
@@ -441,7 +441,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     title: "Training complete",
     prompt: "Protect the Vault for five turns.",
     body: "You know the turn loop, exact intents, line of sight, shields, Wait, collision and Whale interruption.",
-    action: "Start mission",
+    action: "Back to training",
     icon: "complete",
   },
 };
@@ -468,13 +468,15 @@ const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
 ]);
 
 function lessonProgress(step: Exclude<BattleTutorialStep, null>) {
-  if (step === "training-complete") return { label: "Field training complete", current: 3, total: 3 };
+  if (step === "training-complete") return { label: "Chapter 3 / 3 · Push Control", current: 4, total: 4 };
   const lesson = LESSONS.find((candidate) => candidate.steps.includes(step));
   if (!lesson) return { label: "Field training", current: 1, total: 1 };
+  const stepIndex = lesson.steps.indexOf(step);
+  const milestoneCount = 4;
   return {
     label: lesson.label,
-    current: lesson.steps.indexOf(step) + 1,
-    total: lesson.steps.length,
+    current: Math.min(milestoneCount, Math.floor((stepIndex * milestoneCount) / lesson.steps.length) + 1),
+    total: milestoneCount,
   };
 }
 
@@ -567,7 +569,6 @@ export function BattleTutorial({
 }) {
   const copy = COPY[step];
   const progress = lessonProgress(step);
-  const isIntro = isTutorialIntroStep(step);
   const isCentered = isTutorialCenteredStep(step);
   const isObserving = OBSERVE_STEPS.has(step);
   const spotlight = useTutorialSpotlight(step);
@@ -603,7 +604,7 @@ export function BattleTutorial({
         <strong className="tutorial-prompt">{copy.prompt}</strong>
         <p id={bodyId}>{copy.body}</p>
         <footer>
-          {isIntro ? <button type="button" className="tutorial-skip" onClick={onSkip}>Skip training</button> : <span />}
+          <button type="button" className="tutorial-skip" onClick={onSkip}>Exit lesson</button>
           {copy.action ? (
             <button type="button" className="tutorial-continue" onClick={onContinue} autoFocus={isCentered}>
               {copy.action}<ArrowRight weight="bold" />

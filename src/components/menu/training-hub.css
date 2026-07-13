@@ -1,0 +1,553 @@
+.training-screen {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden auto;
+  color: #f2f4ef;
+  background-color: #03070a;
+  isolation: isolate;
+}
+
+.training-backdrop,
+.training-vignette {
+  position: fixed;
+  z-index: -2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.training-backdrop {
+  background-image: url("/assets/battle/blacksite-arena.png");
+  background-position: center;
+  background-size: cover;
+  filter: brightness(0.32) saturate(0.72);
+  transform: scale(1.025);
+}
+
+.training-vignette {
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 9, 0.48), rgba(2, 6, 9, 0.86)),
+    radial-gradient(circle at 50% 30%, transparent 0 24%, rgba(0, 0, 0, 0.62) 82%);
+}
+
+.training-topbar {
+  display: flex;
+  width: min(1180px, calc(100% - 48px));
+  min-height: 68px;
+  margin: 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #26353c;
+}
+
+.training-back-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  color: #cad3d3;
+  font: 800 15px/1 var(--game-font-body);
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.training-back-link:hover,
+.training-back-link:focus-visible {
+  color: #69e7d3;
+}
+
+.training-back-link:focus-visible,
+.training-chapter button:focus-visible,
+.training-mission-link:focus-visible {
+  outline: 3px solid #fff1a8;
+  outline-offset: 4px;
+}
+
+.training-system-label {
+  color: #69777e;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+}
+
+.training-shell {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: clamp(36px, 6vh, 70px) 0 48px;
+}
+
+.training-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 40px;
+  margin-bottom: 30px;
+}
+
+.training-heading p {
+  margin: 0 0 7px;
+  color: #5ce1cd;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.training-heading h1 {
+  margin: 0;
+  font: 400 clamp(48px, 5.2vw, 78px)/0.94 var(--game-font-display);
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  text-shadow: 4px 5px 0 #020405;
+}
+
+.training-heading > div:first-child > span {
+  display: block;
+  max-width: 700px;
+  margin-top: 13px;
+  color: #aeb9bc;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.training-overall {
+  display: flex;
+  min-width: 262px;
+  align-items: center;
+  gap: 15px;
+  border-left: 3px solid #47d8c2;
+  padding: 8px 0 8px 17px;
+  background-color: #081115;
+}
+
+.training-overall > strong {
+  color: #f5f2e8;
+  font: 400 44px/1 var(--game-font-display);
+}
+
+.training-overall > strong small {
+  color: #67757b;
+  font-size: 22px;
+}
+
+.training-overall > div {
+  flex: 1;
+}
+
+.training-overall span {
+  color: #aab6b9;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.training-overall i {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.training-overall i b {
+  width: 44px;
+  height: 6px;
+  background-color: #29353a;
+}
+
+.training-overall i b.is-complete {
+  background-color: #50ddc8;
+  box-shadow: 0 0 9px rgba(80, 221, 200, 0.4);
+}
+
+.training-chapter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.training-chapter {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  grid-template-rows: 210px 1fr auto;
+  border: 2px solid #34434a;
+  color: #e8edeb;
+  background-color: #091014;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.5), inset 0 0 0 3px #030609;
+}
+
+.training-chapter::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 5px;
+  content: "";
+  background-color: #56636a;
+}
+
+.training-chapter.is-next {
+  border-color: #d6a13a;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.56), 0 0 26px rgba(211, 153, 44, 0.12), inset 0 0 0 3px #030609;
+}
+
+.training-chapter.is-next::after {
+  background-color: #efbd53;
+}
+
+.training-chapter.is-complete {
+  border-color: #288e82;
+}
+
+.training-chapter.is-complete::after {
+  background-color: #56ddc9;
+}
+
+.training-chapter.is-locked {
+  border-color: #283138;
+}
+
+.training-chapter-art {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 2px solid #2a373d;
+  background:
+    linear-gradient(180deg, rgba(10, 23, 27, 0.18), #070d11),
+    url("/assets/battle/blacksite-board-7x7.png") center 58% / 145% auto;
+}
+
+.training-chapter.is-next .training-chapter-art {
+  border-color: #6e5625;
+}
+
+.training-chapter-art::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, rgba(3, 7, 10, 0.76), transparent 58%);
+  pointer-events: none;
+}
+
+.training-chapter-art img {
+  z-index: 2;
+  object-fit: contain;
+  object-position: 72% 52%;
+  filter: drop-shadow(0 15px 9px rgba(0, 0, 0, 0.8));
+  transform: scale(1.04);
+}
+
+.training-chapter.is-locked .training-chapter-art img {
+  filter: grayscale(0.85) brightness(0.55) drop-shadow(0 12px 8px #000);
+}
+
+.training-chapter-number {
+  position: absolute;
+  z-index: 3;
+  top: 19px;
+  left: 18px;
+  color: #d9e1df;
+  font: 400 49px/1 var(--game-font-display);
+  text-shadow: 3px 3px 0 #020406;
+}
+
+.training-piece-ring {
+  position: absolute;
+  z-index: 1;
+  right: 7%;
+  bottom: 17px;
+  width: 57%;
+  height: 14%;
+  border: 2px solid rgba(72, 222, 200, 0.62);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(72, 222, 200, 0.34), inset 0 0 14px rgba(72, 222, 200, 0.18);
+}
+
+.training-chapter.is-next .training-piece-ring {
+  border-color: rgba(239, 189, 83, 0.75);
+  box-shadow: 0 0 18px rgba(239, 189, 83, 0.35), inset 0 0 14px rgba(239, 189, 83, 0.2);
+}
+
+.training-chapter-copy {
+  padding: 19px 20px 17px;
+}
+
+.training-chapter-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #65ddca;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.training-chapter-meta span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #9eaaae;
+  white-space: nowrap;
+}
+
+.training-chapter-meta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.training-chapter h2 {
+  margin: 10px 0 8px;
+  color: #f5f2e9;
+  font: 400 34px/1 var(--game-font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.training-chapter-copy > p {
+  min-height: 48px;
+  margin: 0;
+  color: #a8b3b6;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.training-chapter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 17px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-chapter li {
+  border-left: 2px solid #3f575e;
+  padding: 4px 7px;
+  color: #bdc7c8;
+  background-color: #111b20;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+}
+
+.training-chapter > footer {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #26343a;
+  padding: 11px 13px 11px 19px;
+  background-color: #070c0f;
+}
+
+.training-chapter-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #839095;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.training-chapter-status svg {
+  width: 17px;
+  height: 17px;
+}
+
+.training-chapter.is-complete .training-chapter-status {
+  color: #54dac5;
+}
+
+.training-chapter.is-next .training-chapter-status {
+  color: #efbd53;
+}
+
+.training-chapter button {
+  display: inline-flex;
+  min-height: 41px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px solid #52dac6;
+  padding: 0 12px;
+  color: #06110f;
+  background-color: #52dac6;
+  font: 900 13px/1 var(--game-font-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.training-chapter.is-next button {
+  border-color: #efbd53;
+  background-color: #efbd53;
+}
+
+.training-chapter button:hover:not(:disabled) {
+  background-color: #7cede0;
+  transform: translateY(-2px);
+}
+
+.training-chapter.is-next button:hover:not(:disabled) {
+  background-color: #ffd978;
+}
+
+.training-chapter button:disabled {
+  border-color: #303a3f;
+  color: #677278;
+  background-color: #141b1f;
+  cursor: not-allowed;
+}
+
+.training-chapter button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.training-footer {
+  display: flex;
+  margin-top: 26px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  border-top: 1px solid #334047;
+  padding: 23px 0 0;
+}
+
+.training-footer p {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  color: #88969b;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.training-footer p strong {
+  color: #e5eae7;
+  font-size: 17px;
+}
+
+.training-mission-link {
+  display: inline-flex;
+  min-width: 205px;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 2px solid #9d5fe0;
+  color: #f1e6ff;
+  background-color: #28143c;
+  box-shadow: 0 5px 0 #0b0610;
+  font: 900 14px/1 var(--game-font-body);
+  letter-spacing: 0.09em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.training-mission-link:hover {
+  background-color: #3b1c59;
+  transform: translateY(-2px);
+}
+
+.training-mission-link svg {
+  width: 21px;
+  height: 21px;
+}
+
+@media (max-width: 1000px) {
+  .training-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .training-overall {
+    width: min(100%, 330px);
+  }
+
+  .training-chapter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .training-chapter {
+    grid-template-columns: minmax(230px, 34%) 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .training-chapter-art {
+    grid-row: 1 / 3;
+    min-height: 260px;
+    border-right: 2px solid #2a373d;
+    border-bottom: 0;
+  }
+
+  .training-chapter-copy > p {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .training-topbar,
+  .training-shell {
+    width: min(100% - 28px, 1180px);
+  }
+
+  .training-system-label {
+    display: none;
+  }
+
+  .training-shell {
+    padding-top: 34px;
+  }
+
+  .training-heading {
+    gap: 24px;
+  }
+
+  .training-heading h1 {
+    font-size: 48px;
+  }
+
+  .training-heading > div:first-child > span {
+    font-size: 15px;
+  }
+
+  .training-chapter {
+    grid-template-columns: 1fr;
+    grid-template-rows: 190px 1fr auto;
+  }
+
+  .training-chapter-art {
+    grid-row: auto;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 2px solid #2a373d;
+  }
+
+  .training-chapter > footer,
+  .training-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .training-chapter button,
+  .training-mission-link {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-chapter button,
+  .training-mission-link {
+    transition: none;
+  }
+}
