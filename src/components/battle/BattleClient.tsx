@@ -70,7 +70,7 @@ const SPRITE_ASSETS = {
 
 type SpriteKind = keyof typeof SPRITE_ASSETS;
 
-type BattleSpriteMotion = "idle" | "attack" | "hurt" | "death";
+type BattleSpriteMotion = "idle" | "walk" | "attack" | "ability" | "hurt" | "death";
 
 type BattleSpriteState = {
   motion: BattleSpriteMotion;
@@ -164,7 +164,12 @@ function SpriteArt({ kind, name, className, priority = false }: { kind: SpriteKi
   );
 }
 
-function battleSpriteState(effects: readonly BattleEffect[], unitId: string): BattleSpriteState {
+function battleSpriteState(
+  effects: readonly BattleEffect[],
+  cue: CombatCue | null,
+  unitId: string,
+  role: PlayerUnit["role"],
+): BattleSpriteState {
   const targetEffects = effects.filter((effect) => effect.targetId === unitId);
   const deathEffect = [...targetEffects].reverse().find((effect) => effect.kind === "death");
   if (deathEffect) return { motion: "death", effectId: deathEffect.id };
@@ -174,24 +179,42 @@ function battleSpriteState(effects: readonly BattleEffect[], unitId: string): Ba
   );
   if (hurtEffect) return { motion: "hurt", effectId: hurtEffect.id };
 
-  const attackEffect = effects.find((effect) =>
-    (effect.kind === "attack" || effect.kind === "push") && effect.sourceId === unitId,
+  const abilityEffect = [...effects].reverse().find((effect) =>
+    effect.sourceId === unitId
+      && (
+        (role === "guardian" && effect.kind === "shield")
+        || (role === "pusher" && (effect.kind === "push" || (effect.kind === "collision" && Boolean(effect.ability))))
+      ),
   );
-  if (attackEffect) return { motion: "attack", effectId: attackEffect.id };
+  const abilityCue = cue?.sourceId === unitId && (
+    (role === "guardian" && cue.variant === "shield-wall")
+    || (role === "pusher" && (cue.variant === "shove" || cue.variant === "batter-up"))
+  );
+  if (abilityEffect || abilityCue) return { motion: "ability", effectId: abilityEffect?.id ?? cue?.id ?? 0 };
+
+  const attackEffect = [...effects].reverse().find((effect) => effect.kind === "attack" && effect.sourceId === unitId);
+  if (attackEffect || (cue?.stage === "attack" && cue.sourceId === unitId)) {
+    return { motion: "attack", effectId: attackEffect?.id ?? cue?.id ?? 0 };
+  }
+
+  const moveEffect = [...effects].reverse().find((effect) => effect.kind === "move" && effect.sourceId === unitId);
+  if (moveEffect) return { motion: "walk", effectId: moveEffect.id };
 
   return { motion: "idle", effectId: 0 };
 }
 
-function SniperBattleSprite({ name, state }: { name: string; state: BattleSpriteState }) {
+function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerUnit["role"]; state: BattleSpriteState }) {
+  const frames = state.motion === "death" ? 12 : 8;
   return (
     <span
-      className={clsx("sprite-art", "sprite-sniper", "board-sprite", "sniper-spritecook", `is-${state.motion}`)}
+      className={clsx("sprite-art", `sprite-${role}`, "board-sprite", "player-spritecook", `role-${role}`, `is-${state.motion}`)}
       data-sprite-source="spritecook-pixel"
+      data-sprite-role={role}
       data-sprite-motion={state.motion}
       data-sprite-effect-id={state.effectId}
-      data-sprite-frames="8"
+      data-sprite-frames={frames}
     >
-      <span key={`${state.motion}-${state.effectId}`} className="sniper-spritecook-frames" aria-hidden="true" />
+      <span key={`${state.motion}-${state.effectId}`} className="player-spritecook-frames" aria-hidden="true" />
       <span className="sr-only">{name}</span>
     </span>
   );
@@ -556,14 +579,26 @@ function Board({
       nextRects.set(id, rect);
       const previous = previousRects.current.get(id);
       if (previous && (previous.left !== rect.left || previous.top !== rect.top)) {
-        element.animate([
-          { transform: `translate(${previous.left - rect.left}px, ${previous.top - rect.top}px) scale(.96)` },
-          { transform: "translate(0, 0) scale(1)" },
-        ], { duration: 230, easing: "cubic-bezier(.16,1,.3,1)" });
+        const movement = effects.find((effect) => effect.kind === "move" && effect.sourceId === id);
+        const pathRects = movement?.path?.map((position) =>
+          root.querySelector<HTMLElement>(`[data-coordinate="${coordinate(position)}"]`)?.getBoundingClientRect(),
+        );
+        const hasCompletePath = pathRects && pathRects.length > 1 && pathRects.every(Boolean);
+        const keyframes = hasCompletePath
+          ? pathRects.map((pathRect, index) => ({
+              transform: `translate(${pathRect!.left - rect.left}px, ${pathRect!.top - rect.top}px) scale(${index === 0 ? ".96" : "1"})`,
+              offset: index / (pathRects.length - 1),
+            }))
+          : [
+              { transform: `translate(${previous.left - rect.left}px, ${previous.top - rect.top}px) scale(.96)` },
+              { transform: "translate(0, 0) scale(1)" },
+            ];
+        const duration = hasCompletePath ? Math.max(280, (pathRects.length - 1) * 180) : 230;
+        element.animate(keyframes, { duration, easing: "cubic-bezier(.16,1,.3,1)" });
       }
     });
     previousRects.current = nextRects;
-  }, [entityFingerprint]);
+  }, [effects, entityFingerprint]);
 
   const positions = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, index): Position => ({ x: index % BOARD_SIZE, y: Math.floor(index / BOARD_SIZE) }));
   const heavyImpact = effects.some((effect) => effect.kind === "heavy");
@@ -603,7 +638,7 @@ function Board({
           const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
           const healEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "heal");
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
-          const sniperAnimation = unit?.role === "sniper" ? battleSpriteState(effects, unit.id) : null;
+          const playerAnimation = unit ? battleSpriteState(effects, combatCue, unit.id, unit.role) : null;
           const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
@@ -667,9 +702,7 @@ function Board({
               {unit ? (
                 <span className={clsx("game-piece ally-piece", `piece-${unit.role}`, `is-${unitActivationState(unit)}`, unit.id === selectedUnitId && "is-active", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={unit.id} data-activation-state={unitActivationState(unit)}>
                   <span className="piece-base" />
-                  {sniperAnimation
-                    ? <SniperBattleSprite name={unit.name} state={sniperAnimation} />
-                    : <SpriteArt kind={unit.role} name={unit.name} className="board-sprite" priority />}
+                  {playerAnimation ? <PlayerBattleSprite name={unit.name} role={unit.role} state={playerAnimation} /> : null}
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
                   <span className="piece-activation" aria-hidden="true">{unitActivationState(unit) === "ready" ? "READY" : unitActivationState(unit) === "action-ready" ? "ACTION" : unitActivationState(unit) === "done" ? "✓" : "KO"}</span>
                   {unit.shield ? <><span className="piece-shield-aura" aria-hidden="true" /><span className="piece-shield"><Shield weight="fill" />{unit.shield.value}</span></> : null}
@@ -1027,15 +1060,25 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         hits: combatCue.hits ?? [],
         queueRemaining,
       } : null,
+      playerAnimations: Object.fromEntries(game.units.map((unit) => {
+        const spriteState = battleSpriteState(effects, combatCue, unit.id, unit.role);
+        return [unit.id, {
+          source: "spritecook-pixel",
+          role: unit.role,
+          motion: spriteState.motion,
+          effectId: spriteState.effectId,
+          frames: spriteState.motion === "death" ? 12 : 8,
+        }];
+      })),
       sniperAnimation: (() => {
         const sniper = game.units.find((unit) => unit.role === "sniper");
         if (!sniper) return null;
-        const spriteState = battleSpriteState(effects, sniper.id);
+        const spriteState = battleSpriteState(effects, combatCue, sniper.id, sniper.role);
         return {
           source: "spritecook-pixel",
           motion: spriteState.motion,
           effectId: spriteState.effectId,
-          frames: 8,
+          frames: spriteState.motion === "death" ? 12 : 8,
         };
       })(),
       movePreview: movePreview && movePreviewPath ? {

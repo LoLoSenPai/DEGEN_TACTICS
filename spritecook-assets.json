@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "workflow": "three character batches; no standalone animation calls",
+  "credits": {
+    "before": 926,
+    "used": 264,
+    "remaining": 662
+  },
+  "characters": {
+    "sniper": {
+      "master": { "asset_id": "77bca013-be04-4d5f-9fdf-b55fe973b4f3", "sha12": "8433213faa19" },
+      "runs": ["32f391f2-c3a6-4c06-9617-78741b6e3e2c", "68f5649d-5914-4447-8e57-cc427ce843ab"],
+      "animations": {
+        "idle": { "asset_id": "965e6388-05ad-40a7-bd44-7fb7ee04e160", "sha12": "16ce05bb22bf" },
+        "walk": { "asset_id": "250082d1-889b-4eff-840d-9a5c41ef37c8", "sha12": "f72a2aceb033" },
+        "attack": { "asset_id": "7cc8e9ee-e28b-4a80-b6d3-39421380e1d4", "sha12": "59a870b615ac" },
+        "hurt": { "asset_id": "f2c43a27-673c-4e99-bc7f-94c24b7a482b", "sha12": "b83c4a83ba5e" },
+        "death": { "asset_id": "5b084527-5dc3-4362-8937-33e612460364", "sha12": "b4825db23c3a" }
+      }
+    },
+    "guardian": {
+      "master": { "asset_id": "451124fe-e60d-46d7-bb21-e055208c15c3", "sha12": "28a1e1510e18" },
+      "runs": ["70dc41d6-fd2e-4b35-b897-6823f6da92b3"],
+      "animations": {
+        "idle": { "asset_id": "62d504ad-5003-46dd-bdb4-bd0845141fa1", "sha12": "28af106840be" },
+        "walk": { "asset_id": "0720a18b-b921-43bb-bda7-dea2814332f3", "sha12": "7c79db835871" },
+        "attack": { "asset_id": "c14810f4-1750-45c7-a60e-dfc878c4cdac", "sha12": "112654cd19d7" },
+        "hurt": { "asset_id": "6a9bd62d-fd73-4a5c-a4dd-4e78a0616333", "sha12": "beb565b12106" },
+        "death": { "asset_id": "e417fcb4-5455-49e8-ad12-f146b77b0413", "sha12": "5d84e4f6fdb8" },
+        "shield-wall": { "asset_id": "a6e3a626-6bb6-416c-b5bc-02c3e6e2da29", "sha12": "4fe2d2648d45" }
+      }
+    },
+    "pusher": {
+      "master": { "asset_id": "325f628b-6f8e-44ec-baf4-3ce4bd08b582", "sha12": "3ee9de09d98c" },
+      "runs": ["96c4dc56-ff02-4d14-8474-3a77319fb158"],
+      "runtimeTransform": "uniform 232/244 nearest-neighbor scale with 6 px horizontal safe margin",
+      "animations": {
+        "idle": { "asset_id": "db4e3807-3005-4534-91f5-5f64ebf12371", "sha12": "5cb722911f84" },
+        "walk": { "asset_id": "44aaae1d-d318-4bb0-b7a3-465ad335fc8a", "sha12": "f25b65417b9a" },
+        "attack": { "asset_id": "0468f46f-ab2e-426d-a8ee-5fc6a84cb8f1", "sha12": "99adc8ad5659" },
+        "hurt": { "asset_id": "5576e26b-c583-491d-aba5-629ae894495d", "sha12": "f0e8b2e1057b" },
+        "death": { "asset_id": "3cc094f2-0c52-48ce-a049-ac98d830a1d8", "sha12": "657646936743" },
+        "batter-up": { "asset_id": "4e0cd292-7368-47f9-843d-65d9dc1c8265", "sha12": "b7993708eb7b" }
+      }
+    }
+  }
+}

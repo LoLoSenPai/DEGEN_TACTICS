@@ -520,16 +520,18 @@
   height: 110.8%;
 }
 
-.piece-sniper .sniper-spritecook.board-sprite {
-  right: 5%;
-  bottom: 14%;
-  width: 90%;
-  height: 90%;
+.piece-guardian .player-spritecook.board-sprite,
+.piece-sniper .player-spritecook.board-sprite,
+.piece-pusher .player-spritecook.board-sprite {
+  right: 0;
+  bottom: 12%;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   image-rendering: pixelated;
 }
 
-.sniper-spritecook-frames {
+.player-spritecook-frames {
   position: absolute;
   inset: 0;
   background-position: 0 0;
@@ -540,19 +542,71 @@
   will-change: background-position;
 }
 
-.sniper-spritecook.is-idle .sniper-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-idle.png");
+.player-spritecook.is-idle .player-spritecook-frames {
   animation: spritecook-frames-8 1000ms linear infinite;
 }
 
-.sniper-spritecook.is-attack .sniper-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-attack.png");
+.player-spritecook.is-walk .player-spritecook-frames {
+  animation: spritecook-frames-8 360ms linear infinite;
+}
+
+.player-spritecook.is-attack .player-spritecook-frames {
   animation: spritecook-frames-8 520ms linear both;
 }
 
-.sniper-spritecook.is-hurt .sniper-spritecook-frames,
-.sniper-spritecook.is-death .sniper-spritecook-frames {
+.player-spritecook.is-hurt .player-spritecook-frames {
+  animation: spritecook-frames-8 460ms linear both;
+}
+
+.player-spritecook.is-death .player-spritecook-frames {
+  background-size: 1200% 100%;
+  animation: spritecook-frames-12 680ms linear both;
+}
+
+.player-spritecook.role-guardian.is-idle .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-idle.png");
+}
+
+.player-spritecook.role-guardian.is-walk .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-walk.png");
+}
+
+.player-spritecook.role-guardian.is-attack .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-attack.png");
+}
+
+.player-spritecook.role-guardian.is-ability .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-shield-wall.png");
+  animation: spritecook-frames-8 720ms linear both;
+}
+
+.player-spritecook.role-guardian.is-hurt .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-hurt.png");
+}
+
+.player-spritecook.role-guardian.is-death .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/guardian-death.png");
+}
+
+.player-spritecook.role-sniper.is-idle .player-spritecook-frames {
   background-image: url("/assets/sprites/spritecook/sniper-idle.png");
+}
+
+.player-spritecook.role-sniper.is-walk .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-walk.png");
+}
+
+.player-spritecook.role-sniper.is-attack .player-spritecook-frames,
+.player-spritecook.role-sniper.is-ability .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-attack.png");
+}
+
+.player-spritecook.role-sniper.is-hurt .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-hurt.png");
+}
+
+.player-spritecook.role-sniper.is-death .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-death.png");
 }
 
 .piece-pusher .board-sprite {
@@ -560,6 +614,38 @@
   bottom: 15.6%;
   width: 160.3%;
   height: 100.2%;
+}
+
+.piece-pusher .player-spritecook.board-sprite {
+  right: 0;
+  bottom: 12%;
+  width: 100%;
+  height: 100%;
+}
+
+.player-spritecook.role-pusher.is-idle .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-idle.png");
+}
+
+.player-spritecook.role-pusher.is-walk .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-walk.png");
+}
+
+.player-spritecook.role-pusher.is-attack .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-attack.png");
+}
+
+.player-spritecook.role-pusher.is-ability .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-batter-up.png");
+  animation: spritecook-frames-8 580ms linear both;
+}
+
+.player-spritecook.role-pusher.is-hurt .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-hurt.png");
+}
+
+.player-spritecook.role-pusher.is-death .player-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/pusher-death.png");
 }
 
 .piece-rugger .board-sprite {
@@ -775,9 +861,9 @@
 }
 
 .game-ko-popup {
-  top: 31%;
+  top: 2%;
   color: #fff3d0;
-  font: 400 28px/1 var(--game-font-display);
+  font: 400 20px/1 var(--game-font-display);
   letter-spacing: 0.08em;
   animation: ko-pop 560ms steps(4, end) both;
 }
@@ -807,8 +893,8 @@
 
 .game-combat-vfx.is-death {
   z-index: 14;
-  inset: -24%;
-  opacity: 0.62;
+  inset: -16%;
+  opacity: 0.38;
   filter: hue-rotate(60deg) saturate(0.8);
 }
 
@@ -858,8 +944,9 @@
   animation: combat-fade 420ms 100ms steps(4, end) both;
 }
 
-.game-piece.piece-sniper.is-attacking .sniper-spritecook.board-sprite,
-.game-piece.piece-sniper.is-attacking .piece-base {
+.game-piece.ally-piece.is-attacking .player-spritecook.board-sprite,
+.game-piece.ally-piece.is-attacking .piece-base,
+.game-piece.ally-piece.is-dying .player-spritecook.board-sprite {
   animation: none;
 }
 
@@ -1936,6 +2023,21 @@
   87.5%, 100% { background-position: 100% 0; }
 }
 
+@keyframes spritecook-frames-12 {
+  0%, 8.332% { background-position: 0% 0; }
+  8.333%, 16.665% { background-position: 9.0909% 0; }
+  16.666%, 24.999% { background-position: 18.1818% 0; }
+  25%, 33.332% { background-position: 27.2727% 0; }
+  33.333%, 41.665% { background-position: 36.3636% 0; }
+  41.666%, 49.999% { background-position: 45.4545% 0; }
+  50%, 58.332% { background-position: 54.5455% 0; }
+  58.333%, 66.665% { background-position: 63.6364% 0; }
+  66.666%, 74.999% { background-position: 72.7273% 0; }
+  75%, 83.332% { background-position: 81.8182% 0; }
+  83.333%, 91.665% { background-position: 90.9091% 0; }
+  91.666%, 100% { background-position: 100% 0; }
+}
+
 @keyframes block-pop {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
   25%, 72% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); }
@@ -2176,12 +2278,18 @@
     animation: none !important;
   }
 
-  .sniper-spritecook-frames {
+  .player-spritecook-frames {
     animation: none !important;
   }
 
-  .sniper-spritecook.is-attack .sniper-spritecook-frames {
+  .player-spritecook.is-attack .player-spritecook-frames,
+  .player-spritecook.is-ability .player-spritecook-frames,
+  .player-spritecook.is-hurt .player-spritecook-frames {
     background-position: 57.1429% 0;
+  }
+
+  .player-spritecook.is-death .player-spritecook-frames {
+    background-position: 100% 0;
   }
 
   .game-combat-vfx {

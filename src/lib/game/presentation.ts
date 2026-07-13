@@ -167,11 +167,12 @@ export const compileEnemyPlayback = (
           hits,
         });
         for (const hit of hits.filter((candidate) => candidate.fatal)) {
+          const playerDeath = visualState.units.some((unit) => unit.id === hit.targetId);
           beats.push({
             stage: "death",
             state: visualState,
             event,
-            duration: 560,
+            duration: playerDeath ? 760 : 560,
             sourceId: event.sourceId,
             targetId: hit.targetId,
             amount: hit.amount,
@@ -211,11 +212,12 @@ export const compileEnemyPlayback = (
         fatal,
       });
       if (fatal) {
+        const playerDeath = visualState.units.some((unit) => unit.id === event.targetId);
         beats.push({
           stage: "death",
           state: visualState,
           event,
-          duration: 560,
+          duration: playerDeath ? 760 : 560,
           sourceId: event.sourceId,
           targetId: event.targetId,
           amount: event.amount,

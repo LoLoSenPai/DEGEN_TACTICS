@@ -9,6 +9,7 @@ import {
   compileEnemyPlayback,
   createInitialGameState,
   createMissionResult,
+  getMovementPath,
   getMissionDefinition,
   isTrainingMissionId,
   moveUnit,
@@ -51,13 +52,14 @@ export interface CombatLogEntry {
 
 export interface BattleEffect {
   id: number;
-  kind: "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death" | "push" | "heal";
+  kind: "move" | "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death" | "push" | "heal";
   sourceId?: string;
   targetId?: string;
   amount?: number;
   absorbed?: number;
   from?: Position;
   to?: Position;
+  path?: readonly Position[];
   ability?: PushKind;
 }
 
@@ -79,6 +81,7 @@ export interface CombatCue {
 interface LastMoveSnapshot {
   state: GameState;
   unitId: string;
+  path: readonly Position[];
 }
 
 interface PersistentSettings {
@@ -332,7 +335,7 @@ function effectsFromEvents(events: readonly GameEvent[], state: GameState): Batt
       if (defeatedIds.has(event.targetId) || isDefeated(state, event.targetId)) effects.push(nextEffect({ kind: "death", sourceId: event.sourceId, targetId: event.targetId }));
     }
     if (event.type === "collision") {
-      effects.push(nextEffect({ kind: "collision", sourceId: event.sourceId, targetId: event.targetId, amount: event.damage }));
+      effects.push(nextEffect({ kind: "collision", sourceId: event.sourceId, targetId: event.targetId, amount: event.damage, ability: event.ability }));
       if (defeatedIds.has(event.targetId) || isDefeated(state, event.targetId)) effects.push(nextEffect({ kind: "death", sourceId: event.sourceId, targetId: event.targetId }));
     }
     if (event.type === "target-pushed") {
@@ -475,17 +478,35 @@ export const useGameStore = create<GameStore>()(
       moveSelected: (to) => {
         const { game, selectedUnitId, log } = get();
         if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
+        const path = getMovementPath(game, selectedUnitId, to);
         const transition = moveUnit(game, selectedUnitId, to);
         const rejected = hasRejected(transition.events);
+        const moved = transition.events.find((event): event is Extract<GameEvent, { type: "unit-moved" }> => event.type === "unit-moved");
+        const movementPath = path ?? (moved ? [moved.from, moved.to] : []);
+        const movementEffect = moved ? nextEffect({
+          kind: "move",
+          sourceId: moved.unitId,
+          from: moved.from,
+          to: moved.to,
+          path: movementPath,
+        }) : null;
+        const generation = sessionGeneration;
         set({
           game: transition.state,
           enemyPlan: planFor(transition.state),
           actionMode: rejected ? "move" : null,
-          lastMove: rejected ? get().lastMove : { state: game, unitId: selectedUnitId },
+          lastMove: rejected ? get().lastMove : { state: game, unitId: selectedUnitId, path: movementPath },
           log: appendEvents(log, transition.events, game.turn),
-          effects: effectsFromEvents(transition.events, transition.state),
-          lastEvents: transition.events,
+          effects: movementEffect ? [movementEffect] : effectsFromEvents(transition.events, transition.state),
+          isAnimating: Boolean(movementEffect),
+          lastEvents: movementEffect ? [] : transition.events,
         });
+        if (movementEffect) {
+          const duration = Math.max(280, Math.max(1, movementPath.length - 1) * 180);
+          schedulePresentation(() => {
+            if (generation === sessionGeneration) set({ isAnimating: false, effects: [], lastEvents: transition.events });
+          }, duration);
+        }
       },
 
       attackSelected: (enemyId, deadeye = false) => {
@@ -513,9 +534,7 @@ export const useGameStore = create<GameStore>()(
         const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
         const variant = combatVariantForSource(game, attack.unitId, { deadeye });
         const attackingUnit = game.units.find((unit) => unit.id === attack.unitId);
-        const attackDuration = attackingUnit?.role === "sniper"
-          ? deadeye ? 600 : 520
-          : deadeye ? 320 : 230;
+        const attackDuration = deadeye ? 600 : attackingUnit ? 520 : 260;
         set({
           actionMode: null,
           lastMove: null,
@@ -624,7 +643,7 @@ export const useGameStore = create<GameStore>()(
         });
         if (animated) schedulePresentation(() => {
           if (generation === sessionGeneration) set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
-        }, fatal ? 650 : pushed ? 430 : 480);
+        }, fatal ? 780 : 580);
       },
 
       waitSelected: () => {
@@ -646,6 +665,23 @@ export const useGameStore = create<GameStore>()(
       undoMove: () => {
         const snapshot = get().lastMove;
         if (!snapshot || get().isResolving || get().isAnimating) return;
+        const currentGame = get().game;
+        if (!currentGame) return;
+        const currentUnit = currentGame.units.find((unit) => unit.id === snapshot.unitId);
+        const restoredUnit = snapshot.state.units.find((unit) => unit.id === snapshot.unitId);
+        const reversePath = snapshot.path.length > 1
+          ? [...snapshot.path].reverse()
+          : currentUnit && restoredUnit
+            ? [currentUnit.position, restoredUnit.position]
+            : [];
+        const movementEffect = currentUnit && restoredUnit ? nextEffect({
+          kind: "move",
+          sourceId: snapshot.unitId,
+          from: currentUnit.position,
+          to: restoredUnit.position,
+          path: reversePath,
+        }) : null;
+        const generation = sessionGeneration;
         logId += 1;
         set({
           game: snapshot.state,
@@ -654,8 +690,17 @@ export const useGameStore = create<GameStore>()(
           actionMode: "move",
           lastMove: null,
           log: [...get().log, { id: logId, turn: snapshot.state.turn, tone: "neutral", text: "Last movement reversed. Enemy plan restored." } as CombatLogEntry].slice(-32),
+          effects: movementEffect ? [movementEffect] : [],
+          isAnimating: Boolean(movementEffect),
+          combatCue: null,
           lastEvents: [],
         });
+        if (movementEffect) {
+          const duration = Math.max(280, Math.max(1, reversePath.length - 1) * 180);
+          schedulePresentation(() => {
+            if (generation === sessionGeneration) set({ isAnimating: false, effects: [] });
+          }, duration);
+        }
       },
 
       endTurn: () => {

@@ -22,7 +22,7 @@ describe("combat presentation playback", () => {
     const beats = compileEnemyPlayback(state, resolved.state, resolved.events);
 
     expect(beats.map((beat) => beat.stage)).toEqual(["move", "attack", "impact", "death"]);
-    expect(beats.at(-1)).toMatchObject({ targetId: "guardian", fatal: true });
+    expect(beats.at(-1)).toMatchObject({ targetId: "guardian", fatal: true, duration: 760 });
     expect(beats.at(-1)?.state.units[0].hp).toBe(0);
   });
 
