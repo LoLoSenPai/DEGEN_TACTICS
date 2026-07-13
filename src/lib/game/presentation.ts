@@ -1,4 +1,4 @@
-import type { Enemy, GameEvent, GameState } from "./types";
+import type { Enemy, GameEvent, GameState, Position } from "./types";
 
 export type CombatPlaybackStage =
   | "move"
@@ -6,6 +6,7 @@ export type CombatPlaybackStage =
   | "impact"
   | "death"
   | "shield"
+  | "push"
   | "spawn"
   | "status";
 
@@ -19,6 +20,13 @@ export interface CombatPlaybackBeat {
   readonly amount?: number;
   readonly absorbed?: number;
   readonly fatal?: boolean;
+  readonly area?: readonly Position[];
+  readonly hits?: readonly Readonly<{
+    targetId: string;
+    amount: number;
+    absorbed: number;
+    fatal: boolean;
+  }>[];
 }
 
 const copyEnemyFromFinalState = (
@@ -107,7 +115,8 @@ export const compileEnemyPlayback = (
   const beats: CombatPlaybackBeat[] = [];
   let visualState: GameState = { ...initialState, phase: "enemy" };
 
-  for (const event of events) {
+  for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+    const event = events[eventIndex];
     if (event.type === "enemy-moved") {
       visualState = applyPresentationEvent(visualState, event, finalState);
       beats.push({ stage: "move", state: visualState, event, duration: 300, sourceId: event.enemyId });
@@ -115,13 +124,74 @@ export const compileEnemyPlayback = (
     }
 
     if (event.type === "damage") {
+      const sourceEnemy = visualState.enemies.find((enemy) => enemy.id === event.sourceId);
+      if (sourceEnemy?.kind === "whale") {
+        const slamEvents: Array<Extract<GameEvent, { type: "damage" }>> = [];
+        let scanIndex = eventIndex;
+        while (scanIndex < events.length) {
+          const candidate = events[scanIndex];
+          if (candidate.type !== "damage" || candidate.sourceId !== event.sourceId) break;
+          slamEvents.push(candidate);
+          scanIndex += 1;
+        }
+
+        const beforeSlam = visualState;
+        const hits: Array<{ targetId: string; amount: number; absorbed: number; fatal: boolean }> = [];
+        for (const slamEvent of slamEvents) {
+          const hpBefore = getCombatantHp(visualState, slamEvent.targetId);
+          const fatal = hpBefore !== null && hpBefore > 0 && slamEvent.amount >= hpBefore;
+          hits.push({ targetId: slamEvent.targetId, amount: slamEvent.amount, absorbed: slamEvent.absorbed, fatal });
+          visualState = applyPresentationEvent(visualState, slamEvent, finalState);
+        }
+        const area = sourceEnemy.lockedArea ?? [];
+        beats.push({
+          stage: "attack",
+          state: beforeSlam,
+          event,
+          duration: 440,
+          sourceId: event.sourceId,
+          targetId: hits[0]?.targetId,
+          amount: event.amount,
+          area,
+          hits,
+        });
+        beats.push({
+          stage: "impact",
+          state: visualState,
+          event,
+          duration: 560,
+          sourceId: event.sourceId,
+          targetId: hits[0]?.targetId,
+          amount: event.amount,
+          area,
+          hits,
+        });
+        for (const hit of hits.filter((candidate) => candidate.fatal)) {
+          beats.push({
+            stage: "death",
+            state: visualState,
+            event,
+            duration: 560,
+            sourceId: event.sourceId,
+            targetId: hit.targetId,
+            amount: hit.amount,
+            absorbed: hit.absorbed,
+            fatal: true,
+            area,
+            hits,
+          });
+        }
+        eventIndex = scanIndex - 1;
+        continue;
+      }
+
       const hpBefore = getCombatantHp(visualState, event.targetId);
       const fatal = hpBefore !== null && hpBefore > 0 && event.amount >= hpBefore;
       beats.push({
         stage: "attack",
         state: visualState,
         event,
-        duration: 260,
+        duration: sourceEnemy?.kind === "drainer" ? 330 : 260,
         sourceId: event.sourceId,
         targetId: event.targetId,
         amount: event.amount,
@@ -158,7 +228,7 @@ export const compileEnemyPlayback = (
 
     if (event.type === "enemy-healed") {
       visualState = applyPresentationEvent(visualState, event, finalState);
-      beats.push({ stage: "status", state: visualState, event, duration: 260, sourceId: event.enemyId });
+      beats.push({ stage: "status", state: visualState, event, duration: 360, sourceId: event.enemyId, amount: event.amount });
       continue;
     }
 
@@ -176,6 +246,7 @@ export const compileEnemyPlayback = (
         event,
         duration: 360,
         sourceId: event.type === "whale-cone-locked" ? event.enemyId : undefined,
+        area: event.type === "whale-cone-locked" ? event.area : undefined,
       });
     }
   }

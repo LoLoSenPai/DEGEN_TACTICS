@@ -24,9 +24,23 @@ import {
   type MissionResult,
   type PlayerIdentity,
   type Position,
+  type PushKind,
 } from "@/lib/game";
 
 export type ActionMode = "move" | "attack" | "push" | "ability" | null;
+
+export type CombatVariant =
+  | "guardian-bash"
+  | "sniper-shot"
+  | "deadeye"
+  | "pusher-punch"
+  | "shove"
+  | "batter-up"
+  | "rugger-charge"
+  | "drain"
+  | "whale-slam"
+  | "shield-wall"
+  | "generic";
 
 export interface CombatLogEntry {
   id: number;
@@ -37,11 +51,14 @@ export interface CombatLogEntry {
 
 export interface BattleEffect {
   id: number;
-  kind: "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death";
+  kind: "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death" | "push" | "heal";
   sourceId?: string;
   targetId?: string;
   amount?: number;
   absorbed?: number;
+  from?: Position;
+  to?: Position;
+  ability?: PushKind;
 }
 
 export interface CombatCue {
@@ -52,6 +69,11 @@ export interface CombatCue {
   amount?: number;
   absorbed?: number;
   fatal?: boolean;
+  variant?: CombatVariant;
+  from?: Position;
+  to?: Position;
+  area?: readonly Position[];
+  hits?: readonly Readonly<{ targetId: string; amount: number; absorbed: number; fatal: boolean }>[];
 }
 
 interface LastMoveSnapshot {
@@ -269,6 +291,25 @@ function isDefeated(state: GameState, id: string) {
     || state.enemies.some((enemy) => enemy.id === id && enemy.hp <= 0);
 }
 
+function combatVariantForSource(
+  state: GameState,
+  sourceId?: string,
+  options: { deadeye?: boolean; pushAbility?: PushKind } = {},
+): CombatVariant {
+  if (options.pushAbility === "batter-up") return "batter-up";
+  if (options.pushAbility === "shove") return "shove";
+  if (!sourceId) return "generic";
+  const unit = state.units.find((candidate) => candidate.id === sourceId);
+  if (unit?.role === "guardian") return "guardian-bash";
+  if (unit?.role === "sniper") return options.deadeye ? "deadeye" : "sniper-shot";
+  if (unit?.role === "pusher") return "pusher-punch";
+  const enemy = state.enemies.find((candidate) => candidate.id === sourceId);
+  if (enemy?.kind === "rugger") return "rugger-charge";
+  if (enemy?.kind === "drainer") return "drain";
+  if (enemy?.kind === "whale") return "whale-slam";
+  return "generic";
+}
+
 function withDefeatedEnemyGhost(previous: GameState, next: GameState, enemyId: string): GameState {
   if (next.enemies.some((enemy) => enemy.id === enemyId)) return next;
   const defeated = previous.enemies.find((enemy) => enemy.id === enemyId);
@@ -294,6 +335,16 @@ function effectsFromEvents(events: readonly GameEvent[], state: GameState): Batt
       effects.push(nextEffect({ kind: "collision", sourceId: event.sourceId, targetId: event.targetId, amount: event.damage }));
       if (defeatedIds.has(event.targetId) || isDefeated(state, event.targetId)) effects.push(nextEffect({ kind: "death", sourceId: event.sourceId, targetId: event.targetId }));
     }
+    if (event.type === "target-pushed") {
+      effects.push(nextEffect({
+        kind: "push",
+        sourceId: event.sourceId,
+        targetId: event.targetId,
+        from: event.from,
+        to: event.to,
+        ability: event.ability,
+      }));
+    }
     if (event.type === "shield-applied") {
       for (const unitId of event.unitIds) effects.push(nextEffect({ kind: "shield", sourceId: event.sourceId, targetId: unitId, amount: event.value }));
     }
@@ -306,18 +357,26 @@ function effectsForBeat(beat: CombatPlaybackBeat): BattleEffect[] {
     return [nextEffect({ kind: "attack", sourceId: beat.sourceId, targetId: beat.targetId })];
   }
   if (beat.stage === "impact") {
-    const effects: BattleEffect[] = [nextEffect({
-      kind: (beat.amount ?? 0) >= 4 ? "heavy" : "damage",
-      sourceId: beat.sourceId,
-      targetId: beat.targetId,
-      amount: beat.amount,
-      absorbed: beat.absorbed,
-    })];
-    if ((beat.absorbed ?? 0) > 0) effects.push(nextEffect({ kind: "shield-hit", sourceId: beat.sourceId, targetId: beat.targetId, absorbed: beat.absorbed }));
+    const hitList = beat.hits ?? [{ targetId: beat.targetId ?? "", amount: beat.amount ?? 0, absorbed: beat.absorbed ?? 0, fatal: Boolean(beat.fatal) }];
+    const effects: BattleEffect[] = [];
+    for (const hit of hitList) {
+      if (!hit.targetId) continue;
+      effects.push(nextEffect({
+        kind: hit.amount >= 4 ? "heavy" : "damage",
+        sourceId: beat.sourceId,
+        targetId: hit.targetId,
+        amount: hit.amount,
+        absorbed: hit.absorbed,
+      }));
+      if (hit.absorbed > 0) effects.push(nextEffect({ kind: "shield-hit", sourceId: beat.sourceId, targetId: hit.targetId, absorbed: hit.absorbed }));
+    }
     return effects;
   }
   if (beat.stage === "death") {
     return [nextEffect({ kind: "death", sourceId: beat.sourceId, targetId: beat.targetId, amount: beat.amount })];
+  }
+  if (beat.stage === "status" && beat.event.type === "enemy-healed") {
+    return [nextEffect({ kind: "heal", sourceId: beat.sourceId, targetId: beat.sourceId, amount: beat.amount })];
   }
   return [];
 }
@@ -452,12 +511,13 @@ export const useGameStore = create<GameStore>()(
         const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === attack.enemyId)
           || isDefeated(transition.state, attack.enemyId);
         const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
+        const variant = combatVariantForSource(game, attack.unitId, { deadeye });
         set({
           actionMode: null,
           lastMove: null,
           isAnimating: true,
           effects: [nextEffect({ kind: "attack", sourceId: attack.unitId, targetId: attack.enemyId })],
-          combatCue: nextCue("attack", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal }),
+          combatCue: nextCue("attack", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal, variant }),
           lastEvents: [],
         });
 
@@ -469,7 +529,7 @@ export const useGameStore = create<GameStore>()(
             enemyPlan: planFor(transition.state),
             log: appendEvents(log, transition.events, game.turn),
             effects: impactEffects,
-            combatCue: nextCue("impact", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal }),
+            combatCue: nextCue("impact", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal, variant }),
           });
 
           const finish = () => {
@@ -482,7 +542,7 @@ export const useGameStore = create<GameStore>()(
               if (generation !== sessionGeneration) return;
               set({
                 effects: [nextEffect({ kind: "death", sourceId: attack.unitId, targetId: attack.enemyId })],
-                combatCue: nextCue("death", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal: true }),
+                combatCue: nextCue("death", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal: true, variant }),
               });
               schedulePresentation(finish, 560);
             }, 330);
@@ -516,7 +576,7 @@ export const useGameStore = create<GameStore>()(
           log: appendEvents(log, transition.events, game.turn),
           effects: effectsFromEvents(transition.events, transition.state),
           isAnimating: true,
-          combatCue: nextCue("shield", { sourceId: selectedUnitId, amount: 2 }),
+          combatCue: nextCue("shield", { sourceId: selectedUnitId, amount: 2, variant: "shield-wall" }),
           lastEvents: [],
         });
         schedulePresentation(() => {
@@ -530,6 +590,10 @@ export const useGameStore = create<GameStore>()(
         const transition = pushTarget(game, selectedUnitId, targetId, batterUp ? "batter-up" : "shove");
         const rejected = hasRejected(transition.events);
         const effects = effectsFromEvents(transition.events, transition.state);
+        const pushed = transition.events.find((event): event is Extract<GameEvent, { type: "target-pushed" }> => event.type === "target-pushed");
+        const collision = transition.events.find((event): event is Extract<GameEvent, { type: "collision" }> => event.type === "collision");
+        const pushAbility = pushed?.ability ?? collision?.ability ?? (batterUp ? "batter-up" : "shove");
+        const variant = combatVariantForSource(game, selectedUnitId, { pushAbility });
         const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === targetId)
           || isDefeated(transition.state, targetId);
         const presentationState = fatal ? withDefeatedEnemyGhost(game, transition.state, targetId) : transition.state;
@@ -543,12 +607,20 @@ export const useGameStore = create<GameStore>()(
           log: appendEvents(log, transition.events, game.turn),
           effects,
           isAnimating: animated,
-          combatCue: animated ? nextCue(fatal ? "death" : "impact", { sourceId: selectedUnitId, targetId, fatal }) : null,
+          combatCue: animated ? nextCue(fatal ? "death" : pushed ? "push" : "impact", {
+            sourceId: selectedUnitId,
+            targetId,
+            amount: collision?.damage,
+            fatal,
+            variant,
+            from: pushed?.from,
+            to: pushed?.to,
+          }) : null,
           lastEvents: animated ? [] : transition.events,
         });
         if (animated) schedulePresentation(() => {
           if (generation === sessionGeneration) set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
-        }, fatal ? 650 : 480);
+        }, fatal ? 650 : pushed ? 430 : 480);
       },
 
       waitSelected: () => {
@@ -655,6 +727,7 @@ export const useGameStore = create<GameStore>()(
               finishPlayback();
               return;
             }
+            const variant = combatVariantForSource(beat.state, beat.sourceId);
             set({
               game: beat.state,
               effects: effectsForBeat(beat),
@@ -664,6 +737,9 @@ export const useGameStore = create<GameStore>()(
                 amount: beat.amount,
                 absorbed: beat.absorbed,
                 fatal: beat.fatal,
+                variant,
+                area: beat.area,
+                hits: beat.hits,
               }),
               playbackIndex: index,
               queueRemaining: beats.length - index - 1,

@@ -179,6 +179,25 @@ export const getValidMoves = (state: GameState, unitId: string): Position[] => {
   );
 };
 
+/**
+ * Returns the exact deterministic BFS route used to preview a legal move.
+ * The first position is the unit origin and the last position is `to`.
+ */
+export const getMovementPath = (
+  state: GameState,
+  unitId: string,
+  to: Position,
+): Position[] | null => {
+  const unit = getUnit(state, unitId);
+  if (!unit || !getValidMoves(state, unitId).some((move) => samePosition(move, to))) return null;
+  const route = findShortestPath(
+    unit.position,
+    to,
+    (candidate) => isOccupied(state, candidate, { ignoreUnitId: unit.id }),
+  );
+  return route ? [clonePosition(unit.position), ...route.map(clonePosition)] : null;
+};
+
 const hasLineOfSight = (
   state: GameState,
   from: Position,

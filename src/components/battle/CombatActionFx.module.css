@@ -1,0 +1,141 @@
+.root {
+  position: absolute;
+  z-index: 14;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  shape-rendering: geometricprecision;
+}
+
+.traceOuter,
+.traceInner {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.traceOuter {
+  stroke: #061014;
+  stroke-width: 18;
+}
+
+.traceInner {
+  stroke: #aefaff;
+  stroke-width: 6;
+  filter: drop-shadow(0 0 8px currentColor);
+  animation: combat-trace-fire 260ms ease-out both;
+}
+
+.sourcePulse,
+.targetPulse,
+.slamOuter {
+  fill: none;
+  stroke-width: 7;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.sourcePulse {
+  stroke: currentColor;
+  animation: combat-source-pulse 320ms ease-out both;
+}
+
+.targetPulse {
+  stroke: currentColor;
+  animation: combat-target-pulse 280ms ease-out both;
+}
+
+.arrow { fill: currentColor; }
+
+.sniper { color: #65d8ff; }
+.sniper .traceInner { stroke: #65d8ff; stroke-dasharray: 24 9; }
+
+.deadeye { color: #e9fbff; }
+.deadeye .traceOuter { stroke: #13364a; stroke-width: 25; }
+.deadeye .traceInner { stroke: #f4ffff; stroke-width: 10; filter: drop-shadow(0 0 12px #42d4ff); }
+.deadeye .sourcePulse { stroke: #a763ff; stroke-width: 11; }
+
+.drain { color: #df68ff; }
+.drain .traceOuter { stroke: #21072a; stroke-width: 25; }
+.drain .traceInner {
+  stroke: #ef75ff;
+  stroke-dasharray: 13 13;
+  stroke-width: 9;
+  filter: drop-shadow(0 0 10px #bd39df);
+  animation: drain-flow 330ms linear infinite;
+}
+
+.guardian { color: #52ead6; }
+.guardian .traceInner { stroke: #61e8d6; stroke-width: 10; stroke-dasharray: 32 14; }
+
+.rugger { color: #ff5c55; }
+.rugger .traceInner { stroke: #ff514f; stroke-width: 11; stroke-dasharray: 24 10; }
+
+.pusher,
+.push { color: #ffc447; }
+.pusher .traceInner,
+.push .traceInner { stroke: #ffc447; stroke-width: 10; stroke-dasharray: 26 10; }
+.push .traceOuter { stroke: #2b1b04; stroke-width: 23; }
+
+.generic { color: #f4f0df; }
+
+.whale { color: #ff514f; }
+.whale .sourcePulse { stroke: #ff514f; stroke-width: 13; animation-duration: 440ms; }
+
+.slamOuter {
+  fill: rgba(173, 25, 29, 0.2);
+  stroke: #ff514f;
+  animation: slam-zone 440ms steps(4, end) both;
+}
+
+.slamCrack {
+  fill: none;
+  stroke: #ffd0b2;
+  stroke-linecap: square;
+  stroke-width: 8;
+  filter: drop-shadow(0 0 6px rgba(255, 81, 79, 0.92));
+  animation: slam-crack 440ms steps(3, end) both;
+}
+
+@keyframes combat-trace-fire {
+  0% { opacity: 0; stroke-dashoffset: 70; }
+  25% { opacity: 1; }
+  100% { opacity: 0.9; stroke-dashoffset: 0; }
+}
+
+@keyframes drain-flow {
+  to { stroke-dashoffset: 52; }
+}
+
+@keyframes combat-source-pulse {
+  from { opacity: 0; transform: scale(0.4); }
+  45% { opacity: 1; }
+  to { opacity: 0.2; transform: scale(1.35); }
+}
+
+@keyframes combat-target-pulse {
+  from { opacity: 0; transform: scale(1.4); }
+  45% { opacity: 1; }
+  to { opacity: 0.15; transform: scale(0.65); }
+}
+
+@keyframes slam-zone {
+  from { opacity: 0.15; transform: scale(0.7); }
+  55% { opacity: 1; transform: scale(1.04); }
+  to { opacity: 0.72; transform: scale(1); }
+}
+
+@keyframes slam-crack {
+  from { opacity: 0; }
+  45%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .traceInner,
+  .sourcePulse,
+  .targetPulse,
+  .slamOuter,
+  .slamCrack { animation: none; }
+}

@@ -13,6 +13,7 @@ import {
   createInitialGameState,
   getMissionDefinition,
   getAttackableTargets,
+  getMovementPath,
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
@@ -334,6 +335,19 @@ describe("mission state and player movement", () => {
     expect(hasPosition(moves, at(4, 2))).toBe(false);
     expect(hasPosition(moves, at(3, 3))).toBe(false);
     expect(hasPosition(moves, at(2, 3))).toBe(false);
+  });
+
+  it("returns the exact deterministic route used by a legal movement preview", () => {
+    const state = createInitialGameState(TRAINING_MOMENTUM);
+
+    expect(getMovementPath(state, "pusher", at(4, 4))).toEqual([
+      at(5, 5),
+      at(5, 4),
+      at(4, 4),
+    ]);
+    expect(getMovementPath(state, "pusher", at(4, 2))).toBeNull();
+    expect(getMovementPath(state, "missing", at(4, 4))).toBeNull();
+    expect(getMovementPath(state, "pusher", at(5, 5))).toBeNull();
   });
 
   it("allows one move followed by one action, then closes activation", () => {

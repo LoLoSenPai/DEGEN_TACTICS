@@ -41,4 +41,36 @@ describe("combat presentation playback", () => {
     expect(guardianImpact).toMatchObject({ amount: 1, absorbed: 2, fatal: false });
     expect(guardianImpact?.state.units.find((unit) => unit.id === "guardian")).toMatchObject({ hp: 11, shield: null });
   });
+
+  it("groups every Whale target into one slam windup and one simultaneous impact", () => {
+    const initial = createInitialGameState(TRAINING_BASICS);
+    const whaleState = {
+      ...initial,
+      enemies: [{
+        ...initial.enemies[0],
+        id: "whale-test",
+        kind: "whale" as const,
+        name: "Test Whale",
+        hp: 10,
+        maxHp: 10,
+        position: { x: 5, y: 3 },
+        whaleState: "charging" as const,
+        lockedArea: [{ x: 4, y: 3 }, { x: 3, y: 3 }],
+      }],
+    };
+    const events = [
+      { type: "damage" as const, sourceId: "whale-test", targetId: "guardian", amount: 4, absorbed: 0 },
+      { type: "damage" as const, sourceId: "whale-test", targetId: "vault", amount: 4, absorbed: 0 },
+    ];
+    const beats = compileEnemyPlayback(whaleState, whaleState, events);
+
+    expect(beats.map((beat) => beat.stage)).toEqual(["attack", "impact"]);
+    expect(beats[0]).toMatchObject({ sourceId: "whale-test", area: [{ x: 4, y: 3 }, { x: 3, y: 3 }] });
+    expect(beats[1].hits).toEqual([
+      { targetId: "guardian", amount: 4, absorbed: 0, fatal: false },
+      { targetId: "vault", amount: 4, absorbed: 0, fatal: false },
+    ]);
+    expect(beats[1].state.units[0].hp).toBe(8);
+    expect(beats[1].state.vault.hp).toBe(6);
+  });
 });

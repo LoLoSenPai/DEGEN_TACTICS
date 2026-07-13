@@ -85,3 +85,13 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Passed `pnpm lint` with zero warnings, strict `pnpm typecheck`, all 38 `pnpm test` cases, and the optimized Next.js 15 production build.
 - Smoke-tested the production server through HQ → missions → briefing → fresh battle plus direct-results fallback; the production browser console remained at zero errors and zero warnings.
 - Inspected the final 1440×900 production battle capture alongside the earlier 1280×720, 1024×768, and 390×844 QA captures; the premium tactical hierarchy, readable exact intents, disabled-state copy, focusable DOM grid, and responsive notice all held.
+
+## 2026-07-13 — Exact movement previews and combat archetypes
+
+- Added a teal SVG movement preview that appears on pointer hover and keyboard focus, follows the exact deterministic BFS route used by the movement command, respects authored board rails and obstacles, and disappears on cancel, blur, mode change, or movement.
+- Added destination rings, route nodes, an animated arrowhead, focus-visible tile feedback, and contextual copy such as `Move Guardian to D2 · 2 tiles`. Space and Enter now activate a focused board tile instead of accidentally ending the turn.
+- Added role-specific event-derived combat presentation: Guardian shield bash, Sniper shot, Deadeye beam, Pusher Shove/Batter Up, Rugger charge, Drainer siphon and heal, plus an exact-area Whale ground slam.
+- Grouped the Whale's simultaneous locked-area damage into one readable windup and one impact while preserving every exact target and damage event. Successful non-collision pushes now receive their own movement beat instead of visually teleporting.
+- Extended the text serializer with movement previews, combat variants, exact areas, multi-target hits, and enemy-plan targets for deterministic browser assertions.
+- Added pure tests for route calculation, calibrated preview geometry, Whale multi-target playback, and effect grouping. The suite now contains 52 passing tests.
+- Replayed the complete three-lesson training, Drainer siphon/heal, Whale charge/slam, main battle, results/defeat, responsive layout, and source-pixel grid registration with zero captured console errors.

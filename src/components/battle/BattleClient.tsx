@@ -27,6 +27,7 @@ import {
   TRAINING_SQUAD,
   getMissionDefinition,
   getAttackableTargets,
+  getMovementPath,
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
@@ -38,7 +39,9 @@ import {
 } from "@/lib/game";
 import { useGameStore, type ActionMode, type BattleEffect, type CombatCue, type CombatLogEntry } from "@/store/gameStore";
 import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/BattleTutorial";
+import { CombatActionFx } from "@/components/battle/CombatActionFx";
 import { EnemyIntentPath } from "@/components/battle/EnemyIntentPath";
+import { PlayerMovePath } from "@/components/battle/PlayerMovePath";
 import {
   initialTutorialStep,
   trainingMissionForProgress,
@@ -93,7 +96,7 @@ function entityPosition(game: GameState, id: string): Position | null {
 function attackDirectionStyle(game: GameState, entityId: string, effect?: BattleEffect): CSSProperties | undefined {
   if (!effect?.targetId) return undefined;
   const source = entityPosition(game, entityId);
-  const target = entityPosition(game, effect.targetId);
+  const target = effect.from ?? entityPosition(game, effect.targetId);
   if (!source || !target) return undefined;
   return {
     "--combat-x": `${Math.sign(target.x - source.x) * 16}%`,
@@ -102,7 +105,7 @@ function attackDirectionStyle(game: GameState, entityId: string, effect?: Battle
 }
 
 function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }) {
-  if (!cue || !["attack", "impact", "death", "shield"].includes(cue.stage)) return null;
+  if (!cue || !["attack", "impact", "death", "shield", "push", "status"].includes(cue.stage)) return null;
   const source = cue.sourceId ? entityName(game, cue.sourceId) : "Enemy";
   const target = cue.targetId ? entityName(game, cue.targetId) : "Squad";
   let kicker = "COMBAT";
@@ -111,6 +114,12 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
   if (cue.stage === "shield") {
     kicker = "ABILITY";
     message = `Shield Wall · ${cue.amount ?? 2} armor applied`;
+  } else if (cue.stage === "push") {
+    kicker = cue.variant === "batter-up" ? "BATTER UP" : "SHOVE";
+    message = `${source} pushes ${target}`;
+  } else if (cue.stage === "status" && cue.variant === "drain") {
+    kicker = "LIFE DRAIN";
+    message = `${source} recovers ${cue.amount ?? 1} HP`;
   } else if (cue.stage === "impact") {
     kicker = cue.absorbed ? "SHIELD HIT" : "IMPACT";
     message = cue.absorbed
@@ -121,11 +130,21 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
     message = `${target} is down`;
   } else {
     kicker = source.toUpperCase();
-    message = `Attacks ${target}`;
+    message = cue.variant === "deadeye"
+      ? `Deadeye fires on ${target}`
+      : cue.variant === "sniper-shot"
+        ? `Fires on ${target}`
+        : cue.variant === "drain"
+          ? `Drains ${target}`
+          : cue.variant === "whale-slam"
+            ? `Slams the locked area`
+            : cue.variant === "guardian-bash"
+              ? `Shield-bashes ${target}`
+              : `Attacks ${target}`;
   }
 
   return (
-    <div key={cue.id} className={clsx("combat-callout", `is-${cue.stage}`, cue.absorbed && "is-blocked", cue.fatal && "is-fatal")} role="status" aria-live="assertive">
+    <div key={cue.id} className={clsx("combat-callout", `is-${cue.stage}`, cue.variant && `variant-${cue.variant}`, cue.absorbed && "is-blocked", cue.fatal && "is-fatal")} role="status" aria-live="assertive">
       <small>{kicker}</small>
       <strong>{message}</strong>
     </div>
@@ -315,8 +334,11 @@ function Board({
   actionMode,
   inspectedId,
   tutorialStep,
+  movePreview,
+  movePreviewPath,
   disabled,
   onTile,
+  onPreviewMove,
 }: {
   game: GameState;
   highlights: HighlightState;
@@ -324,11 +346,15 @@ function Board({
   actionMode: ActionMode;
   inspectedId: string | null;
   tutorialStep: BattleTutorialStep;
+  movePreview: Position | null;
+  movePreviewPath: readonly Position[] | null;
   disabled: boolean;
   onTile: (position: Position) => void;
+  onPreviewMove: (position: Position | null) => void;
 }) {
   const enemyPlan = useGameStore((state) => state.enemyPlan);
   const effects = useGameStore((state) => state.effects);
+  const combatCue = useGameStore((state) => state.combatCue);
   const boardRef = useRef<HTMLDivElement>(null);
   const previousRects = useRef(new Map<string, DOMRect>());
   const moveKeys = useMemo(() => new Set(highlights.moves.map(positionKey)), [highlights.moves]);
@@ -395,6 +421,8 @@ function Board({
     >
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
         <EnemyIntentPath plan={enemyPlan} />
+        {movePreview && movePreviewPath ? <PlayerMovePath positions={movePreviewPath} destination={coordinate(movePreview)} /> : null}
+        <CombatActionFx game={game} cue={combatCue} />
         {positions.map((position) => {
           const key = positionKey(position);
           const unit = game.units.find((candidate) => (candidate.hp > 0 || visibleZeroHpIds.has(candidate.id)) && samePosition(candidate.position, position));
@@ -410,12 +438,13 @@ function Board({
           const destinationOrders = intentData.destinations.get(key) ?? [];
           const entityId = unit?.id ?? enemy?.id ?? object?.id ?? (isVault ? game.vault.id : undefined);
           const targetEffects = entityId ? effects.filter((candidate) => candidate.targetId === entityId) : [];
-          const attackEffect = entityId ? effects.find((candidate) => candidate.kind === "attack" && candidate.sourceId === entityId) : undefined;
+          const attackEffect = entityId ? effects.find((candidate) => (candidate.kind === "attack" || candidate.kind === "push") && candidate.sourceId === entityId) : undefined;
           const damageEffect = [...targetEffects].reverse().find((candidate) => ["damage", "heavy", "collision"].includes(candidate.kind));
           const shieldEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "shield" || candidate.kind === "shield-hit");
           const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
+          const healEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "heal");
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
-          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying");
+          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
@@ -441,7 +470,22 @@ function Board({
                 intentData.locked.has(key) && "is-locked-danger",
                 isTutorialFocus && "is-tutorial-focus",
               )}
-              onClick={() => onTile(position)}
+              onClick={() => {
+                onPreviewMove(null);
+                onTile(position);
+              }}
+              onPointerEnter={() => {
+                if (isMove) onPreviewMove(position);
+              }}
+              onPointerLeave={() => {
+                if (movePreview && samePosition(movePreview, position)) onPreviewMove(null);
+              }}
+              onFocus={() => {
+                if (isMove) onPreviewMove(position);
+              }}
+              onBlur={() => {
+                if (movePreview && samePosition(movePreview, position)) onPreviewMove(null);
+              }}
               disabled={disabled || game.phase !== "player" || (tutorialRestricted && !tutorialTileAllowed)}
               aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, isDanger })}
               aria-selected={isSelected}
@@ -494,6 +538,7 @@ function Board({
               ) : null}
               {damageEffect && (damageEffect.amount ?? 0) > 0 ? <span key={`damage-${damageEffect.id}`} className="game-damage-popup">−{damageEffect.amount} HP</span> : null}
               {shieldEffect?.kind === "shield-hit" && (shieldEffect.absorbed ?? 0) > 0 ? <span key={`block-${shieldEffect.id}`} className="game-block-popup">BLOCK {shieldEffect.absorbed}</span> : null}
+              {healEffect && (healEffect.amount ?? 0) > 0 ? <span key={`heal-${healEffect.id}`} className="game-heal-popup">+{healEffect.amount} HP</span> : null}
               {deathEffect ? <span key={`ko-${deathEffect.id}`} className="game-ko-popup">KO</span> : null}
             </button>
           );
@@ -506,6 +551,8 @@ function Board({
 function ActionBar({
   selected,
   actionMode,
+  movePreview,
+  movePreviewDistance,
   hasUndo,
   tutorialStep,
   disabled,
@@ -518,6 +565,8 @@ function ActionBar({
 }: {
   selected?: PlayerUnit;
   actionMode: ActionMode;
+  movePreview: Position | null;
+  movePreviewDistance: number;
   hasUndo: boolean;
   tutorialStep: BattleTutorialStep;
   disabled: boolean;
@@ -538,7 +587,9 @@ function ActionBar({
     : selected.hasActed
       ? `${selected.name} is done · select another hero`
       : actionMode === "move"
-        ? "Choose a teal tile"
+        ? movePreview
+          ? `Move ${selected.name} to ${coordinate(movePreview)} · ${movePreviewDistance} tile${movePreviewDistance === 1 ? "" : "s"}`
+          : "Point at a teal tile to preview the route"
         : actionMode === "attack"
           ? "Choose a cyan enemy"
           : actionMode === "push" || actionMode === "ability"
@@ -634,6 +685,7 @@ export function BattleClient() {
   const setTutorialComplete = useGameStore((state) => state.setTutorialComplete);
   const completeTrainingLesson = useGameStore((state) => state.completeTrainingLesson);
   const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const [movePreview, setMovePreview] = useState<Position | null>(null);
   const [introVisible, setIntroVisible] = useState(true);
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
   const missionId = game?.missionId;
@@ -649,6 +701,13 @@ export function BattleClient() {
   }, [actionMode, game, selected]);
   const pushTargets = useMemo(() => game && selected && selected.role === "pusher" && (actionMode === "push" || actionMode === "ability") ? getPushTargets(game, selected.id) : [], [actionMode, game, selected]);
   const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), pushTargets }), [attackTargets, moves, pushTargets]);
+  const movePreviewPath = useMemo(() => game && selected && movePreview && actionMode === "move"
+    ? getMovementPath(game, selected.id, movePreview)
+    : null, [actionMode, game, movePreview, selected]);
+
+  useEffect(() => {
+    if (actionMode !== "move" || controlsLocked || !selected) setMovePreview(null);
+  }, [actionMode, controlsLocked, selected]);
 
   useEffect(() => {
     if (!hydrated || initialized.current) return;
@@ -784,7 +843,17 @@ export function BattleClient() {
         amount: combatCue.amount ?? 0,
         absorbed: combatCue.absorbed ?? 0,
         fatal: combatCue.fatal ?? false,
+        variant: combatCue.variant ?? "generic",
+        from: combatCue.from ? coordinate(combatCue.from) : null,
+        to: combatCue.to ? coordinate(combatCue.to) : null,
+        area: combatCue.area?.map(coordinate) ?? [],
+        hits: combatCue.hits ?? [],
         queueRemaining,
+      } : null,
+      movePreview: movePreview && movePreviewPath ? {
+        from: coordinate(movePreviewPath[0]),
+        to: coordinate(movePreview),
+        path: movePreviewPath.map(coordinate),
       } : null,
       highlights: {
         moves: moves.map(coordinate),
@@ -795,7 +864,7 @@ export function BattleClient() {
       units: game.units.map((unit) => ({ id: unit.id, role: unit.role, at: coordinate(unit.position), hp: unit.hp, hasMoved: unit.hasMoved, hasActed: unit.hasActed, signatureAvailable: unit.signatureAvailable })),
       enemies: game.enemies.map((enemy) => ({ id: enemy.id, kind: enemy.kind, at: coordinate(enemy.position), hp: enemy.hp, whaleState: enemy.whaleState })),
       objects: game.objects.map((object) => ({ id: object.id, at: coordinate(object.position) })),
-      exactEnemyPlan: enemyPlan?.intents.map((intent) => ({ order: intent.order, enemyId: intent.enemyId, action: intent.action, path: intent.path.map(coordinate), destination: coordinate(intent.destination), target: intent.target?.id ?? null, area: intent.area.map(coordinate), damage: intent.damage, special: intent.special })) ?? [],
+      exactEnemyPlan: enemyPlan?.intents.map((intent) => ({ order: intent.order, enemyId: intent.enemyId, action: intent.action, path: intent.path.map(coordinate), destination: coordinate(intent.destination), target: intent.target?.id ?? null, targets: intent.targets.map((target) => ({ id: target.id, at: coordinate(target.position), expectedDamage: target.expectedDamage })), area: intent.area.map(coordinate), damage: intent.damage, special: intent.special })) ?? [],
       tutorial: {
         running: tutorialStep !== null,
         step: tutorialStep,
@@ -812,7 +881,7 @@ export function BattleClient() {
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, combatCue, enemyPlan, game, inspectedId, introVisible, isAnimating, isResolving, moves, playbackIndex, pushTargets, queueRemaining, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, combatCue, enemyPlan, game, inspectedId, introVisible, isAnimating, isResolving, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
@@ -914,9 +983,11 @@ export function BattleClient() {
       }
       if (key === "escape") {
         if (tutorialRestrictsInput(tutorialStep)) return;
+        setMovePreview(null);
         setActionMode(null);
         return;
       }
+      if ((key === " " || key === "enter") && target instanceof HTMLButtonElement) return;
       if (event.repeat || controlsLocked || !game || game.phase !== "player") return;
       if (tutorialRestrictsInput(tutorialStep)) {
         const allowed = tutorialAction(tutorialStep);
@@ -952,13 +1023,15 @@ export function BattleClient() {
             <GameHud game={game} />
             <Link href="/" className="battle-title-button" aria-label="Game menu — return to title screen"><List weight="bold" /></Link>
             <section className="game-board-zone" aria-label="Battlefield">
-              <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} disabled={controlsLocked} onTile={handleTile} />
+              <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} movePreview={movePreview} movePreviewPath={movePreviewPath} disabled={controlsLocked} onTile={handleTile} onPreviewMove={setMovePreview} />
             </section>
             <CombatCallout game={game} cue={combatCue} />
             <SelectedInspector game={game} selectedUnitId={selectedUnitId} inspectedId={inspectedId} />
             <ActionBar
               selected={selected}
               actionMode={actionMode}
+              movePreview={movePreview}
+              movePreviewDistance={Math.max(0, (movePreviewPath?.length ?? 1) - 1)}
               hasUndo={Boolean(lastMove)}
               tutorialStep={tutorialStep}
               disabled={controlsLocked || game.phase !== "player"}

@@ -268,6 +268,13 @@
   transform: none;
 }
 
+.game-tile:focus-visible {
+  z-index: 29;
+  outline: 3px solid #dffefa;
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 3px rgba(67, 225, 205, 0.72), 0 0 18px rgba(67, 225, 205, 0.48);
+}
+
 .game-tile:disabled {
   cursor: default;
 }
@@ -292,6 +299,7 @@
   border: 2px solid #3fe0cb;
   background-color: rgba(24, 103, 97, 0.76);
   box-shadow: inset 0 0 0 2px rgba(73, 232, 210, 0.2), 0 0 14px rgba(54, 221, 199, 0.2);
+  cursor: crosshair;
 }
 
 .game-tile.is-attack {
@@ -651,7 +659,8 @@
 }
 
 .game-block-popup,
-.game-ko-popup {
+.game-ko-popup,
+.game-heal-popup {
   position: absolute;
   z-index: 92;
   left: 50%;
@@ -659,6 +668,13 @@
   white-space: nowrap;
   transform: translateX(-50%);
   text-shadow: 2px 2px 0 #050708, 0 0 10px currentColor;
+}
+
+.game-heal-popup {
+  top: 9%;
+  color: #d96eff;
+  font: 400 20px/1 var(--game-font-display);
+  animation: heal-pop 620ms ease-out both;
 }
 
 .game-block-popup {
@@ -711,6 +727,26 @@
 
 .game-piece.is-attacking .piece-base {
   animation: combat-base-lunge 260ms ease-out both;
+}
+
+.game-piece.piece-sniper.is-attacking .board-sprite {
+  animation: sniper-recoil 320ms steps(4, end) both;
+}
+
+.game-piece.piece-drainer.is-attacking .board-sprite {
+  animation: drainer-cast 330ms ease-in-out both;
+}
+
+.game-piece.piece-whale.is-attacking .board-sprite {
+  animation: whale-slam 440ms cubic-bezier(.22,.72,.2,1) both;
+}
+
+.game-piece.piece-rugger.is-attacking .board-sprite {
+  animation: rugger-charge 260ms cubic-bezier(.2,.78,.22,1) both;
+}
+
+.game-piece.is-healing .board-sprite {
+  animation: combat-heal 360ms ease-out both;
 }
 
 .game-piece.is-hit:not(.is-shield-hit) .board-sprite {
@@ -792,6 +828,63 @@
   color: #fff0c6;
   background: rgba(30, 16, 5, 0.96);
 }
+
+.combat-callout.is-push {
+  border-color: #e9b43e;
+  color: #fff1c3;
+  background: rgba(31, 21, 5, 0.96);
+}
+
+.combat-callout.is-push small { color: #ffc84f; }
+
+.combat-callout.is-status {
+  border-color: #c45de4;
+  color: #f7d9ff;
+  background: rgba(29, 8, 35, 0.96);
+}
+
+.combat-callout.is-status small { color: #dd75f8; }
+
+.combat-callout.variant-sniper-shot,
+.combat-callout.variant-deadeye {
+  border-color: #61d9ff;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.5), 0 0 22px rgba(71, 205, 255, 0.32);
+}
+
+.combat-callout.variant-sniper-shot small,
+.combat-callout.variant-deadeye small { color: #77e4ff; }
+
+.combat-callout.variant-guardian-bash {
+  border-color: #4de0cd;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.5), 0 0 22px rgba(77, 224, 205, 0.28);
+}
+
+.combat-callout.variant-guardian-bash small { color: #62ead7; }
+
+.combat-callout.variant-drain {
+  border-color: #c45de4;
+  background: rgba(29, 8, 35, 0.96);
+}
+
+.combat-callout.variant-drain small { color: #dd75f8; }
+
+.combat-callout.variant-shove,
+.combat-callout.variant-batter-up,
+.combat-callout.variant-pusher-punch {
+  border-color: #e9b43e;
+}
+
+.combat-callout.variant-shove small,
+.combat-callout.variant-batter-up small,
+.combat-callout.variant-pusher-punch small { color: #ffc84f; }
+
+.combat-callout.is-status.variant-whale-slam {
+  border-color: #ef514b;
+  color: #fff4e7;
+  background: rgba(24, 8, 10, 0.94);
+}
+
+.combat-callout.is-status.variant-whale-slam small { color: #ff746d; }
 
 .selected-inspector {
   position: absolute;
@@ -1334,6 +1427,39 @@
   75% { transform: translate(var(--combat-x, 0%), var(--combat-y, 0%)) scale(1.05); }
 }
 
+@keyframes sniper-recoil {
+  0% { transform: translate(0) scale(1); filter: brightness(1); }
+  24% { transform: translateY(-2px) scale(1.03); filter: brightness(1.65) drop-shadow(0 0 8px #52d8ff); }
+  48% { transform: translateX(-5px) scale(0.98); filter: brightness(1.2); }
+  100% { transform: translate(0) scale(1); filter: brightness(1); }
+}
+
+@keyframes drainer-cast {
+  0% { transform: translateY(0) scale(1); filter: brightness(1); }
+  45% { transform: translateY(-6px) scale(1.07); filter: brightness(1.7) drop-shadow(0 0 12px #d858f2); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+@keyframes whale-slam {
+  0% { transform: translateY(0) scale(1); filter: brightness(1); }
+  35% { transform: translateY(-9px) scale(1.05); filter: brightness(1.45) drop-shadow(0 0 11px #ff514f); }
+  68% { transform: translateY(5px) scale(1.09, 0.91); filter: brightness(2); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+@keyframes rugger-charge {
+  0% { transform: translate(0, 0) scale(1); filter: brightness(1); }
+  28% { transform: translate(0, 0) scale(0.94); filter: brightness(1.3); }
+  72% { transform: translate(var(--combat-x, 0%), var(--combat-y, 0%)) scale(1.09); filter: brightness(1.75) drop-shadow(0 0 8px #ff514f); }
+  100% { transform: translate(0, 0) scale(1); filter: brightness(1); }
+}
+
+@keyframes combat-heal {
+  0% { transform: translateY(0); filter: brightness(1); }
+  45% { transform: translateY(-4px); filter: brightness(1.8) drop-shadow(0 0 12px #d85cf3); }
+  100% { transform: translateY(0); filter: brightness(1); }
+}
+
 @keyframes combat-hit {
   0% { transform: translate(0); filter: brightness(1); }
   25% { transform: translateX(-5px); filter: brightness(3) saturate(0); }
@@ -1365,6 +1491,12 @@
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
   25%, 72% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); }
   100% { opacity: 0; transform: translate(-50%, -22px) scale(0.92); }
+}
+
+@keyframes heal-pop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.7); }
+  28%, 72% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -25px) scale(0.9); }
 }
 
 @keyframes ko-pop {
@@ -1574,10 +1706,12 @@
   .piece-shield-aura,
   .game-block-popup,
   .game-ko-popup,
+  .game-heal-popup,
   .combat-callout,
   .game-piece.is-attacking .board-sprite,
   .game-piece.is-attacking .piece-base,
   .game-piece.is-hit .board-sprite,
+  .game-piece.is-healing .board-sprite,
   .game-piece.is-dying .board-sprite,
   .game-piece.is-dying .piece-base,
   .game-piece.is-dying .piece-health {

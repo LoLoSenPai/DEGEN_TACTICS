@@ -43,6 +43,12 @@ export interface IntentGridMetrics {
   readonly markerRadius: number;
 }
 
+export interface BoardPositionPathGeometry {
+  readonly metrics: IntentGridMetrics;
+  readonly points: readonly Point[];
+  readonly path: string | null;
+}
+
 const samePosition = (left: Position, right: Position) =>
   left.x === right.x && left.y === right.y;
 
@@ -67,7 +73,7 @@ const normalizeTracks = (tracks: readonly number[], fallbackLength: number) => {
   return Array.from({ length: fallbackLength }, () => 1);
 };
 
-const metricsFor = (geometry: IntentGridGeometry): IntentGridMetrics => {
+export const metricsForIntentGrid = (geometry: IntentGridGeometry): IntentGridMetrics => {
   const boardSize = Math.max(
     geometry.columnTracks.length,
     geometry.rowTracks.length,
@@ -86,7 +92,7 @@ const metricsFor = (geometry: IntentGridGeometry): IntentGridMetrics => {
   };
 };
 
-const pointFor = (position: Position, metrics: IntentGridMetrics): Point | null => {
+export const pointForIntentGrid = (position: Position, metrics: IntentGridMetrics): Point | null => {
   const x = metrics.centersX[position.x];
   const y = metrics.centersY[position.y];
   if (x === undefined || y === undefined) return null;
@@ -95,11 +101,26 @@ const pointFor = (position: Position, metrics: IntentGridMetrics): Point | null 
 
 const number = (value: number) => Number(value.toFixed(3)).toString();
 
-const pathFrom = (points: readonly Point[]) => {
+export const pathFromIntentPoints = (points: readonly Point[]) => {
   if (points.length < 2) return null;
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${number(point.x)} ${number(point.y)}`)
     .join(" ");
+};
+
+export const buildBoardPositionPath = (
+  positions: readonly Position[],
+  geometry: IntentGridGeometry = BLACKSITE_INTENT_GRID,
+): BoardPositionPathGeometry => {
+  const metrics = metricsForIntentGrid(geometry);
+  const points = positions
+    .map((position) => pointForIntentGrid(position, metrics))
+    .filter((point): point is Point => point !== null);
+  return {
+    metrics,
+    points,
+    path: points.length === positions.length ? pathFromIntentPoints(points) : null,
+  };
 };
 
 const lerp = (from: Point, to: Point, amount: number): Point => ({
@@ -122,7 +143,7 @@ const trimmedAttackPath = (
   const unitX = dx / distance;
   const unitY = dy / distance;
 
-  return pathFrom([
+  return pathFromIntentPoints([
     { x: from.x + unitX * startGap, y: from.y + unitY * startGap },
     { x: to.x - unitX * endGap, y: to.y - unitY * endGap },
   ]);
@@ -144,7 +165,7 @@ export const buildEnemyIntentGeometry = (
   plan: EnemyTurnPlan | null | undefined,
   geometry: IntentGridGeometry = BLACKSITE_INTENT_GRID,
 ): Readonly<{ metrics: IntentGridMetrics; paths: readonly IntentPathGeometry[] }> => {
-  const metrics = metricsFor(geometry);
+  const metrics = metricsForIntentGrid(geometry);
   const paths = [...(plan?.intents ?? [])]
     .sort((left, right) => left.order - right.order || left.enemyId.localeCompare(right.enemyId))
     .flatMap((intent): IntentPathGeometry[] => {
@@ -153,10 +174,10 @@ export const buildEnemyIntentGeometry = (
         positions.push(intent.destination);
       }
       const movement = positions
-        .map((position) => pointFor(position, metrics))
+        .map((position) => pointForIntentGrid(position, metrics))
         .filter((point): point is Point => point !== null);
-      const destination = pointFor(intent.destination, metrics);
-      const origin = pointFor(intent.from, metrics);
+      const destination = pointForIntentGrid(intent.destination, metrics);
+      const origin = pointForIntentGrid(intent.from, metrics);
       if (!destination || !origin) return [];
 
       const firstStep = movement[1];
@@ -164,7 +185,7 @@ export const buildEnemyIntentGeometry = (
         ? lerp(movement[0], firstStep, 0.42)
         : { x: origin.x + metrics.markerRadius, y: origin.y - metrics.markerRadius };
       const targets = distinctTargets(intent).flatMap((target) => {
-        const point = pointFor(target.position, metrics);
+        const point = pointForIntentGrid(target.position, metrics);
         if (!point) return [];
         return [{
           id: target.id,
@@ -177,7 +198,7 @@ export const buildEnemyIntentGeometry = (
       return [{
         intent,
         movement,
-        movementPath: pathFrom(movement),
+        movementPath: pathFromIntentPoints(movement),
         orderBadge,
         targets,
       }];
