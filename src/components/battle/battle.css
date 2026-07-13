@@ -520,6 +520,41 @@
   height: 110.8%;
 }
 
+.piece-sniper .sniper-spritecook.board-sprite {
+  right: 5%;
+  bottom: 14%;
+  width: 90%;
+  height: 90%;
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+
+.sniper-spritecook-frames {
+  position: absolute;
+  inset: 0;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 800% 100%;
+  filter: brightness(1.08) saturate(1.08) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.74));
+  image-rendering: pixelated;
+  will-change: background-position;
+}
+
+.sniper-spritecook.is-idle .sniper-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-idle.png");
+  animation: spritecook-frames-8 1000ms linear infinite;
+}
+
+.sniper-spritecook.is-attack .sniper-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-attack.png");
+  animation: spritecook-frames-8 520ms linear both;
+}
+
+.sniper-spritecook.is-hurt .sniper-spritecook-frames,
+.sniper-spritecook.is-death .sniper-spritecook-frames {
+  background-image: url("/assets/sprites/spritecook/sniper-idle.png");
+}
+
 .piece-pusher .board-sprite {
   right: -30.9%;
   bottom: 15.6%;
@@ -771,9 +806,10 @@
 }
 
 .game-combat-vfx.is-death {
-  z-index: 77;
-  inset: -36%;
-  filter: hue-rotate(60deg) saturate(0.85);
+  z-index: 14;
+  inset: -24%;
+  opacity: 0.62;
+  filter: hue-rotate(60deg) saturate(0.8);
 }
 
 .game-piece.is-attacking .board-sprite {
@@ -820,6 +856,11 @@
 .game-piece.is-dying .piece-health,
 .game-piece.is-dying .piece-shield {
   animation: combat-fade 420ms 100ms steps(4, end) both;
+}
+
+.game-piece.piece-sniper.is-attacking .sniper-spritecook.board-sprite,
+.game-piece.piece-sniper.is-attacking .piece-base {
+  animation: none;
 }
 
 .combat-callout {
@@ -1884,6 +1925,17 @@
   to { opacity: 0; }
 }
 
+@keyframes spritecook-frames-8 {
+  0%, 12.499% { background-position: 0% 0; }
+  12.5%, 24.999% { background-position: 14.2857% 0; }
+  25%, 37.499% { background-position: 28.5714% 0; }
+  37.5%, 49.999% { background-position: 42.8571% 0; }
+  50%, 62.499% { background-position: 57.1429% 0; }
+  62.5%, 74.999% { background-position: 71.4286% 0; }
+  75%, 87.499% { background-position: 85.7143% 0; }
+  87.5%, 100% { background-position: 100% 0; }
+}
+
 @keyframes block-pop {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
   25%, 72% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); }
@@ -2122,6 +2174,14 @@
   .game-piece.is-dying .piece-base,
   .game-piece.is-dying .piece-health {
     animation: none !important;
+  }
+
+  .sniper-spritecook-frames {
+    animation: none !important;
+  }
+
+  .sniper-spritecook.is-attack .sniper-spritecook-frames {
+    background-position: 57.1429% 0;
   }
 
   .game-combat-vfx {

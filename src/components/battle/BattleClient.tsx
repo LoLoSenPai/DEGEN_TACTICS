@@ -70,6 +70,13 @@ const SPRITE_ASSETS = {
 
 type SpriteKind = keyof typeof SPRITE_ASSETS;
 
+type BattleSpriteMotion = "idle" | "attack" | "hurt" | "death";
+
+type BattleSpriteState = {
+  motion: BattleSpriteMotion;
+  effectId: number;
+};
+
 const positionKey = ({ x, y }: Position) => `${x},${y}`;
 const samePosition = (left: Position, right: Position) => left.x === right.x && left.y === right.y;
 const coordinate = ({ x, y }: Position) => `${COLUMNS[x] ?? "?"}${y + 1}`;
@@ -152,6 +159,39 @@ function SpriteArt({ kind, name, className, priority = false }: { kind: SpriteKi
   return (
     <span className={clsx("sprite-art", `sprite-${kind}`, className)}>
       <Image src={SPRITE_ASSETS[kind]} alt="" fill sizes="130px" priority={priority} className="sprite-image" />
+      <span className="sr-only">{name}</span>
+    </span>
+  );
+}
+
+function battleSpriteState(effects: readonly BattleEffect[], unitId: string): BattleSpriteState {
+  const targetEffects = effects.filter((effect) => effect.targetId === unitId);
+  const deathEffect = [...targetEffects].reverse().find((effect) => effect.kind === "death");
+  if (deathEffect) return { motion: "death", effectId: deathEffect.id };
+
+  const hurtEffect = [...targetEffects].reverse().find((effect) =>
+    ["damage", "heavy", "collision"].includes(effect.kind) && (effect.amount ?? 0) > 0,
+  );
+  if (hurtEffect) return { motion: "hurt", effectId: hurtEffect.id };
+
+  const attackEffect = effects.find((effect) =>
+    (effect.kind === "attack" || effect.kind === "push") && effect.sourceId === unitId,
+  );
+  if (attackEffect) return { motion: "attack", effectId: attackEffect.id };
+
+  return { motion: "idle", effectId: 0 };
+}
+
+function SniperBattleSprite({ name, state }: { name: string; state: BattleSpriteState }) {
+  return (
+    <span
+      className={clsx("sprite-art", "sprite-sniper", "board-sprite", "sniper-spritecook", `is-${state.motion}`)}
+      data-sprite-source="spritecook-pixel"
+      data-sprite-motion={state.motion}
+      data-sprite-effect-id={state.effectId}
+      data-sprite-frames="8"
+    >
+      <span key={`${state.motion}-${state.effectId}`} className="sniper-spritecook-frames" aria-hidden="true" />
       <span className="sr-only">{name}</span>
     </span>
   );
@@ -563,6 +603,7 @@ function Board({
           const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
           const healEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "heal");
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
+          const sniperAnimation = unit?.role === "sniper" ? battleSpriteState(effects, unit.id) : null;
           const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
@@ -626,7 +667,9 @@ function Board({
               {unit ? (
                 <span className={clsx("game-piece ally-piece", `piece-${unit.role}`, `is-${unitActivationState(unit)}`, unit.id === selectedUnitId && "is-active", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={unit.id} data-activation-state={unitActivationState(unit)}>
                   <span className="piece-base" />
-                  <SpriteArt kind={unit.role} name={unit.name} className="board-sprite" priority />
+                  {sniperAnimation
+                    ? <SniperBattleSprite name={unit.name} state={sniperAnimation} />
+                    : <SpriteArt kind={unit.role} name={unit.name} className="board-sprite" priority />}
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
                   <span className="piece-activation" aria-hidden="true">{unitActivationState(unit) === "ready" ? "READY" : unitActivationState(unit) === "action-ready" ? "ACTION" : unitActivationState(unit) === "done" ? "✓" : "KO"}</span>
                   {unit.shield ? <><span className="piece-shield-aura" aria-hidden="true" /><span className="piece-shield"><Shield weight="fill" />{unit.shield.value}</span></> : null}
@@ -936,10 +979,10 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   }, [actionMode, completeTrainingLesson, game, isResolving, lastEvents, selectedUnitId, turnBanner, tutorialStep]);
 
   useEffect(() => {
-    if (effects.length === 0) return;
+    if (effects.length === 0 || combatCue) return;
     const timeout = window.setTimeout(clearEffects, 680);
     return () => window.clearTimeout(timeout);
-  }, [clearEffects, effects]);
+  }, [clearEffects, combatCue, effects]);
 
   useEffect(() => {
     if (!game || isTrainingMissionId(game.missionId) || !lastResult || (game.phase !== "victory" && game.phase !== "defeat")) return;
@@ -984,6 +1027,17 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         hits: combatCue.hits ?? [],
         queueRemaining,
       } : null,
+      sniperAnimation: (() => {
+        const sniper = game.units.find((unit) => unit.role === "sniper");
+        if (!sniper) return null;
+        const spriteState = battleSpriteState(effects, sniper.id);
+        return {
+          source: "spritecook-pixel",
+          motion: spriteState.motion,
+          effectId: spriteState.effectId,
+          frames: 8,
+        };
+      })(),
       movePreview: movePreview && movePreviewPath ? {
         from: coordinate(movePreviewPath[0]),
         to: coordinate(movePreview),
@@ -1039,7 +1093,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, combatCue, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");

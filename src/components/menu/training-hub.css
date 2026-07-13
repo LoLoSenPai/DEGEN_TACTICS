@@ -235,6 +235,7 @@
   z-index: 2;
   object-fit: contain;
   object-position: 72% 52%;
+  pointer-events: none;
   filter: drop-shadow(0 15px 9px rgba(0, 0, 0, 0.8));
   transform: scale(1.04);
 }

@@ -512,6 +512,10 @@ export const useGameStore = create<GameStore>()(
           || isDefeated(transition.state, attack.enemyId);
         const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
         const variant = combatVariantForSource(game, attack.unitId, { deadeye });
+        const attackingUnit = game.units.find((unit) => unit.id === attack.unitId);
+        const attackDuration = attackingUnit?.role === "sniper"
+          ? deadeye ? 600 : 520
+          : deadeye ? 320 : 230;
         set({
           actionMode: null,
           lastMove: null,
@@ -549,7 +553,7 @@ export const useGameStore = create<GameStore>()(
           } else {
             schedulePresentation(finish, 460);
           }
-        }, deadeye ? 320 : 230);
+        }, attackDuration);
       },
 
       shieldSelected: () => {
