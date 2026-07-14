@@ -11,6 +11,7 @@ import {
   createInitialGameState,
   createMissionResult,
   getMovementPath,
+  getPlayerMovementPresentationDuration,
   getMissionDefinition,
   isTrainingMissionId,
   moveUnit,
@@ -141,6 +142,7 @@ let logId = 0;
 let effectId = 0;
 let cueId = 0;
 let sessionGeneration = 0;
+const PLAYER_MOVEMENT_SETTLE_MS = 48;
 let bannerTimer: number | null = null;
 let resolutionTimer: number | null = null;
 let presentationTimers: number[] = [];
@@ -558,7 +560,7 @@ export const useGameStore = create<GameStore>()(
           lastEvents: movementEffect ? [] : transition.events,
         });
         if (movementEffect) {
-          const duration = Math.max(280, Math.max(1, movementPath.length - 1) * 180);
+          const duration = getPlayerMovementPresentationDuration(movementPath.length) + PLAYER_MOVEMENT_SETTLE_MS;
           schedulePresentation(() => {
             if (generation === sessionGeneration) set({ isAnimating: false, effects: [], lastEvents: transition.events });
           }, duration);
@@ -813,7 +815,7 @@ export const useGameStore = create<GameStore>()(
           lastEvents: [],
         });
         if (movementEffect) {
-          const duration = Math.max(280, Math.max(1, reversePath.length - 1) * 180);
+          const duration = getPlayerMovementPresentationDuration(reversePath.length) + PLAYER_MOVEMENT_SETTLE_MS;
           schedulePresentation(() => {
             if (generation === sessionGeneration) set({ isAnimating: false, effects: [] });
           }, duration);

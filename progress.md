@@ -165,3 +165,12 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Replayed all three training chapters, activation warnings, 1024px readability, reduced motion, Drainer siphon/heal, Whale slam, deliberate defeat and a perfect canonical victory through semantic browser interactions with zero captured console errors. The verified win ends at Vault 10/10, all three heroes alive, 3 kills, 1,475 points and rank S.
 - Final gates pass: ESLint with zero warnings, strict TypeScript, all 60 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build of all routes.
 - SpriteCook OAuth remains expired after the Codex crash. No generation call was made and no credits were spent in this pass; future enemy sheets should be generated as three `/characters` batches after reauthentication.
+
+## 2026-07-14 — Cold-cache sprite playback and readable walking
+
+- Reproduced the first-play disappearance with a deliberately delayed SpriteCook sheet. The active keyed frame layer replaced idle before its CSS-only background had downloaded or decoded, while the same animation worked on its second use from cache.
+- Centralized all 17 unique player animation sheets in one typed registry. The title screen now preloads them opportunistically, and a direct battle entry loads plus decodes the same files before enabling any board, action-bar or keyboard command. A compact in-game preparation state covers the direct-entry wait and cannot be hidden by the turn banner.
+- Kept animation keys so attacks and abilities still restart on frame one, but moved the exact sheet URL onto the rendered frame layer so the preloader and renderer cannot drift apart.
+- Replaced the nearly instant one-tile FLIP with a shared timing contract: 400 ms for the first tile and 220 ms per additional tile, a progressive `cubic-bezier(.4,0,.2,1)` curve, a synchronized walk cycle and a short store-side settle margin. Undo uses the same reversed-path timing.
+- Cold-cache browser QA delayed `guardian-walk.png` by 901 ms. Before decode the serializer reported `loading-squad`, board and End Turn controls were disabled, and a forced click was ignored. The first real walk remained visible at 27/85/202 ms with movement progress `0.007 / 0.051 / 0.429`, finished on D2 in idle, and produced zero console or page errors.
+- Added registry/file-presence and movement-timing tests. Final gates pass with ESLint, strict TypeScript, 62 Vitest cases and the optimized Next.js 15.5.12 build. No SpriteCook generation call was made and no credits were spent.

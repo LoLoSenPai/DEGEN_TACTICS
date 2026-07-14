@@ -547,7 +547,7 @@
 }
 
 .player-spritecook.is-walk .player-spritecook-frames {
-  animation: spritecook-frames-8 360ms linear infinite;
+  animation: spritecook-frames-8 400ms linear infinite;
 }
 
 .player-spritecook.is-attack .player-spritecook-frames {
@@ -563,50 +563,8 @@
   animation: spritecook-frames-12 680ms linear both;
 }
 
-.player-spritecook.role-guardian.is-idle .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-idle.png");
-}
-
-.player-spritecook.role-guardian.is-walk .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-walk.png");
-}
-
-.player-spritecook.role-guardian.is-attack .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-attack.png");
-}
-
 .player-spritecook.role-guardian.is-ability .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-shield-wall.png");
   animation: spritecook-frames-8 720ms linear both;
-}
-
-.player-spritecook.role-guardian.is-hurt .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-hurt.png");
-}
-
-.player-spritecook.role-guardian.is-death .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/guardian-death.png");
-}
-
-.player-spritecook.role-sniper.is-idle .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-idle.png");
-}
-
-.player-spritecook.role-sniper.is-walk .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-walk.png");
-}
-
-.player-spritecook.role-sniper.is-attack .player-spritecook-frames,
-.player-spritecook.role-sniper.is-ability .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-attack.png");
-}
-
-.player-spritecook.role-sniper.is-hurt .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-hurt.png");
-}
-
-.player-spritecook.role-sniper.is-death .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/sniper-death.png");
 }
 
 .piece-pusher .board-sprite {
@@ -623,29 +581,8 @@
   height: 100%;
 }
 
-.player-spritecook.role-pusher.is-idle .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-idle.png");
-}
-
-.player-spritecook.role-pusher.is-walk .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-walk.png");
-}
-
-.player-spritecook.role-pusher.is-attack .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-attack.png");
-}
-
 .player-spritecook.role-pusher.is-ability .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-batter-up.png");
   animation: spritecook-frames-8 580ms linear both;
-}
-
-.player-spritecook.role-pusher.is-hurt .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-hurt.png");
-}
-
-.player-spritecook.role-pusher.is-death .player-spritecook-frames {
-  background-image: url("/assets/sprites/spritecook/pusher-death.png");
 }
 
 .piece-rugger .board-sprite {
@@ -2051,9 +1988,39 @@
   text-transform: uppercase;
 }
 
+.game-sprite-loading {
+  position: absolute;
+  z-index: 220;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px solid #43dcc8;
+  padding: 13px 18px;
+  color: #effffa;
+  background-color: rgba(3, 12, 15, 0.96);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.72), 0 0 24px rgba(67, 220, 200, 0.22);
+  font: 400 19px/1 var(--game-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+}
+
+.game-sprite-loading svg {
+  width: 20px;
+  height: 20px;
+  color: #43dcc8;
+  animation: sprite-loading-turn 850ms steps(8, end) infinite;
+}
+
 @keyframes danger-pulse {
   0%, 100% { box-shadow: inset 0 0 0 2px rgba(241, 83, 76, 0.2); }
   50% { box-shadow: inset 0 0 0 3px rgba(255, 111, 103, 0.58), 0 0 13px rgba(241, 83, 76, 0.22); }
+}
+
+@keyframes sprite-loading-turn {
+  to { transform: rotate(1turn); }
 }
 
 @keyframes selected-ring {
@@ -2499,6 +2466,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .game-sprite-loading svg {
+    animation: none;
+  }
+
   .game-tile,
   .game-piece .board-sprite,
   .game-piece.is-active .piece-base,

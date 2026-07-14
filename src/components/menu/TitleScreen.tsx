@@ -14,6 +14,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useGameStore } from "@/store/gameStore";
+import { preloadPlayerSpriteSheets } from "@/components/battle/playerSpriteSheets";
 
 export function TitleScreen() {
   const router = useRouter();
@@ -22,6 +23,10 @@ export function TitleScreen() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [launchWarningOpen, setLaunchWarningOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    void preloadPlayerSpriteSheets();
+  }, []);
 
   const startMission = () => {
     setLaunchWarningOpen(false);

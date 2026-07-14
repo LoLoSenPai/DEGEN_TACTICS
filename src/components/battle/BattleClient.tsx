@@ -26,6 +26,7 @@ import {
   getMissionDefinition,
   getAttackableTargets,
   getMovementPath,
+  getPlayerMovementPresentationDuration,
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
@@ -40,6 +41,12 @@ import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/Bat
 import { CombatActionFx } from "@/components/battle/CombatActionFx";
 import { EnemyIntentPath } from "@/components/battle/EnemyIntentPath";
 import { PlayerMovePath } from "@/components/battle/PlayerMovePath";
+import {
+  PLAYER_SPRITE_SHEETS,
+  playerSpriteSheetsAreReady,
+  preloadPlayerSpriteSheets,
+  type PlayerBattleSpriteMotion,
+} from "@/components/battle/playerSpriteSheets";
 import {
   initialTutorialStep,
   tutorialAction,
@@ -69,8 +76,6 @@ const SPRITE_ASSETS = {
 } as const;
 
 type SpriteKind = keyof typeof SPRITE_ASSETS;
-
-type PlayerBattleSpriteMotion = "idle" | "walk" | "attack" | "ability" | "hurt" | "death";
 
 type EnemyBattleSpriteMotion =
   | "idle"
@@ -297,6 +302,7 @@ function enemyBattleSpriteState(
 
 function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerUnit["role"]; state: BattleSpriteState<PlayerBattleSpriteMotion> }) {
   const frames = state.motion === "death" ? 12 : 8;
+  const spriteSheet = PLAYER_SPRITE_SHEETS[role][state.motion];
   return (
     <span
       className={clsx("sprite-art", `sprite-${role}`, "board-sprite", "player-spritecook", `role-${role}`, `is-${state.motion}`)}
@@ -306,7 +312,12 @@ function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerU
       data-sprite-effect-id={state.effectId}
       data-sprite-frames={frames}
     >
-      <span key={`${state.motion}-${state.effectId}`} className="player-spritecook-frames" aria-hidden="true" />
+      <span
+        key={`${state.motion}-${state.effectId}`}
+        className="player-spritecook-frames"
+        style={{ backgroundImage: `url("${spriteSheet}")` }}
+        aria-hidden="true"
+      />
       <span className="sr-only">{name}</span>
     </span>
   );
@@ -708,10 +719,12 @@ function Board({
               { transform: `translate(${previous.left - rect.left}px, ${previous.top - rect.top}px) scale(.96)` },
               { transform: "translate(0, 0) scale(1)" },
             ];
-        const duration = hasCompletePath ? Math.max(280, (pathRects.length - 1) * 180) : 230;
+        const duration = hasCompletePath
+          ? getPlayerMovementPresentationDuration(pathRects.length)
+          : getPlayerMovementPresentationDuration(2);
         element.animate(keyframes, {
           duration,
-          easing: movement?.kind === "push" ? "cubic-bezier(.12,.82,.18,1)" : "cubic-bezier(.16,1,.3,1)",
+          easing: movement?.kind === "push" ? "cubic-bezier(.12,.82,.18,1)" : "cubic-bezier(.4,0,.2,1)",
         });
       }
     });
@@ -1012,6 +1025,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [movePreview, setMovePreview] = useState<Position | null>(null);
   const [introVisible, setIntroVisible] = useState(true);
+  const [playerSpritesReady, setPlayerSpritesReady] = useState(playerSpriteSheetsAreReady);
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
   const [endTurnConfirmationOpen, setEndTurnConfirmationOpen] = useState(false);
   const missionId = game?.missionId;
@@ -1020,7 +1034,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const remainingUnits = useMemo(() => game?.units.filter((unit) => unit.hp > 0 && !unit.hasActed) ?? [], [game]);
-  const controlsLocked = isResolving || isAnimating || (introVisible && !isTrainingMission) || endTurnConfirmationOpen;
+  const controlsLocked = !playerSpritesReady || isResolving || isAnimating || (introVisible && !isTrainingMission) || endTurnConfirmationOpen;
   const moves = useMemo(() => game && selected && actionMode === "move" ? getValidMoves(game, selected.id) : [], [actionMode, game, selected]);
   const attackTargets = useMemo(() => {
     if (!game || !selected) return [];
@@ -1037,6 +1051,16 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   useEffect(() => {
     if (actionMode !== "move" || controlsLocked || !selected) setMovePreview(null);
   }, [actionMode, controlsLocked, selected]);
+
+  useEffect(() => {
+    let mounted = true;
+    void preloadPlayerSpriteSheets().then(() => {
+      if (mounted) setPlayerSpritesReady(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hydrated || initialized.current) return;
@@ -1070,10 +1094,10 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   }, [hydrated, introDuration, missionId]);
 
   useEffect(() => {
-    if (!hydrated || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
+    if (!hydrated || !playerSpritesReady || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
     tutorialStarted.current = game.missionId;
     setTutorialStep(initialTutorialStep(game.missionId));
-  }, [game, hydrated, introVisible]);
+  }, [game, hydrated, introVisible, playerSpritesReady]);
 
   useEffect(() => {
     if (!game || !tutorialStep) return;
@@ -1172,7 +1196,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (process.env.NODE_ENV === "production" || !game) return;
     window.render_game_to_text = () => JSON.stringify({
       coordinateSystem: "A1 is top-left. Columns A-G increase right; rows 1-7 increase down.",
-      screen: introVisible && !isTrainingMission ? "mission-intro" : endTurnConfirmationOpen ? "end-turn-confirmation" : "battle",
+      screen: !playerSpritesReady ? "loading-squad" : introVisible && !isTrainingMission ? "mission-intro" : endTurnConfirmationOpen ? "end-turn-confirmation" : "battle",
       missionId: game.missionId,
       phase: game.phase,
       turn: game.turn,
@@ -1181,6 +1205,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       actionMode,
       resolving: isResolving,
       animating: isAnimating,
+      playerSpriteSheetsReady: playerSpritesReady,
       combatPlayback: combatCue ? {
         index: playbackIndex,
         stage: combatCue.stage,
@@ -1283,7 +1308,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
@@ -1449,7 +1474,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   return (
     <div className="game-battle-route">
       <MobileNotice />
-      <main className={clsx("game-battle-stage", tutorialStep && "has-tutorial")}>
+      <main className={clsx("game-battle-stage", tutorialStep && "has-tutorial")} data-player-sprites-ready={playerSpritesReady}>
         {!game ? <div className="game-loading"><Hourglass weight="fill" /> Loading battle…</div> : (
           <>
             <GameHud game={game} />
@@ -1479,6 +1504,11 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
           </>
         )}
         {introVisible && game && !isTrainingMissionId(game.missionId) ? <MissionIntro game={game} /> : null}
+        {game && !playerSpritesReady && (!introVisible || isTrainingMission) ? (
+          <div className="game-sprite-loading" role="status" aria-live="polite">
+            <Hourglass weight="fill" /> Preparing squad animations
+          </div>
+        ) : null}
         {turnBanner && !introVisible && (!tutorialStep || ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep)) ? (
           <div className={clsx("game-turn-banner", tutorialStep && "is-tutorial-watch")} role="status">{turnBanner}</div>
         ) : null}

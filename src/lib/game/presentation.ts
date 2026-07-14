@@ -40,6 +40,11 @@ export interface CombatPlaybackBeat {
   }>[];
 }
 
+export const getPlayerMovementPresentationDuration = (pathLength: number): number => {
+  const steps = Math.max(1, pathLength - 1);
+  return 400 + Math.max(0, steps - 1) * 220;
+};
+
 const copyEnemyFromFinalState = (
   state: GameState,
   finalState: GameState,
