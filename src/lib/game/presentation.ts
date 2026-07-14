@@ -45,6 +45,11 @@ export const getPlayerMovementPresentationDuration = (pathLength: number): numbe
   return 400 + Math.max(0, steps - 1) * 220;
 };
 
+export const getReducedPlayerMovementPresentationDuration = (pathLength: number): number => {
+  const steps = Math.max(1, pathLength - 1);
+  return 280 + Math.max(0, steps - 1) * 150;
+};
+
 const copyEnemyFromFinalState = (
   state: GameState,
   finalState: GameState,

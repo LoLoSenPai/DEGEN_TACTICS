@@ -2471,9 +2471,10 @@
   }
 
   .game-tile,
-  .game-piece .board-sprite,
+  .game-piece.ally-piece .player-spritecook.board-sprite,
+  .game-piece.vault-piece .board-sprite,
+  .game-piece.object-piece .board-sprite,
   .game-piece.is-active .piece-base,
-  .game-piece.is-active .board-sprite,
   .game-tile.is-danger,
   .game-damage-popup,
   .game-board-frame.is-shaking,
@@ -2485,14 +2486,13 @@
   .game-ko-popup,
   .game-heal-popup,
   .combat-callout,
-  .game-piece.is-attacking .board-sprite,
-  .game-piece.is-attacking .piece-base,
-  .game-piece.is-hit .board-sprite,
-  .game-piece.is-healing .board-sprite,
-  .game-piece.is-dying .board-sprite,
+  .game-piece.ally-piece.is-attacking .player-spritecook.board-sprite,
+  .game-piece.ally-piece.is-attacking .piece-base,
+  .game-piece.ally-piece.is-hit .player-spritecook.board-sprite,
+  .game-piece.vault-piece.is-hit .board-sprite,
+  .game-piece.ally-piece.is-dying .player-spritecook.board-sprite,
   .game-piece.is-dying .piece-base,
-  .game-piece.is-dying .piece-health,
-  .enemy-battle-sprite {
+  .game-piece.is-dying .piece-health {
     animation: none !important;
   }
 
@@ -2517,20 +2517,6 @@
 
   .enemy-motion-accent {
     display: none;
-  }
-
-  .player-spritecook-frames {
-    animation: none !important;
-  }
-
-  .player-spritecook.is-attack .player-spritecook-frames,
-  .player-spritecook.is-ability .player-spritecook-frames,
-  .player-spritecook.is-hurt .player-spritecook-frames {
-    background-position: 57.1429% 0;
-  }
-
-  .player-spritecook.is-death .player-spritecook-frames {
-    background-position: 100% 0;
   }
 
   .game-combat-vfx {

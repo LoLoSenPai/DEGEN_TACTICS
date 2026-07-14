@@ -27,6 +27,7 @@ import {
   getAttackableTargets,
   getMovementPath,
   getPlayerMovementPresentationDuration,
+  getReducedPlayerMovementPresentationDuration,
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
@@ -698,8 +699,7 @@ function Board({
       const rect = element.getBoundingClientRect();
       nextRects.set(id, rect);
       const previous = previousRects.current.get(id);
-      if (reduceMotion) element.getAnimations().forEach((animation) => animation.cancel());
-      if (!reduceMotion && previous && (previous.left !== rect.left || previous.top !== rect.top)) {
+      if (previous && (previous.left !== rect.left || previous.top !== rect.top)) {
         const movement = effects.find((effect) =>
           (effect.kind === "move" && effect.sourceId === id)
           || (effect.kind === "push" && effect.targetId === id),
@@ -712,19 +712,20 @@ function Board({
         const hasCompletePath = pathRects && pathRects.length > 1 && pathRects.every(Boolean);
         const keyframes = hasCompletePath
           ? pathRects.map((pathRect, index) => ({
-              transform: `translate(${pathRect!.left - rect.left}px, ${pathRect!.top - rect.top}px) scale(${index === 0 ? ".96" : "1"})`,
+              transform: `translate(${pathRect!.left - rect.left}px, ${pathRect!.top - rect.top}px) scale(${reduceMotion ? "1" : index === 0 ? ".96" : "1"})`,
               offset: index / (pathRects.length - 1),
             }))
           : [
-              { transform: `translate(${previous.left - rect.left}px, ${previous.top - rect.top}px) scale(.96)` },
+              { transform: `translate(${previous.left - rect.left}px, ${previous.top - rect.top}px) scale(${reduceMotion ? "1" : ".96"})` },
               { transform: "translate(0, 0) scale(1)" },
             ];
-        const duration = hasCompletePath
-          ? getPlayerMovementPresentationDuration(pathRects.length)
-          : getPlayerMovementPresentationDuration(2);
+        const pathLength = hasCompletePath ? pathRects.length : 2;
+        const duration = reduceMotion
+          ? getReducedPlayerMovementPresentationDuration(pathLength)
+          : getPlayerMovementPresentationDuration(pathLength);
         element.animate(keyframes, {
           duration,
-          easing: movement?.kind === "push" ? "cubic-bezier(.12,.82,.18,1)" : "cubic-bezier(.4,0,.2,1)",
+          easing: reduceMotion ? "linear" : movement?.kind === "push" ? "cubic-bezier(.12,.82,.18,1)" : "cubic-bezier(.4,0,.2,1)",
         });
       }
     });
@@ -1206,6 +1207,10 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       resolving: isResolving,
       animating: isAnimating,
       playerSpriteSheetsReady: playerSpritesReady,
+      motionPreference: {
+        systemReduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        semanticGameplayAnimations: true,
+      },
       combatPlayback: combatCue ? {
         index: playbackIndex,
         stage: combatCue.stage,

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { calculateEnemyPlan, createInitialGameState, pushTarget, resolveEnemyTurn } from "./engine";
 import { TRAINING_BASICS, TRAINING_MOMENTUM, TRAINING_SQUAD } from "./mission";
-import { compileEnemyPlayback, compilePushPlayback, getPlayerMovementPresentationDuration } from "./presentation";
+import {
+  compileEnemyPlayback,
+  compilePushPlayback,
+  getPlayerMovementPresentationDuration,
+  getReducedPlayerMovementPresentationDuration,
+} from "./presentation";
 
 describe("player movement presentation", () => {
   it("keeps a one-tile move readable and adds time for every extra step", () => {
@@ -9,6 +14,8 @@ describe("player movement presentation", () => {
     expect(getPlayerMovementPresentationDuration(2)).toBe(400);
     expect(getPlayerMovementPresentationDuration(3)).toBe(620);
     expect(getPlayerMovementPresentationDuration(4)).toBe(840);
+    expect(getReducedPlayerMovementPresentationDuration(2)).toBe(280);
+    expect(getReducedPlayerMovementPresentationDuration(3)).toBe(430);
   });
 });
 
