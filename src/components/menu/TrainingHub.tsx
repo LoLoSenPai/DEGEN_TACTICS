@@ -29,13 +29,13 @@ const CHAPTER_DETAILS = {
     skills: ["Move then act", "Exact intents", "Enemy attacks"],
   },
   "training-squad": {
-    label: "Squad Tactics",
+    label: "Squad Turns",
     duration: "3 min",
     sprite: "/assets/sprites/sniper.png",
     skills: ["Hero order", "Shield Wall", "Deadeye & sight"],
   },
   "training-momentum": {
-    label: "Board Control",
+    label: "Push Control",
     duration: "5 min",
     sprite: "/assets/sprites/pusher.png",
     skills: ["Push objects", "Collision damage", "Interrupt the Whale"],
@@ -137,10 +137,10 @@ export function TrainingHub() {
         <footer className="training-footer">
           <p>
             <strong>Ready for the real fight?</strong>
-            You can leave training at any time. Unfinished chapters stay available here.
+            You can leave training at any time. An unfinished chapter restarts from its first step when you return.
           </p>
           <Link href="/?launch=mission" className="training-mission-link">
-            Play mission
+            {hydrated && completed < 3 ? "Skip to mission" : "Play mission"}
             <Play weight="fill" aria-hidden="true" />
           </Link>
         </footer>

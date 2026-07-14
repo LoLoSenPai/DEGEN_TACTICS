@@ -143,3 +143,25 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Semantic browser QA exercised every idle/walk/attack/ability/hurt/death state through real game commands, including the Pusher's two-segment bent route and all three deterministic deaths. Frame progression, correct sheet selection, 12-frame KO metadata, reduced motion, 1024×768 registration and console logs all pass.
 - The final visual pass reduced the legacy death accent and moved the tile-level KO label above the body, then lets the 12-frame fall finish early enough to hold the final pose before removal.
 - Final gates passed: ESLint with zero warnings, strict TypeScript, all 52 Vitest cases, `git diff --check`, and the optimized Next.js 15 build. The full three-chapter tutorial and a fresh bundled web-game client pass both completed with empty console-error artifacts after a clean dev-server restart.
+
+## 2026-07-14 — Enemy motion and combat-readability pass
+
+- SpriteCook preflight found the configured OAuth refresh token invalid after the Codex crash (`invalid_grant`). No generation call was made and no credits were spent; the recorded balance therefore remains 662 until the connector is reauthenticated and checked again.
+- Added explicit enemy presentation states for idle, exact-path walk, attack, drain/heal, Whale charge, pushed/staggered, hurt, spawn and death. The current authored pixel pieces now use restrained role-specific procedural motion while the renderer is ready to receive future SpriteCook sheets without changing combat rules.
+- Enemy movement beats now carry the engine-authored path into the existing FLIP renderer and spend 180 ms per traversed tile, so corners follow their exact preview instead of sliding diagonally to the final destination.
+- Pushed enemies and the Data Block now reuse their event `from`/`to` coordinates for smooth displacement, with a separate settle reaction for the block.
+- Extended Rugger, Drainer and Whale windups to readable 520/600/720 ms beats and enemy KO holds to 760 ms. Reduced-motion mode keeps distinct static hurt, charge and death poses.
+- Exposed `enemyAnimations` plus movement `from`/`to` through `window.render_game_to_text()` for browser assertions.
+- Focused strict typecheck, ESLint and presentation/movement tests pass after this first motion integration.
+
+## 2026-07-14 — Combat choreography and training completion
+
+- Replaced immediate push state swaps with an event-derived playback queue: one Pusher windup, exact target displacement, collision impact, readable KO hold, then charge-cancel/stagger status. The Data Block now distinguishes a fully jammed push from a partial Batter Up move that stops at an obstacle.
+- Added typed combat statuses and callouts for breach warnings, locked cones, charge breaks, staggered activations, Drainer healing, blocked pushes and Vault breaches. Fatal Whale area hits share one simultaneous death beat, and Vault destruction is no longer mislabeled as an enemy KO.
+- Preserved the engine-authored enemy paths through presentation. Ruggers, Drainers and the Whale now expose explicit idle, walk, attack, hurt, heal, lock, charge, stagger, spawn and death states; the authored pixel pieces use role-specific procedural motion until SpriteCook can be reauthenticated.
+- Reworked training into honest four-phase chapter progress, clearer novice copy and direct chapter completion. Training starts immediately without the generic mission intro, the opening turn banner no longer covers the coach, Shield Wall explains its exact two-point one-hit protection, and leaving early warns that the chapter restarts.
+- Added session cancellation on battle exit so pending timers cannot write a result or best score after an abandoned enemy phase. Reduced-motion mode now cancels both CSS animation and programmatic WAAPI movement.
+- Extended deterministic coverage to 60 tests, including exact movement duration, push movement/collision ordering, partial object pushes, grouped Whale fatalities, Vault breach classification and the Whale losing its staggered activation.
+- Replayed all three training chapters, activation warnings, 1024px readability, reduced motion, Drainer siphon/heal, Whale slam, deliberate defeat and a perfect canonical victory through semantic browser interactions with zero captured console errors. The verified win ends at Vault 10/10, all three heroes alive, 3 kills, 1,475 points and rank S.
+- Final gates pass: ESLint with zero warnings, strict TypeScript, all 60 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build of all routes.
+- SpriteCook OAuth remains expired after the Codex crash. No generation call was made and no credits were spent in this pass; future enemy sheets should be generated as three `/characters` batches after reauthentication.

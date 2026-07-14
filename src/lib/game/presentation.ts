@@ -10,6 +10,16 @@ export type CombatPlaybackStage =
   | "spawn"
   | "status";
 
+export type CombatPlaybackStatusKind =
+  | "breach-warning"
+  | "cone-locked"
+  | "charge-cancelled"
+  | "staggered"
+  | "drain-heal"
+  | "push-blocked"
+  | "push-stopped"
+  | "vault-breached";
+
 export interface CombatPlaybackBeat {
   readonly stage: CombatPlaybackStage;
   readonly state: GameState;
@@ -20,6 +30,7 @@ export interface CombatPlaybackBeat {
   readonly amount?: number;
   readonly absorbed?: number;
   readonly fatal?: boolean;
+  readonly statusKind?: CombatPlaybackStatusKind;
   readonly area?: readonly Position[];
   readonly hits?: readonly Readonly<{
     targetId: string;
@@ -37,6 +48,57 @@ const copyEnemyFromFinalState = (
   if (state.enemies.some((enemy) => enemy.id === enemyId)) return state;
   const spawned = finalState.enemies.find((enemy) => enemy.id === enemyId);
   return spawned ? { ...state, enemies: [...state.enemies, spawned] } : state;
+};
+
+const movePushedTarget = (
+  state: GameState,
+  event: Extract<GameEvent, { type: "target-pushed" }>,
+): GameState => event.targetKind === "enemy"
+  ? {
+      ...state,
+      enemies: state.enemies.map((enemy) =>
+        enemy.id === event.targetId ? { ...enemy, position: event.to } : enemy,
+      ),
+    }
+  : {
+      ...state,
+      objects: state.objects.map((object) =>
+        object.id === event.targetId ? { ...object, position: event.to } : object,
+      ),
+    };
+
+const applyCollisionEvent = (
+  state: GameState,
+  event: Extract<GameEvent, { type: "collision" }>,
+): GameState => event.targetKind === "enemy"
+  ? {
+      ...state,
+      enemies: state.enemies.map((enemy) =>
+        enemy.id === event.targetId ? { ...enemy, hp: Math.max(0, enemy.hp - event.damage) } : enemy,
+      ),
+    }
+  : state;
+
+const copyWhaleStatusFromFinalState = (
+  state: GameState,
+  finalState: GameState,
+  enemyId: string,
+): GameState => {
+  const finalEnemy = finalState.enemies.find((enemy) => enemy.id === enemyId);
+  if (!finalEnemy) return state;
+  return {
+    ...state,
+    enemies: state.enemies.map((enemy) =>
+      enemy.id === enemyId
+        ? {
+            ...enemy,
+            whaleState: finalEnemy.whaleState,
+            lockedArea: finalEnemy.lockedArea,
+            facing: finalEnemy.facing,
+          }
+        : enemy,
+    ),
+  };
 };
 
 export const getCombatantHp = (state: GameState, id: string): number | null => {
@@ -119,7 +181,14 @@ export const compileEnemyPlayback = (
     const event = events[eventIndex];
     if (event.type === "enemy-moved") {
       visualState = applyPresentationEvent(visualState, event, finalState);
-      beats.push({ stage: "move", state: visualState, event, duration: 300, sourceId: event.enemyId });
+      const movementSteps = Math.max(1, event.path.length);
+      beats.push({
+        stage: "move",
+        state: visualState,
+        event,
+        duration: Math.max(320, movementSteps * 180),
+        sourceId: event.enemyId,
+      });
       continue;
     }
 
@@ -148,7 +217,7 @@ export const compileEnemyPlayback = (
           stage: "attack",
           state: beforeSlam,
           event,
-          duration: 440,
+          duration: 720,
           sourceId: event.sourceId,
           targetId: hits[0]?.targetId,
           amount: event.amount,
@@ -166,20 +235,22 @@ export const compileEnemyPlayback = (
           area,
           hits,
         });
-        for (const hit of hits.filter((candidate) => candidate.fatal)) {
-          const playerDeath = visualState.units.some((unit) => unit.id === hit.targetId);
+        const fatalHits = hits.filter((candidate) => candidate.fatal);
+        if (fatalHits.length > 0) {
+          const vaultBreached = fatalHits.some((hit) => hit.targetId === visualState.vault.id);
           beats.push({
             stage: "death",
             state: visualState,
             event,
-            duration: playerDeath ? 760 : 560,
+            duration: vaultBreached ? 900 : 760,
             sourceId: event.sourceId,
-            targetId: hit.targetId,
-            amount: hit.amount,
-            absorbed: hit.absorbed,
+            targetId: fatalHits[0].targetId,
+            amount: fatalHits[0].amount,
+            absorbed: fatalHits[0].absorbed,
             fatal: true,
             area,
-            hits,
+            hits: fatalHits,
+            statusKind: vaultBreached ? "vault-breached" : undefined,
           });
         }
         eventIndex = scanIndex - 1;
@@ -192,7 +263,7 @@ export const compileEnemyPlayback = (
         stage: "attack",
         state: visualState,
         event,
-        duration: sourceEnemy?.kind === "drainer" ? 330 : 260,
+        duration: sourceEnemy?.kind === "drainer" ? 600 : 520,
         sourceId: event.sourceId,
         targetId: event.targetId,
         amount: event.amount,
@@ -213,16 +284,18 @@ export const compileEnemyPlayback = (
       });
       if (fatal) {
         const playerDeath = visualState.units.some((unit) => unit.id === event.targetId);
+        const vaultBreached = event.targetId === visualState.vault.id;
         beats.push({
           stage: "death",
           state: visualState,
           event,
-          duration: playerDeath ? 760 : 560,
+          duration: vaultBreached ? 900 : playerDeath ? 760 : 560,
           sourceId: event.sourceId,
           targetId: event.targetId,
           amount: event.amount,
           absorbed: event.absorbed,
           fatal: true,
+          statusKind: vaultBreached ? "vault-breached" : undefined,
         });
       }
       continue;
@@ -230,13 +303,27 @@ export const compileEnemyPlayback = (
 
     if (event.type === "enemy-healed") {
       visualState = applyPresentationEvent(visualState, event, finalState);
-      beats.push({ stage: "status", state: visualState, event, duration: 360, sourceId: event.enemyId, amount: event.amount });
+      beats.push({ stage: "status", state: visualState, event, duration: 520, sourceId: event.enemyId, amount: event.amount, statusKind: "drain-heal" });
       continue;
     }
 
     if (event.type === "enemy-spawned") {
       visualState = applyPresentationEvent(visualState, event, finalState);
       beats.push({ stage: "spawn", state: visualState, event, duration: 440, sourceId: event.enemyId });
+      continue;
+    }
+
+    if (event.type === "whale-staggered") {
+      beats.push({
+        stage: "status",
+        state: visualState,
+        event,
+        duration: 820,
+        sourceId: event.enemyId,
+        targetId: event.enemyId,
+        statusKind: "staggered",
+      });
+      visualState = copyWhaleStatusFromFinalState(visualState, finalState, event.enemyId);
       continue;
     }
 
@@ -249,8 +336,103 @@ export const compileEnemyPlayback = (
         duration: 360,
         sourceId: event.type === "whale-cone-locked" ? event.enemyId : undefined,
         area: event.type === "whale-cone-locked" ? event.area : undefined,
+        statusKind: event.type === "whale-cone-locked" ? "cone-locked" : "breach-warning",
       });
     }
+  }
+
+  return beats;
+};
+
+export const compilePushPlayback = (
+  initialState: GameState,
+  finalState: GameState,
+  events: readonly GameEvent[],
+): readonly CombatPlaybackBeat[] => {
+  const pushed = events.find((event): event is Extract<GameEvent, { type: "target-pushed" }> => event.type === "target-pushed");
+  const collision = events.find((event): event is Extract<GameEvent, { type: "collision" }> => event.type === "collision");
+  const cancelled = events.find((event): event is Extract<GameEvent, { type: "whale-charge-cancelled" }> => event.type === "whale-charge-cancelled");
+  const staggered = events.find((event): event is Extract<GameEvent, { type: "whale-staggered" }> => event.type === "whale-staggered");
+  const actionEvent = pushed ?? collision;
+  if (!actionEvent) return [];
+
+  const beats: CombatPlaybackBeat[] = [];
+  let visualState = initialState;
+  const sourceId = actionEvent.sourceId;
+  const targetId = actionEvent.targetId;
+  const ability = actionEvent.ability;
+
+  beats.push({
+    stage: "push",
+    state: visualState,
+    event: actionEvent,
+    duration: ability === "batter-up" ? 580 : 460,
+    sourceId,
+    targetId,
+  });
+
+  if (pushed) {
+    visualState = movePushedTarget(visualState, pushed);
+    beats.push({
+      stage: "move",
+      state: visualState,
+      event: pushed,
+      duration: Math.max(300, pushed.distance * 180),
+      sourceId,
+      targetId,
+    });
+  }
+
+  if (collision && collision.damage > 0) {
+    const targetHp = initialState.enemies.find((enemy) => enemy.id === targetId)?.hp ?? null;
+    const fatal = targetHp !== null && targetHp > 0 && collision.damage >= targetHp;
+    visualState = applyCollisionEvent(visualState, collision);
+    beats.push({
+      stage: "impact",
+      state: visualState,
+      event: collision,
+      duration: fatal ? 360 : 460,
+      sourceId,
+      targetId,
+      amount: collision.damage,
+      fatal,
+    });
+    if (fatal) {
+      beats.push({
+        stage: "death",
+        state: visualState,
+        event: collision,
+        duration: 760,
+        sourceId,
+        targetId,
+        amount: collision.damage,
+        fatal: true,
+      });
+    }
+  } else if (collision) {
+    beats.push({
+      stage: "status",
+      state: visualState,
+      event: collision,
+      duration: 360,
+      sourceId,
+      targetId,
+      statusKind: pushed ? "push-stopped" : "push-blocked",
+    });
+  }
+
+  if (cancelled || staggered) {
+    const statusEvent = cancelled ?? staggered!;
+    visualState = copyWhaleStatusFromFinalState(visualState, finalState, statusEvent.enemyId);
+    beats.push({
+      stage: "status",
+      state: visualState,
+      event: statusEvent,
+      duration: 560,
+      sourceId,
+      targetId: statusEvent.enemyId,
+      statusKind: cancelled ? "charge-cancelled" : "staggered",
+    });
   }
 
   return beats;

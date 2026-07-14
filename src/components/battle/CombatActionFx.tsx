@@ -36,6 +36,7 @@ const traceVariant = (variant: CombatCue["variant"]) => {
 export function CombatActionFx({ game, cue }: { game: GameState; cue: CombatCue | null }) {
   const rawId = useId().replaceAll(":", "");
   if (!cue || !cue.variant || !["attack", "push", "status"].includes(cue.stage)) return null;
+  if (cue.stage === "status" && cue.statusKind !== "drain-heal") return null;
 
   const source = cue.stage === "push" ? cue.from ?? positionFor(game, cue.sourceId) : positionFor(game, cue.sourceId);
   const target = cue.stage === "push" ? cue.to ?? positionFor(game, cue.targetId) : positionFor(game, cue.targetId);

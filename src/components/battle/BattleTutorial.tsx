@@ -87,7 +87,6 @@ const BASICS_STEPS = [
   "basics-end-turn",
   "basics-watch-enemy",
   "basics-hit-explained",
-  "basics-complete",
 ] as const;
 
 const SQUAD_STEPS = [
@@ -101,7 +100,6 @@ const SQUAD_STEPS = [
   "squad-end-turn",
   "squad-watch-shield",
   "squad-shield-explained",
-  "squad-complete",
 ] as const;
 
 const PUSH_STEPS = [
@@ -138,21 +136,21 @@ const LESSONS: readonly LessonMeta[] = [
 const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "basics-intro": {
     title: "Learn the turn loop",
-    prompt: "Move once. Then take one action.",
-    body: "Solid red shows exact movement. A dashed link shows the exact attack target and damage.",
+    prompt: "Move once—or stay put—then take one action.",
+    body: "Red arrows show where enemies move. Dashed lines show who they hit and for how much.",
     action: "Start lesson",
     icon: "shield",
   },
   "basics-select-guardian": {
     title: "Choose a hero",
-    prompt: "Select Guardian at D4.",
+    prompt: "Select the highlighted Guardian.",
     body: "A hero activates once each turn. Start with the shield-bearing Guardian.",
     awaiting: "Click the highlighted hero",
     icon: "shield",
   },
   "basics-move-guardian": {
     title: "Move first",
-    prompt: "Move Guardian to D2.",
+    prompt: "Move Guardian to the highlighted tile.",
     body: "Teal tiles are legal moves. Movement is orthogonal and does not end the activation.",
     awaiting: "Click the highlighted tile",
     icon: "move",
@@ -166,7 +164,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   },
   "basics-attack-rugger": {
     title: "Choose a target",
-    prompt: "Attack the Rugger at D1.",
+    prompt: "Attack the highlighted Rugger.",
     body: "Cyan marks a target in range. Attacking completes Guardian’s activation.",
     awaiting: "Click the highlighted enemy",
     icon: "target",
@@ -174,7 +172,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "basics-read-intent": {
     title: "Read the intent",
     prompt: "Your move rewrote the enemy plan.",
-    body: "The number is execution order. The dashed link now targets Guardian for exactly 3 damage.",
+    body: "The badge is execution order. The red route ends in a dashed strike on Guardian for exactly 3 damage.",
     action: "I understand",
     icon: "intent",
   },
@@ -196,7 +194,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     title: "You were attacked",
     prompt: "Rugger moved, struck Guardian, and removed 3 HP.",
     body: "The red impact and −3 HP show the result. At 0 HP a hero is KO and leaves the board. Lose all three heroes and the mission fails.",
-    action: "Got it",
+    action: "Finish chapter",
     icon: "warning",
   },
   "basics-complete": {
@@ -230,7 +228,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "squad-shield-wall": {
     title: "Raise Shield Wall",
     prompt: "Use Shield Wall now.",
-    body: "This one-use ability gives Guardian and adjacent allies one shield for the next enemy phase.",
+    body: "This one-use ability gives Guardian and adjacent allies a 2-point shield that absorbs the next hit this enemy phase.",
     awaiting: "Press 3 or click Shield Wall",
     icon: "shield",
   },
@@ -273,7 +271,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     title: "The shield broke",
     prompt: "2 damage was blocked. Only 1 reached Guardian.",
     body: "A shield absorbs one hit, then expires. Cyan BLOCK is armor absorbed; the red number is HP actually lost.",
-    action: "Got it",
+    action: "Finish chapter",
     icon: "shield",
   },
   "squad-complete": {
@@ -327,14 +325,14 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   },
   "push-breach-warning": {
     title: "Incoming breach",
-    prompt: "Inspect the marked G4 tile.",
+    prompt: "Inspect the highlighted breach tile.",
     body: "It is impassable now. A Whale will arrive there at the start of Turn 3.",
     action: "Continue",
     icon: "warning",
   },
   "push-select-collision": {
     title: "Choose Pusher again",
-    prompt: "Select Pusher at E6.",
+    prompt: "Select the highlighted Pusher.",
     body: "Now set up a blocked push to turn the terrain into a weapon.",
     awaiting: "Click the highlighted hero",
     icon: "push",
@@ -369,14 +367,14 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   },
   "push-whale-arrives": {
     title: "Whale breach",
-    prompt: "Find the Whale at G4.",
+    prompt: "Find the Whale on the breach tile.",
     body: "It moves one tile, then locks a cardinal cone for its next activation.",
     action: "Prepare",
     icon: "warning",
   },
   "push-select-for-whale": {
     title: "Hold your ground",
-    prompt: "Select Pusher at E5.",
+    prompt: "Select the highlighted Pusher.",
     body: "Sometimes the best activation is to keep a useful position.",
     awaiting: "Click the highlighted hero",
     icon: "push",
@@ -457,10 +455,8 @@ const OBSERVE_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
 const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
   "basics-intro",
   "basics-hit-explained",
-  "basics-complete",
   "squad-intro",
   "squad-shield-explained",
-  "squad-complete",
   "push-intro",
   "push-breach-warning",
   "push-whale-arrives",
@@ -468,15 +464,39 @@ const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
 ]);
 
 function lessonProgress(step: Exclude<BattleTutorialStep, null>) {
-  if (step === "training-complete") return { label: "Chapter 3 / 3 · Push Control", current: 4, total: 4 };
+  if (step === "training-complete") return { label: "Chapter 3 / 3 · Push Control", current: 4, total: 4, phase: "Complete" };
   const lesson = LESSONS.find((candidate) => candidate.steps.includes(step));
-  if (!lesson) return { label: "Field training", current: 1, total: 1 };
+  if (!lesson) return { label: "Field training", current: 1, total: 1, phase: "Learn" };
+
+  const phases = step.startsWith("basics-")
+    ? [
+        { name: "Move", through: "basics-move-guardian" },
+        { name: "Attack", through: "basics-attack-rugger" },
+        { name: "Plan", through: "basics-end-turn" },
+        { name: "Resolve", through: "basics-hit-explained" },
+      ]
+    : step.startsWith("squad-")
+      ? [
+          { name: "Position", through: "squad-move-guardian" },
+          { name: "Shield", through: "squad-shield-wall" },
+          { name: "Deadeye", through: "squad-target-drainer" },
+          { name: "Resolve", through: "squad-shield-explained" },
+        ]
+      : [
+          { name: "Objects", through: "push-data-block" },
+          { name: "Collision", through: "push-collision" },
+          { name: "Charge", through: "push-locked-cone" },
+          { name: "Interrupt", through: "push-cancel-whale" },
+        ];
+
   const stepIndex = lesson.steps.indexOf(step);
-  const milestoneCount = 4;
+  const phaseIndex = phases.findIndex(({ through }) => stepIndex <= lesson.steps.indexOf(through as (typeof lesson.steps)[number]));
+  const current = phaseIndex < 0 ? phases.length : phaseIndex + 1;
   return {
     label: lesson.label,
-    current: Math.min(milestoneCount, Math.floor((stepIndex * milestoneCount) / lesson.steps.length) + 1),
-    total: milestoneCount,
+    current,
+    total: phases.length,
+    phase: phases[Math.max(0, current - 1)]?.name ?? phases.at(-1)?.name ?? "Learn",
   };
 }
 
@@ -593,9 +613,9 @@ export function BattleTutorial({
         aria-labelledby={titleId}
         aria-describedby={bodyId}
       >
-        <div className="tutorial-progress" aria-label={`${progress.label}, step ${progress.current} of ${progress.total}`}>
+        <div className="tutorial-progress" aria-label={`${progress.label}, phase ${progress.current} of ${progress.total}: ${progress.phase}`}>
           <span>{progress.label}</span>
-          <b>{String(progress.current).padStart(2, "0")} / {String(progress.total).padStart(2, "0")}</b>
+          <b>Phase {String(progress.current).padStart(2, "0")} / {String(progress.total).padStart(2, "0")} · {progress.phase}</b>
         </div>
         <header>
           <span className="tutorial-icon"><TutorialIcon kind={copy.icon} /></span>
@@ -604,7 +624,16 @@ export function BattleTutorial({
         <strong className="tutorial-prompt">{copy.prompt}</strong>
         <p id={bodyId}>{copy.body}</p>
         <footer>
-          <button type="button" className="tutorial-skip" onClick={onSkip}>Exit lesson</button>
+          {step !== "training-complete" ? (
+            <button
+              type="button"
+              className="tutorial-skip"
+              onClick={onSkip}
+              title="This chapter restarts if you leave before completing it."
+            >
+              Exit lesson
+            </button>
+          ) : <span />}
           {copy.action ? (
             <button type="button" className="tutorial-continue" onClick={onContinue} autoFocus={isCentered}>
               {copy.action}<ArrowRight weight="bold" />

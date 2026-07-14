@@ -70,12 +70,26 @@ const SPRITE_ASSETS = {
 
 type SpriteKind = keyof typeof SPRITE_ASSETS;
 
-type BattleSpriteMotion = "idle" | "walk" | "attack" | "ability" | "hurt" | "death";
+type PlayerBattleSpriteMotion = "idle" | "walk" | "attack" | "ability" | "hurt" | "death";
 
-type BattleSpriteState = {
-  motion: BattleSpriteMotion;
+type EnemyBattleSpriteMotion =
+  | "idle"
+  | "walk"
+  | "attack"
+  | "heal"
+  | "lock"
+  | "charge"
+  | "hurt"
+  | "stagger"
+  | "spawn"
+  | "death";
+
+type BattleSpriteState<Motion extends string> = {
+  motion: Motion;
   effectId: number;
 };
+
+let activeBattleClients = 0;
 
 const positionKey = ({ x, y }: Position) => `${x},${y}`;
 const samePosition = (left: Position, right: Position) => left.x === right.x && left.y === right.y;
@@ -121,17 +135,49 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
   } else if (cue.stage === "push") {
     kicker = cue.variant === "batter-up" ? "BATTER UP" : "SHOVE";
     message = `${source} pushes ${target}`;
-  } else if (cue.stage === "status" && cue.variant === "drain") {
-    kicker = "LIFE DRAIN";
-    message = `${source} recovers ${cue.amount ?? 1} HP`;
+  } else if (cue.stage === "status") {
+    if (cue.statusKind === "drain-heal") {
+      kicker = "LIFE DRAIN";
+      message = `${source} recovers ${cue.amount ?? 1} HP`;
+    } else if (cue.statusKind === "breach-warning") {
+      kicker = "BREACH ALERT";
+      message = "The marked tile is now impassable";
+    } else if (cue.statusKind === "cone-locked") {
+      kicker = "CONE LOCKED";
+      message = `${cue.area?.length ?? 0} exact tiles will take 4 damage next turn`;
+    } else if (cue.statusKind === "charge-cancelled") {
+      kicker = "CHARGE BROKEN";
+      message = `${target} loses the locked cone`;
+    } else if (cue.statusKind === "staggered") {
+      kicker = "STAGGERED";
+      message = `${target} loses this activation`;
+    } else if (cue.statusKind === "push-blocked") {
+      kicker = "JAMMED";
+      message = `${target} cannot be pushed`;
+    } else if (cue.statusKind === "push-stopped") {
+      kicker = "PUSH STOPPED";
+      message = `${target} moved, then hit an obstacle`;
+    } else {
+      kicker = "STATUS";
+      message = `${source} changes state`;
+    }
   } else if (cue.stage === "impact") {
     kicker = cue.absorbed ? "SHIELD HIT" : "IMPACT";
     message = cue.absorbed
       ? `${target} blocks ${cue.absorbed}${cue.amount ? ` · takes ${cue.amount}` : " · no HP lost"}`
       : `${target} takes ${cue.amount ?? 0} damage`;
   } else if (cue.stage === "death") {
-    kicker = game.units.some((unit) => unit.id === cue.targetId) ? "HERO KO" : "ENEMY DOWN";
-    message = `${target} is down`;
+    const fatalHits = cue.hits?.filter((hit) => hit.fatal) ?? [];
+    if (cue.statusKind === "vault-breached" || cue.targetId === game.vault.id) {
+      kicker = "VAULT BREACHED";
+      message = "Vault integrity reached zero";
+    } else if (fatalHits.length > 1) {
+      kicker = "MULTI KO";
+      message = `${fatalHits.length} squad targets are down`;
+    } else {
+      kicker = game.units.some((unit) => unit.id === cue.targetId) ? "HERO KO" : "ENEMY DOWN";
+      message = `${target} is down`;
+    }
   } else {
     kicker = source.toUpperCase();
     message = cue.variant === "deadeye"
@@ -148,7 +194,7 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
   }
 
   return (
-    <div key={cue.id} className={clsx("combat-callout", `is-${cue.stage}`, cue.variant && `variant-${cue.variant}`, cue.absorbed && "is-blocked", cue.fatal && "is-fatal")} role="status" aria-live="assertive">
+    <div key={cue.id} className={clsx("combat-callout", `is-${cue.stage}`, cue.variant && `variant-${cue.variant}`, cue.statusKind && `status-${cue.statusKind}`, cue.absorbed && "is-blocked", cue.fatal && "is-fatal")} role="status" aria-live="assertive">
       <small>{kicker}</small>
       <strong>{message}</strong>
     </div>
@@ -169,7 +215,7 @@ function battleSpriteState(
   cue: CombatCue | null,
   unitId: string,
   role: PlayerUnit["role"],
-): BattleSpriteState {
+): BattleSpriteState<PlayerBattleSpriteMotion> {
   const targetEffects = effects.filter((effect) => effect.targetId === unitId);
   const deathEffect = [...targetEffects].reverse().find((effect) => effect.kind === "death");
   if (deathEffect) return { motion: "death", effectId: deathEffect.id };
@@ -182,13 +228,12 @@ function battleSpriteState(
   const abilityEffect = [...effects].reverse().find((effect) =>
     effect.sourceId === unitId
       && (
-        (role === "guardian" && effect.kind === "shield")
-        || (role === "pusher" && (effect.kind === "push" || (effect.kind === "collision" && Boolean(effect.ability))))
+        role === "guardian" && effect.kind === "shield"
       ),
   );
   const abilityCue = cue?.sourceId === unitId && (
-    (role === "guardian" && cue.variant === "shield-wall")
-    || (role === "pusher" && (cue.variant === "shove" || cue.variant === "batter-up"))
+    (role === "guardian" && cue.stage === "shield" && cue.variant === "shield-wall")
+    || (role === "pusher" && cue.stage === "push" && (cue.variant === "shove" || cue.variant === "batter-up"))
   );
   if (abilityEffect || abilityCue) return { motion: "ability", effectId: abilityEffect?.id ?? cue?.id ?? 0 };
 
@@ -203,7 +248,54 @@ function battleSpriteState(
   return { motion: "idle", effectId: 0 };
 }
 
-function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerUnit["role"]; state: BattleSpriteState }) {
+function enemyBattleSpriteState(
+  effects: readonly BattleEffect[],
+  cue: CombatCue | null,
+  enemy: Enemy,
+): BattleSpriteState<EnemyBattleSpriteMotion> {
+  const targetEffects = effects.filter((effect) => effect.targetId === enemy.id);
+  const deathEffect = [...targetEffects].reverse().find((effect) => effect.kind === "death");
+  if (deathEffect || (cue?.stage === "death" && cue.targetId === enemy.id)) {
+    return { motion: "death", effectId: deathEffect?.id ?? cue?.id ?? 0 };
+  }
+
+  const hurtEffect = [...targetEffects].reverse().find((effect) =>
+    ["damage", "heavy", "collision"].includes(effect.kind) && (effect.amount ?? 0) > 0,
+  );
+  if (hurtEffect) return { motion: "hurt", effectId: hurtEffect.id };
+
+  const pushedEffect = [...targetEffects].reverse().find((effect) => effect.kind === "push");
+  if (pushedEffect) return { motion: "stagger", effectId: pushedEffect.id };
+
+  if (cue?.stage === "spawn" && cue.sourceId === enemy.id) {
+    return { motion: "spawn", effectId: cue.id };
+  }
+
+  const statusBelongsToEnemy = cue?.stage === "status" && (
+    cue.sourceId === enemy.id
+    || ((cue.statusKind === "charge-cancelled" || cue.statusKind === "staggered") && cue.targetId === enemy.id)
+  );
+  if (statusBelongsToEnemy) {
+    if (cue.statusKind === "drain-heal") return { motion: "heal", effectId: cue.id };
+    if (cue.statusKind === "cone-locked") return { motion: "lock", effectId: cue.id };
+    if (cue.statusKind === "charge-cancelled" || cue.statusKind === "staggered") return { motion: "stagger", effectId: cue.id };
+    return { motion: "idle", effectId: cue.id };
+  }
+
+  const attackEffect = [...effects].reverse().find((effect) => effect.kind === "attack" && effect.sourceId === enemy.id);
+  if (attackEffect || (cue?.stage === "attack" && cue.sourceId === enemy.id)) {
+    return { motion: "attack", effectId: attackEffect?.id ?? cue?.id ?? 0 };
+  }
+
+  const moveEffect = [...effects].reverse().find((effect) => effect.kind === "move" && effect.sourceId === enemy.id);
+  if (moveEffect) return { motion: "walk", effectId: moveEffect.id };
+
+  if (enemy.kind === "whale" && enemy.whaleState === "charging") return { motion: "charge", effectId: 0 };
+  if (enemy.kind === "whale" && enemy.whaleState === "staggered") return { motion: "stagger", effectId: 0 };
+  return { motion: "idle", effectId: 0 };
+}
+
+function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerUnit["role"]; state: BattleSpriteState<PlayerBattleSpriteMotion> }) {
   const frames = state.motion === "death" ? 12 : 8;
   return (
     <span
@@ -216,6 +308,22 @@ function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerU
     >
       <span key={`${state.motion}-${state.effectId}`} className="player-spritecook-frames" aria-hidden="true" />
       <span className="sr-only">{name}</span>
+    </span>
+  );
+}
+
+function EnemyBattleSprite({ enemy, state }: { enemy: Enemy; state: BattleSpriteState<EnemyBattleSpriteMotion> }) {
+  return (
+    <span
+      className={clsx("sprite-art", `sprite-${enemy.kind}`, "board-sprite", "enemy-battle-sprite", `kind-${enemy.kind}`, `is-${state.motion}`)}
+      data-sprite-source="authored-pixel-motion"
+      data-sprite-kind={enemy.kind}
+      data-sprite-motion={state.motion}
+      data-sprite-effect-id={state.effectId}
+    >
+      <Image src={SPRITE_ASSETS[enemy.kind]} alt="" fill sizes="150px" priority className="sprite-image enemy-battle-image" />
+      <span className="enemy-motion-accent" aria-hidden="true" />
+      <span className="sr-only">{enemy.name}</span>
     </span>
   );
 }
@@ -571,6 +679,7 @@ function Board({
   useLayoutEffect(() => {
     const root = boardRef.current;
     if (!root) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const nextRects = new Map<string, DOMRect>();
     root.querySelectorAll<HTMLElement>("[data-game-piece]").forEach((element) => {
       const id = element.dataset.gamePiece;
@@ -578,9 +687,15 @@ function Board({
       const rect = element.getBoundingClientRect();
       nextRects.set(id, rect);
       const previous = previousRects.current.get(id);
-      if (previous && (previous.left !== rect.left || previous.top !== rect.top)) {
-        const movement = effects.find((effect) => effect.kind === "move" && effect.sourceId === id);
-        const pathRects = movement?.path?.map((position) =>
+      if (reduceMotion) element.getAnimations().forEach((animation) => animation.cancel());
+      if (!reduceMotion && previous && (previous.left !== rect.left || previous.top !== rect.top)) {
+        const movement = effects.find((effect) =>
+          (effect.kind === "move" && effect.sourceId === id)
+          || (effect.kind === "push" && effect.targetId === id),
+        );
+        const movementPath = movement?.path
+          ?? (movement?.from && movement.to ? [movement.from, movement.to] : undefined);
+        const pathRects = movementPath?.map((position) =>
           root.querySelector<HTMLElement>(`[data-coordinate="${coordinate(position)}"]`)?.getBoundingClientRect(),
         );
         const hasCompletePath = pathRects && pathRects.length > 1 && pathRects.every(Boolean);
@@ -594,7 +709,10 @@ function Board({
               { transform: "translate(0, 0) scale(1)" },
             ];
         const duration = hasCompletePath ? Math.max(280, (pathRects.length - 1) * 180) : 230;
-        element.animate(keyframes, { duration, easing: "cubic-bezier(.16,1,.3,1)" });
+        element.animate(keyframes, {
+          duration,
+          easing: movement?.kind === "push" ? "cubic-bezier(.12,.82,.18,1)" : "cubic-bezier(.16,1,.3,1)",
+        });
       }
     });
     previousRects.current = nextRects;
@@ -637,9 +755,11 @@ function Board({
           const shieldEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "shield" || candidate.kind === "shield-hit");
           const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
           const healEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "heal");
+          const pushedEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "push");
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
           const playerAnimation = unit ? battleSpriteState(effects, combatCue, unit.id, unit.role) : null;
-          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
+          const enemyAnimation = enemy ? enemyBattleSpriteState(effects, combatCue, enemy) : null;
+          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", pushedEffect && "is-pushed", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
@@ -711,12 +831,12 @@ function Board({
               {enemy ? (
                 <span className={clsx("game-piece enemy-piece", `piece-${enemy.kind}`, enemy.kind === "whale" && "is-whale", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={enemy.id}>
                   <span className="piece-base" />
-                  <SpriteArt kind={enemy.kind} name={enemy.name} className="board-sprite" priority />
+                  {enemyAnimation ? <EnemyBattleSprite enemy={enemy} state={enemyAnimation} /> : null}
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%` }} /></span>
                   {order ? <span className="enemy-order">{order}</span> : null}
                 </span>
               ) : null}
-              {object ? <span className="game-piece object-piece" data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
+              {object ? <span className={clsx("game-piece object-piece", pieceCombatClass)} data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
               {damageEffect ? (
                 <span key={`impact-${damageEffect.id}`} className={clsx("game-combat-vfx", damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "is-heavy" : "is-normal")} aria-hidden="true">
                   <Image src={damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "/assets/vfx/big-hit.gif" : "/assets/vfx/small-hit.gif"} alt="" fill sizes="160px" unoptimized />
@@ -735,7 +855,7 @@ function Board({
               {damageEffect && (damageEffect.amount ?? 0) > 0 ? <span key={`damage-${damageEffect.id}`} className="game-damage-popup">−{damageEffect.amount} HP</span> : null}
               {shieldEffect?.kind === "shield-hit" && (shieldEffect.absorbed ?? 0) > 0 ? <span key={`block-${shieldEffect.id}`} className="game-block-popup">BLOCK {shieldEffect.absorbed}</span> : null}
               {healEffect && (healEffect.amount ?? 0) > 0 ? <span key={`heal-${healEffect.id}`} className="game-heal-popup">+{healEffect.amount} HP</span> : null}
-              {deathEffect ? <span key={`ko-${deathEffect.id}`} className="game-ko-popup">KO</span> : null}
+              {deathEffect ? <span key={`ko-${deathEffect.id}`} className="game-ko-popup">{isVault ? "BREACH" : "KO"}</span> : null}
             </button>
           );
         })}
@@ -876,6 +996,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const log = useGameStore((state) => state.log);
   const trainingCompleted = useGameStore((state) => state.settings.trainingCompleted);
   const startMission = useGameStore((state) => state.startMission);
+  const cancelSession = useGameStore((state) => state.cancelSession);
   const ensureIdentity = useGameStore((state) => state.ensureIdentity);
   const selectUnit = useGameStore((state) => state.selectUnit);
   const setActionMode = useGameStore((state) => state.setActionMode);
@@ -894,11 +1015,12 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
   const [endTurnConfirmationOpen, setEndTurnConfirmationOpen] = useState(false);
   const missionId = game?.missionId;
-  const introDuration = missionId && isTrainingMissionId(missionId) ? 950 : 2050;
+  const isTrainingMission = Boolean(missionId && isTrainingMissionId(missionId));
+  const introDuration = isTrainingMission ? 0 : 2050;
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const remainingUnits = useMemo(() => game?.units.filter((unit) => unit.hp > 0 && !unit.hasActed) ?? [], [game]);
-  const controlsLocked = isResolving || isAnimating || introVisible || endTurnConfirmationOpen;
+  const controlsLocked = isResolving || isAnimating || (introVisible && !isTrainingMission) || endTurnConfirmationOpen;
   const moves = useMemo(() => game && selected && actionMode === "move" ? getValidMoves(game, selected.id) : [], [actionMode, game, selected]);
   const attackTargets = useMemo(() => {
     if (!game || !selected) return [];
@@ -927,7 +1049,21 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   }, [ensureIdentity, hydrated, requestedMissionId, startMission]);
 
   useEffect(() => {
+    activeBattleClients += 1;
+    return () => {
+      activeBattleClients = Math.max(0, activeBattleClients - 1);
+      window.queueMicrotask(() => {
+        if (activeBattleClients === 0) cancelSession();
+      });
+    };
+  }, [cancelSession]);
+
+  useEffect(() => {
     if (!hydrated || !missionId) return;
+    if (isTrainingMissionId(missionId)) {
+      setIntroVisible(false);
+      return;
+    }
     setIntroVisible(true);
     const timeout = window.setTimeout(() => setIntroVisible(false), introDuration);
     return () => window.clearTimeout(timeout);
@@ -1036,7 +1172,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (process.env.NODE_ENV === "production" || !game) return;
     window.render_game_to_text = () => JSON.stringify({
       coordinateSystem: "A1 is top-left. Columns A-G increase right; rows 1-7 increase down.",
-      screen: introVisible ? "mission-intro" : endTurnConfirmationOpen ? "end-turn-confirmation" : "battle",
+      screen: introVisible && !isTrainingMission ? "mission-intro" : endTurnConfirmationOpen ? "end-turn-confirmation" : "battle",
       missionId: game.missionId,
       phase: game.phase,
       turn: game.turn,
@@ -1054,6 +1190,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         absorbed: combatCue.absorbed ?? 0,
         fatal: combatCue.fatal ?? false,
         variant: combatCue.variant ?? "generic",
+        statusKind: combatCue.statusKind ?? null,
         from: combatCue.from ? coordinate(combatCue.from) : null,
         to: combatCue.to ? coordinate(combatCue.to) : null,
         area: combatCue.area?.map(coordinate) ?? [],
@@ -1068,6 +1205,16 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
           motion: spriteState.motion,
           effectId: spriteState.effectId,
           frames: spriteState.motion === "death" ? 12 : 8,
+        }];
+      })),
+      enemyAnimations: Object.fromEntries(game.enemies.map((enemy) => {
+        const spriteState = enemyBattleSpriteState(effects, combatCue, enemy);
+        return [enemy.id, {
+          source: "authored-pixel-motion",
+          kind: enemy.kind,
+          motion: spriteState.motion,
+          effectId: spriteState.effectId,
+          whaleState: enemy.whaleState ?? null,
         }];
       })),
       sniperAnimation: (() => {
@@ -1136,14 +1283,16 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
     else if (tutorialStep === "basics-read-intent") setTutorialStep("basics-end-turn");
     else if (tutorialStep === "basics-hit-explained") {
       completeTrainingLesson(1);
-      setTutorialStep("basics-complete");
+      setTutorialStep(null);
+      setInspectedId(null);
+      router.push("/training");
     }
     else if (tutorialStep === "basics-complete") {
       setTutorialStep(null);
@@ -1152,7 +1301,9 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     } else if (tutorialStep === "squad-intro") setTutorialStep("squad-select-guardian");
     else if (tutorialStep === "squad-shield-explained") {
       completeTrainingLesson(2);
-      setTutorialStep("squad-complete");
+      setTutorialStep(null);
+      setInspectedId(null);
+      router.push("/training");
     }
     else if (tutorialStep === "squad-complete") {
       setTutorialStep(null);
@@ -1302,7 +1453,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         {!game ? <div className="game-loading"><Hourglass weight="fill" /> Loading battle…</div> : (
           <>
             <GameHud game={game} />
-            <Link href="/" className="battle-title-button" aria-label="Game menu — return to title screen"><List weight="bold" /></Link>
+            <Link href="/" className="battle-title-button" aria-label="Game menu — return to title screen" onClick={cancelSession}><List weight="bold" /></Link>
             <section className="game-board-zone" aria-label="Battlefield">
               <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} movePreview={movePreview} movePreviewPath={movePreviewPath} disabled={controlsLocked} onTile={handleTile} onPreviewMove={setMovePreview} />
             </section>
@@ -1327,8 +1478,10 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
             />
           </>
         )}
-        {introVisible && game ? <MissionIntro game={game} /> : null}
-        {turnBanner && !introVisible ? <div className={clsx("game-turn-banner", ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep ?? "") && "is-tutorial-watch")} role="status">{turnBanner}</div> : null}
+        {introVisible && game && !isTrainingMissionId(game.missionId) ? <MissionIntro game={game} /> : null}
+        {turnBanner && !introVisible && (!tutorialStep || ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep)) ? (
+          <div className={clsx("game-turn-banner", tutorialStep && "is-tutorial-watch")} role="status">{turnBanner}</div>
+        ) : null}
         {isResolving && !introVisible && !combatCue ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
         {tutorialStep && !introVisible && !isAnimating ? <BattleTutorial key={tutorialStep} step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
         {endTurnConfirmationOpen && game ? <EndTurnConfirmation units={remainingUnits} onReview={reviewRemainingUnits} onConfirm={confirmEndTurn} onCancel={() => setEndTurnConfirmationOpen(false)} /> : null}

@@ -7,6 +7,7 @@ import {
   attackEnemy,
   calculateEnemyPlan,
   compileEnemyPlayback,
+  compilePushPlayback,
   createInitialGameState,
   createMissionResult,
   getMovementPath,
@@ -20,6 +21,7 @@ import {
   type EnemyTurnPlan,
   type CombatPlaybackBeat,
   type CombatPlaybackStage,
+  type CombatPlaybackStatusKind,
   type GameEvent,
   type GameState,
   type MissionResult,
@@ -71,6 +73,7 @@ export interface CombatCue {
   amount?: number;
   absorbed?: number;
   fatal?: boolean;
+  statusKind?: CombatPlaybackStatusKind;
   variant?: CombatVariant;
   from?: Position;
   to?: Position;
@@ -111,6 +114,7 @@ interface GameStore {
   settings: PersistentSettings;
   hydrated: boolean;
   startMission: (missionId?: string) => void;
+  cancelSession: () => void;
   ensureIdentity: () => void;
   setHydrated: (hydrated: boolean) => void;
   selectUnit: (unitId: string | null) => void;
@@ -356,10 +360,40 @@ function effectsFromEvents(events: readonly GameEvent[], state: GameState): Batt
 }
 
 function effectsForBeat(beat: CombatPlaybackBeat): BattleEffect[] {
+  if (beat.stage === "move" && beat.event.type === "enemy-moved") {
+    return [nextEffect({
+      kind: "move",
+      sourceId: beat.event.enemyId,
+      from: beat.event.from,
+      to: beat.event.to,
+      path: [beat.event.from, ...beat.event.path],
+    })];
+  }
+  if (beat.stage === "move" && beat.event.type === "target-pushed") {
+    return [nextEffect({
+      kind: "push",
+      sourceId: beat.event.sourceId,
+      targetId: beat.event.targetId,
+      from: beat.event.from,
+      to: beat.event.to,
+      path: [beat.event.from, beat.event.to],
+      ability: beat.event.ability,
+    })];
+  }
   if (beat.stage === "attack") {
     return [nextEffect({ kind: "attack", sourceId: beat.sourceId, targetId: beat.targetId })];
   }
   if (beat.stage === "impact") {
+    if (beat.event.type === "collision") {
+      if (beat.event.damage <= 0) return [];
+      return [nextEffect({
+        kind: "collision",
+        sourceId: beat.event.sourceId,
+        targetId: beat.event.targetId,
+        amount: beat.event.damage,
+        ability: beat.event.ability,
+      })];
+    }
     const hitList = beat.hits ?? [{ targetId: beat.targetId ?? "", amount: beat.amount ?? 0, absorbed: beat.absorbed ?? 0, fatal: Boolean(beat.fatal) }];
     const effects: BattleEffect[] = [];
     for (const hit of hitList) {
@@ -376,6 +410,10 @@ function effectsForBeat(beat: CombatPlaybackBeat): BattleEffect[] {
     return effects;
   }
   if (beat.stage === "death") {
+    const fatalHits = beat.hits?.filter((hit) => hit.fatal) ?? [];
+    if (fatalHits.length > 0) {
+      return fatalHits.map((hit) => nextEffect({ kind: "death", sourceId: beat.sourceId, targetId: hit.targetId, amount: hit.amount }));
+    }
     return [nextEffect({ kind: "death", sourceId: beat.sourceId, targetId: beat.targetId, amount: beat.amount })];
   }
   if (beat.stage === "status" && beat.event.type === "enemy-healed") {
@@ -451,6 +489,24 @@ export const useGameStore = create<GameStore>()(
           if (generation === sessionGeneration) set({ turnBanner: null });
           bannerTimer = null;
         }, 650);
+      },
+
+      cancelSession: () => {
+        clearSessionTimers();
+        sessionGeneration += 1;
+        set({
+          selectedUnitId: null,
+          actionMode: null,
+          lastMove: null,
+          effects: [],
+          lastEvents: [],
+          isResolving: false,
+          isAnimating: false,
+          combatCue: null,
+          playbackIndex: -1,
+          queueRemaining: 0,
+          turnBanner: null,
+        });
       },
 
       ensureIdentity: () => {
@@ -567,7 +623,7 @@ export const useGameStore = create<GameStore>()(
                 effects: [nextEffect({ kind: "death", sourceId: attack.unitId, targetId: attack.enemyId })],
                 combatCue: nextCue("death", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal: true, variant }),
               });
-              schedulePresentation(finish, 560);
+              schedulePresentation(finish, 760);
             }, 330);
           } else {
             schedulePresentation(finish, 460);
@@ -612,38 +668,99 @@ export const useGameStore = create<GameStore>()(
         if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
         const transition = pushTarget(game, selectedUnitId, targetId, batterUp ? "batter-up" : "shove");
         const rejected = hasRejected(transition.events);
-        const effects = effectsFromEvents(transition.events, transition.state);
         const pushed = transition.events.find((event): event is Extract<GameEvent, { type: "target-pushed" }> => event.type === "target-pushed");
         const collision = transition.events.find((event): event is Extract<GameEvent, { type: "collision" }> => event.type === "collision");
         const pushAbility = pushed?.ability ?? collision?.ability ?? (batterUp ? "batter-up" : "shove");
         const variant = combatVariantForSource(game, selectedUnitId, { pushAbility });
-        const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === targetId)
-          || isDefeated(transition.state, targetId);
-        const presentationState = fatal ? withDefeatedEnemyGhost(game, transition.state, targetId) : transition.state;
-        const animated = !rejected && effects.length > 0;
+        if (rejected) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: get().actionMode,
+            lastMove: get().lastMove,
+            log: appendEvents(log, transition.events, game.turn),
+            effects: [],
+            combatCue: null,
+            lastEvents: transition.events,
+          });
+          return;
+        }
+
+        const beats = compilePushPlayback(game, transition.state, transition.events);
+        if (beats.length === 0) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: null,
+            lastMove: null,
+            log: appendEvents(log, transition.events, game.turn),
+            effects: [],
+            combatCue: null,
+            lastEvents: transition.events,
+          });
+          return;
+        }
+
         const generation = sessionGeneration;
         set({
-          game: presentationState,
-          enemyPlan: planFor(transition.state),
-          actionMode: rejected ? get().actionMode : null,
-          lastMove: rejected ? get().lastMove : null,
-          log: appendEvents(log, transition.events, game.turn),
-          effects,
-          isAnimating: animated,
-          combatCue: animated ? nextCue(fatal ? "death" : pushed ? "push" : "impact", {
-            sourceId: selectedUnitId,
-            targetId,
-            amount: collision?.damage,
-            fatal,
-            variant,
-            from: pushed?.from,
-            to: pushed?.to,
-          }) : null,
-          lastEvents: animated ? [] : transition.events,
+          actionMode: null,
+          lastMove: null,
+          isAnimating: true,
+          effects: [],
+          combatCue: null,
+          playbackIndex: -1,
+          queueRemaining: beats.length,
+          lastEvents: [],
         });
-        if (animated) schedulePresentation(() => {
-          if (generation === sessionGeneration) set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
-        }, fatal ? 780 : 580);
+
+        const finishPushPlayback = () => {
+          if (generation !== sessionGeneration) return;
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            log: appendEvents(log, transition.events, game.turn),
+            effects: [],
+            isAnimating: false,
+            combatCue: null,
+            playbackIndex: beats.length,
+            queueRemaining: 0,
+            lastEvents: transition.events,
+          });
+        };
+
+        const playPushBeat = (index: number) => {
+          if (generation !== sessionGeneration) return;
+          const beat = beats[index];
+          if (!beat) {
+            finishPushPlayback();
+            return;
+          }
+          const movementEvent = beat.event.type === "target-pushed" ? beat.event : null;
+          set({
+            game: beat.state,
+            enemyPlan: index === 0 ? get().enemyPlan : planFor(transition.state),
+            effects: effectsForBeat(beat),
+            combatCue: nextCue(beat.stage, {
+              sourceId: beat.sourceId,
+              targetId: beat.targetId,
+              amount: beat.amount,
+              absorbed: beat.absorbed,
+              fatal: beat.fatal,
+              variant,
+              from: movementEvent?.from,
+              to: movementEvent?.to,
+              area: beat.area,
+              hits: beat.hits,
+              statusKind: beat.statusKind,
+            }),
+            playbackIndex: index,
+            queueRemaining: beats.length - index - 1,
+            lastEvents: [beat.event],
+          });
+          schedulePresentation(() => playPushBeat(index + 1), beat.duration);
+        };
+
+        playPushBeat(0);
       },
 
       waitSelected: () => {
@@ -787,8 +904,11 @@ export const useGameStore = create<GameStore>()(
                 absorbed: beat.absorbed,
                 fatal: beat.fatal,
                 variant,
+                from: beat.event.type === "enemy-moved" ? beat.event.from : undefined,
+                to: beat.event.type === "enemy-moved" ? beat.event.to : undefined,
                 area: beat.area,
                 hits: beat.hits,
+                statusKind: beat.statusKind,
               }),
               playbackIndex: index,
               queueRemaining: beats.length - index - 1,

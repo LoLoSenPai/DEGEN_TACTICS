@@ -162,7 +162,7 @@ export const TRAINING_BASICS = {
 
 export const TRAINING_SQUAD = {
   id: "training-squad",
-  name: "Action Economy",
+  name: "Squad Turns",
   boardSize: BOARD_SIZE,
   maxTurns: 1,
   obstacles: [],
@@ -238,7 +238,7 @@ export const TRAINING_SQUAD = {
 
 export const TRAINING_MOMENTUM = {
   id: "training-momentum",
-  name: "Momentum",
+  name: "Push Control",
   boardSize: BOARD_SIZE,
   maxTurns: 5,
   obstacles: [position(4, 2)],
@@ -329,13 +329,13 @@ export const TRAINING_LESSONS = [
   {
     order: 2,
     missionId: TRAINING_SQUAD.id,
-    title: "Action Economy",
+    title: "Squad Turns",
     objective: "Activate the squad and time one-charge signatures.",
   },
   {
     order: 3,
     missionId: TRAINING_MOMENTUM.id,
-    title: "Momentum",
+    title: "Push Control",
     objective: "Push objects, cause collisions, and interrupt a locked attack.",
   },
 ] as const satisfies readonly TrainingLessonMetadata[];

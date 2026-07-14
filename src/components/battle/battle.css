@@ -680,6 +680,124 @@
   height: 30%;
 }
 
+.enemy-battle-sprite {
+  overflow: visible;
+  transform-origin: 50% 82%;
+  will-change: transform, filter, opacity;
+}
+
+.enemy-battle-image {
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.enemy-motion-accent {
+  position: absolute;
+  z-index: -1;
+  right: 14%;
+  bottom: 12%;
+  width: 72%;
+  height: 32%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-rugger {
+  animation: enemy-rugger-idle 1.65s steps(4, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-drainer {
+  animation: enemy-drainer-idle 1.8s ease-in-out infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-whale {
+  animation: enemy-whale-idle 2.1s steps(4, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-walk.kind-rugger {
+  animation: enemy-rugger-walk 360ms steps(4, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-walk.kind-drainer {
+  animation: enemy-drainer-walk 420ms ease-in-out infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-walk.kind-whale {
+  animation: enemy-whale-walk 480ms steps(4, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-rugger {
+  animation: rugger-charge 520ms cubic-bezier(.2,.78,.22,1) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-drainer {
+  animation: drainer-cast 600ms ease-in-out both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-whale {
+  animation: whale-slam 720ms cubic-bezier(.22,.72,.2,1) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-hurt {
+  animation: enemy-hurt 460ms steps(6, end) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-death {
+  animation: enemy-death 760ms steps(10, end) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-spawn {
+  animation: enemy-spawn 440ms steps(7, end) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-heal {
+  animation: combat-heal 520ms ease-out both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-lock {
+  animation: enemy-lock 360ms steps(6, end) both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-charge {
+  animation: enemy-charge 820ms steps(6, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-stagger {
+  animation: enemy-stagger 900ms steps(6, end) infinite;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-rugger .enemy-motion-accent {
+  background: radial-gradient(ellipse, rgba(255, 77, 68, 0.56), rgba(127, 18, 21, 0.12) 58%, transparent 72%);
+  opacity: 0.9;
+  animation: enemy-accent-burst 520ms ease-out both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-drainer .enemy-motion-accent,
+.game-piece.enemy-piece .enemy-battle-sprite.is-heal.kind-drainer .enemy-motion-accent {
+  border: 2px solid rgba(214, 93, 244, 0.78);
+  box-shadow: 0 0 12px rgba(201, 74, 239, 0.55), inset 0 0 10px rgba(201, 74, 239, 0.24);
+  opacity: 0.9;
+  animation: enemy-accent-burst 600ms ease-out both;
+}
+
+.game-piece.enemy-piece .enemy-battle-sprite.is-lock.kind-whale .enemy-motion-accent,
+.game-piece.enemy-piece .enemy-battle-sprite.is-charge.kind-whale .enemy-motion-accent,
+.game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-whale .enemy-motion-accent {
+  right: 3%;
+  bottom: 4%;
+  width: 94%;
+  height: 45%;
+  border: 3px solid rgba(255, 81, 79, 0.76);
+  box-shadow: 0 0 18px rgba(255, 65, 62, 0.52), inset 0 0 14px rgba(255, 65, 62, 0.24);
+  opacity: 0.86;
+  animation: whale-charge-ring 820ms steps(6, end) infinite;
+}
+
+.game-piece.is-pushed.object-piece .board-sprite {
+  animation: pushed-object 420ms cubic-bezier(.12,.82,.18,1) both;
+}
+
 .vault-piece .board-sprite {
   right: -11.2%;
   bottom: -4%;
@@ -930,6 +1048,10 @@
   animation: combat-hit 320ms steps(4, end) both;
 }
 
+.game-piece.enemy-piece.is-hit:not(.is-shield-hit) .enemy-battle-sprite.is-hurt.board-sprite {
+  animation: enemy-hurt 460ms steps(6, end) both;
+}
+
 .game-piece.is-shield-hit .board-sprite {
   animation: shield-hit 360ms ease-out both;
 }
@@ -1027,6 +1149,37 @@
 }
 
 .combat-callout.is-status small { color: #dd75f8; }
+
+.combat-callout.status-breach-warning,
+.combat-callout.status-cone-locked {
+  border-color: #ef514b;
+  color: #fff0ea;
+  background: rgba(30, 7, 9, 0.96);
+}
+
+.combat-callout.status-breach-warning small,
+.combat-callout.status-cone-locked small { color: #ff746d; }
+
+.combat-callout.status-charge-cancelled,
+.combat-callout.status-staggered,
+.combat-callout.status-push-blocked,
+.combat-callout.status-push-stopped {
+  border-color: #e9b43e;
+  color: #fff1c3;
+  background: rgba(31, 21, 5, 0.96);
+}
+
+.combat-callout.status-charge-cancelled small,
+.combat-callout.status-staggered small,
+.combat-callout.status-push-blocked small,
+.combat-callout.status-push-stopped small { color: #ffc84f; }
+
+.combat-callout.status-vault-breached {
+  border-color: #c565ff;
+  color: #fff;
+  background: rgba(31, 8, 39, 0.98);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.5), 0 0 28px rgba(197, 101, 255, 0.42);
+}
 
 .combat-callout.variant-sniper-shot,
 .combat-callout.variant-deadeye {
@@ -1913,6 +2066,99 @@
   50% { transform: translateY(-2px); }
 }
 
+@keyframes enemy-rugger-idle {
+  0%, 100% { transform: translateY(0) scale(1); filter: brightness(1) drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
+  50% { transform: translateY(1px) scale(1.015, 0.985); filter: brightness(1.08) drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
+}
+
+@keyframes enemy-drainer-idle {
+  0%, 100% { transform: translateY(1px) rotate(-0.6deg); filter: brightness(1) drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
+  50% { transform: translateY(-4px) rotate(0.8deg); filter: brightness(1.16) drop-shadow(0 0 8px rgba(203, 79, 238, 0.35)); }
+}
+
+@keyframes enemy-whale-idle {
+  0%, 100% { transform: translateY(0) scale(1); filter: brightness(0.96) drop-shadow(0 9px 6px rgba(0, 0, 0, 0.78)); }
+  50% { transform: translateY(-1px) scale(1.012, 0.988); filter: brightness(1.08) drop-shadow(0 9px 6px rgba(0, 0, 0, 0.78)); }
+}
+
+@keyframes enemy-rugger-walk {
+  0%, 100% { transform: translateY(1px) rotate(-1deg) scale(1.02, 0.98); }
+  25% { transform: translateY(-4px) rotate(1.2deg) scale(0.98, 1.02); }
+  50% { transform: translateY(0) rotate(0) scale(1.03, 0.97); }
+  75% { transform: translateY(-3px) rotate(-1.2deg) scale(0.99, 1.01); }
+}
+
+@keyframes enemy-drainer-walk {
+  0%, 100% { transform: translateY(2px) rotate(-1deg); filter: brightness(1); }
+  50% { transform: translateY(-7px) rotate(1.2deg); filter: brightness(1.24) drop-shadow(0 0 8px rgba(203, 79, 238, 0.42)); }
+}
+
+@keyframes enemy-whale-walk {
+  0%, 100% { transform: translateY(2px) scale(1.025, 0.975); }
+  50% { transform: translateY(-3px) scale(0.985, 1.015); }
+}
+
+@keyframes enemy-hurt {
+  0% { transform: translateX(0) scale(1); filter: brightness(1); }
+  18% { transform: translateX(-7px) scale(0.96); filter: brightness(3) saturate(0); }
+  36% { transform: translateX(6px) scale(1.02); filter: brightness(0.75) sepia(1) saturate(4); }
+  58% { transform: translateX(-4px) scale(0.98); filter: brightness(2); }
+  80% { transform: translateX(2px) scale(1.01); filter: brightness(1.15); }
+  100% { transform: translateX(0) scale(1); filter: brightness(1); }
+}
+
+@keyframes enemy-death {
+  0% { opacity: 1; transform: translateY(0) rotate(0) scale(1); filter: brightness(2.5) saturate(0); }
+  18% { opacity: 1; transform: translateY(-3px) rotate(-2deg) scale(1.04); filter: brightness(1.7) grayscale(0.6); }
+  44% { opacity: 1; transform: translateY(5px) rotate(5deg) scale(0.96, 0.9); filter: grayscale(0.9) brightness(1); }
+  78% { opacity: 0.9; transform: translateY(12px) rotate(8deg) scale(0.88, 0.7); filter: grayscale(1) brightness(0.62); }
+  100% { opacity: 0; transform: translateY(18px) rotate(8deg) scale(0.78, 0.58); filter: grayscale(1) brightness(0.3); }
+}
+
+@keyframes enemy-spawn {
+  0% { opacity: 0; transform: translateY(-18px) scale(1.24, 0.6); filter: brightness(3) saturate(0); }
+  42% { opacity: 1; transform: translateY(4px) scale(0.92, 1.08); filter: brightness(1.7); }
+  72% { transform: translateY(-2px) scale(1.04, 0.96); filter: brightness(1.2); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+@keyframes enemy-charge {
+  0%, 100% { transform: translateY(0) scale(1); filter: brightness(1) drop-shadow(0 0 5px rgba(255, 66, 61, 0.28)); }
+  50% { transform: translateY(-2px) scale(1.035, 0.97); filter: brightness(1.45) drop-shadow(0 0 13px rgba(255, 66, 61, 0.62)); }
+}
+
+@keyframes enemy-lock {
+  0% { transform: translateY(0) scale(0.94); filter: brightness(1); }
+  38% { transform: translateY(-5px) scale(1.06); filter: brightness(2.1) drop-shadow(0 0 16px rgba(255, 66, 61, 0.78)); }
+  66% { transform: translateY(2px) scale(1.02, 0.94); filter: brightness(1.45) drop-shadow(0 0 12px rgba(255, 66, 61, 0.62)); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1.15) drop-shadow(0 0 8px rgba(255, 66, 61, 0.48)); }
+}
+
+@keyframes enemy-stagger {
+  0%, 100% { transform: translateX(0) rotate(0); filter: brightness(0.86) saturate(0.78); }
+  25% { transform: translateX(-2px) rotate(-1.5deg); filter: brightness(1.08) saturate(0.7); }
+  50% { transform: translateX(2px) rotate(1deg); filter: brightness(0.82) saturate(0.72); }
+  75% { transform: translateX(-1px) rotate(-0.5deg); filter: brightness(0.94) saturate(0.75); }
+}
+
+@keyframes enemy-accent-burst {
+  0% { opacity: 0; transform: scale(0.45); }
+  42% { opacity: 0.95; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+@keyframes whale-charge-ring {
+  0%, 100% { opacity: 0.42; transform: scale(0.82); }
+  50% { opacity: 0.92; transform: scale(1.08); }
+}
+
+@keyframes pushed-object {
+  0% { transform: rotate(0) scale(1); filter: brightness(1); }
+  34% { transform: rotate(-6deg) scale(0.96, 1.04); filter: brightness(1.35); }
+  70% { transform: rotate(3deg) scale(1.03, 0.97); filter: brightness(1.12); }
+  100% { transform: rotate(0) scale(1); filter: brightness(1); }
+}
+
 @keyframes selected-piece {
   from { transform: translateY(0) scale(1); filter: drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
   to { transform: translateY(-3px) scale(1.025); filter: drop-shadow(0 8px 7px rgba(40, 226, 204, 0.46)); }
@@ -2274,8 +2520,32 @@
   .game-piece.is-healing .board-sprite,
   .game-piece.is-dying .board-sprite,
   .game-piece.is-dying .piece-base,
-  .game-piece.is-dying .piece-health {
+  .game-piece.is-dying .piece-health,
+  .enemy-battle-sprite {
     animation: none !important;
+  }
+
+  .enemy-battle-sprite.is-hurt {
+    filter: brightness(1.65) saturate(0.55);
+    transform: translateX(-3px);
+  }
+
+  .enemy-battle-sprite.is-death {
+    opacity: 0.48;
+    filter: grayscale(1) brightness(0.58);
+    transform: translateY(9px) rotate(5deg) scale(0.88, 0.72);
+  }
+
+  .enemy-battle-sprite.is-charge {
+    filter: brightness(1.35) drop-shadow(0 0 12px rgba(255, 66, 61, 0.6));
+  }
+
+  .enemy-battle-sprite.is-lock {
+    filter: brightness(1.55) drop-shadow(0 0 14px rgba(255, 66, 61, 0.72));
+  }
+
+  .enemy-motion-accent {
+    display: none;
   }
 
   .player-spritecook-frames {
