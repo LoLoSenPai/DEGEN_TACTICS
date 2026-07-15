@@ -592,7 +592,7 @@ export const useGameStore = create<GameStore>()(
         const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
         const variant = combatVariantForSource(game, attack.unitId, { deadeye });
         const attackingUnit = game.units.find((unit) => unit.id === attack.unitId);
-        const attackDuration = deadeye ? 600 : attackingUnit ? 520 : 260;
+        const attackDuration = deadeye ? 760 : attackingUnit ? 520 : 260;
         set({
           actionMode: null,
           lastMove: null,

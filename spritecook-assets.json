@@ -1,19 +1,20 @@
 {
   "version": 1,
-  "workflow": "three character batches; no standalone animation calls",
+  "workflow": "three squad character batches plus one Sniper Deadeye character-animation request; no standalone /animate calls",
   "credits": {
     "before": 926,
-    "used": 264,
-    "remaining": 662
+    "used": 284,
+    "remaining": 642
   },
   "characters": {
     "sniper": {
       "master": { "asset_id": "77bca013-be04-4d5f-9fdf-b55fe973b4f3", "sha12": "8433213faa19" },
-      "runs": ["32f391f2-c3a6-4c06-9617-78741b6e3e2c", "68f5649d-5914-4447-8e57-cc427ce843ab"],
+      "runs": ["32f391f2-c3a6-4c06-9617-78741b6e3e2c", "68f5649d-5914-4447-8e57-cc427ce843ab", "3487888c-bc70-42b7-8427-aaf9209979ec"],
       "animations": {
         "idle": { "asset_id": "965e6388-05ad-40a7-bd44-7fb7ee04e160", "sha12": "16ce05bb22bf" },
         "walk": { "asset_id": "250082d1-889b-4eff-840d-9a5c41ef37c8", "sha12": "f72a2aceb033" },
         "attack": { "asset_id": "7cc8e9ee-e28b-4a80-b6d3-39421380e1d4", "sha12": "59a870b615ac" },
+        "deadeye": { "asset_id": "67297f2c-e96c-4387-ba01-1670627864ac", "sha12": "7f828cb6aee6" },
         "hurt": { "asset_id": "f2c43a27-673c-4e99-bc7f-94c24b7a482b", "sha12": "b83c4a83ba5e" },
         "death": { "asset_id": "5b084527-5dc3-4362-8937-33e612460364", "sha12": "b4825db23c3a" }
       }

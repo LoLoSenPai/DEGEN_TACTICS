@@ -376,7 +376,7 @@ export const compilePushPlayback = (
     stage: "push",
     state: visualState,
     event: actionEvent,
-    duration: ability === "batter-up" ? 580 : 460,
+    duration: ability === "batter-up" ? 580 : 520,
     sourceId,
     targetId,
   });

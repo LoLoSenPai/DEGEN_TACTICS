@@ -239,12 +239,14 @@ function battleSpriteState(
   );
   const abilityCue = cue?.sourceId === unitId && (
     (role === "guardian" && cue.stage === "shield" && cue.variant === "shield-wall")
-    || (role === "pusher" && cue.stage === "push" && (cue.variant === "shove" || cue.variant === "batter-up"))
+    || (role === "sniper" && cue.stage === "attack" && cue.variant === "deadeye")
+    || (role === "pusher" && cue.stage === "push" && cue.variant === "batter-up")
   );
   if (abilityEffect || abilityCue) return { motion: "ability", effectId: abilityEffect?.id ?? cue?.id ?? 0 };
 
   const attackEffect = [...effects].reverse().find((effect) => effect.kind === "attack" && effect.sourceId === unitId);
-  if (attackEffect || (cue?.stage === "attack" && cue.sourceId === unitId)) {
+  const shoveCue = role === "pusher" && cue?.stage === "push" && cue.sourceId === unitId && cue.variant === "shove";
+  if (attackEffect || shoveCue || (cue?.stage === "attack" && cue.sourceId === unitId)) {
     return { motion: "attack", effectId: attackEffect?.id ?? cue?.id ?? 0 };
   }
 
@@ -585,6 +587,138 @@ function EndTurnConfirmation({
         <footer>
           <button type="button" className="end-turn-review" onClick={onReview} autoFocus>Back to squad</button>
           <button type="button" className="end-turn-anyway" onClick={onConfirm}>End turn anyway</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+type BattleDestructiveAction = "restart" | "leave";
+
+const MODAL_FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function useModalFocusTrap() {
+  const dialogRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const focusables = () => [...dialog.querySelectorAll<HTMLElement>(MODAL_FOCUSABLE_SELECTOR)]
+      .filter((element) => element.getClientRects().length > 0);
+    const initialFocus = dialog.querySelector<HTMLElement>("[autofocus]") ?? focusables()[0] ?? dialog;
+    initialFocus.focus();
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const available = focusables();
+      if (available.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = available[0];
+      const last = available[available.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      document.removeEventListener("keydown", trapFocus);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return dialogRef;
+}
+
+function BattlePauseMenu({
+  isTraining,
+  onResume,
+  onRestart,
+  onLeave,
+}: {
+  isTraining: boolean;
+  onResume: () => void;
+  onRestart: () => void;
+  onLeave: () => void;
+}) {
+  const dialogRef = useModalFocusTrap();
+
+  return (
+    <div className="battle-menu-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onResume(); }}>
+      <section ref={dialogRef} className="battle-pause-menu" role="dialog" aria-modal="true" aria-labelledby="battle-menu-title" data-battle-menu="true" tabIndex={-1}>
+        <header>
+          <span>Battle paused</span>
+          <h2 id="battle-menu-title">Mission menu</h2>
+        </header>
+        <p>Your tactical state is unchanged.</p>
+        <div className="battle-menu-actions">
+          <button type="button" className="is-primary" onClick={onResume} autoFocus><span>Resume</span><kbd>Esc</kbd></button>
+          <button type="button" onClick={onRestart}><span>Restart {isTraining ? "lesson" : "mission"}</span><kbd>R</kbd></button>
+          <button type="button" className="is-danger" onClick={onLeave}><span>Return to {isTraining ? "training" : "title"}</span></button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function BattleDestructiveConfirmation({
+  action,
+  isTraining,
+  onConfirm,
+  onCancel,
+}: {
+  action: BattleDestructiveAction;
+  isTraining: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useModalFocusTrap();
+  const restarting = action === "restart";
+  const title = restarting
+    ? `Restart ${isTraining ? "this lesson" : "the mission"}?`
+    : `Leave ${isTraining ? "this lesson" : "the mission"}?`;
+  const description = restarting
+    ? isTraining
+      ? "The board and coach return to phase 1. Completed chapter progress stays saved."
+      : "The current run is discarded and the mission restarts from Turn 1."
+    : isTraining
+      ? "This unfinished lesson restarts from phase 1 when you return."
+      : "The current run is discarded and you return to the title screen.";
+
+  return (
+    <div className="battle-confirmation-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <section
+        ref={dialogRef}
+        className="battle-destructive-confirmation"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="battle-confirmation-title"
+        aria-describedby="battle-confirmation-description"
+        data-battle-confirmation={action}
+        tabIndex={-1}
+      >
+        <header>
+          <Warning weight="fill" aria-hidden="true" />
+          <div><span>{restarting ? "Restart run" : "Leave battle"}</span><h2 id="battle-confirmation-title">{title}</h2></div>
+        </header>
+        <p id="battle-confirmation-description">{description}</p>
+        <footer>
+          <button type="button" onClick={onCancel} autoFocus>Keep playing</button>
+          <button type="button" className="is-danger" onClick={onConfirm}>{restarting ? "Restart now" : `Leave to ${isTraining ? "training" : "title"}`}</button>
         </footer>
       </section>
     </div>
@@ -1029,13 +1163,17 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const [playerSpritesReady, setPlayerSpritesReady] = useState(playerSpriteSheetsAreReady);
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
   const [endTurnConfirmationOpen, setEndTurnConfirmationOpen] = useState(false);
+  const [battleMenuOpen, setBattleMenuOpen] = useState(false);
+  const [destructiveConfirmation, setDestructiveConfirmation] = useState<BattleDestructiveAction | null>(null);
+  const [battleResetKey, setBattleResetKey] = useState(0);
   const missionId = game?.missionId;
   const isTrainingMission = Boolean(missionId && isTrainingMissionId(missionId));
   const introDuration = isTrainingMission ? 0 : 2050;
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const remainingUnits = useMemo(() => game?.units.filter((unit) => unit.hp > 0 && !unit.hasActed) ?? [], [game]);
-  const controlsLocked = !playerSpritesReady || isResolving || isAnimating || (introVisible && !isTrainingMission) || endTurnConfirmationOpen;
+  const battleTransitionLocked = !playerSpritesReady || isResolving || isAnimating || (introVisible && !isTrainingMission);
+  const controlsLocked = battleTransitionLocked || endTurnConfirmationOpen || battleMenuOpen || destructiveConfirmation !== null;
   const moves = useMemo(() => game && selected && actionMode === "move" ? getValidMoves(game, selected.id) : [], [actionMode, game, selected]);
   const attackTargets = useMemo(() => {
     if (!game || !selected) return [];
@@ -1197,7 +1335,19 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (process.env.NODE_ENV === "production" || !game) return;
     window.render_game_to_text = () => JSON.stringify({
       coordinateSystem: "A1 is top-left. Columns A-G increase right; rows 1-7 increase down.",
-      screen: !playerSpritesReady ? "loading-squad" : introVisible && !isTrainingMission ? "mission-intro" : endTurnConfirmationOpen ? "end-turn-confirmation" : "battle",
+      screen: !playerSpritesReady
+        ? "loading-squad"
+        : introVisible && !isTrainingMission
+          ? "mission-intro"
+          : destructiveConfirmation === "restart"
+            ? "restart-confirmation"
+            : destructiveConfirmation === "leave"
+              ? "leave-confirmation"
+              : battleMenuOpen
+                ? "battle-menu"
+                : endTurnConfirmationOpen
+                  ? "end-turn-confirmation"
+                  : "battle",
       missionId: game.missionId,
       phase: game.phase,
       turn: game.turn,
@@ -1274,6 +1424,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         role: unit.role,
         at: coordinate(unit.position),
         hp: unit.hp,
+        shield: unit.shield?.value ?? 0,
         hasMoved: unit.hasMoved,
         hasActed: unit.hasActed,
         activationState: unitActivationState(unit),
@@ -1304,6 +1455,11 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         count: remainingUnits.length,
         confirmationOpen: endTurnConfirmationOpen,
       },
+      battleMenu: {
+        open: battleMenuOpen,
+        confirmation: destructiveConfirmation,
+        returnDestination: isTrainingMission ? "/training" : "/",
+      },
     });
     window.advanceTime = (milliseconds) => {
       virtualTime.current += milliseconds;
@@ -1313,7 +1469,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, combatCue, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, battleMenuOpen, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
@@ -1427,6 +1583,55 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     endTurn();
   }, [endTurn]);
 
+  const openBattleMenu = useCallback(() => {
+    if (!game || battleTransitionLocked || game.phase !== "player") return;
+    setBattleMenuOpen(true);
+  }, [battleTransitionLocked, game]);
+
+  const requestRestart = useCallback(() => {
+    if (!game || battleTransitionLocked || game.phase !== "player") return;
+    setEndTurnConfirmationOpen(false);
+    setBattleMenuOpen(true);
+    setDestructiveConfirmation("restart");
+  }, [battleTransitionLocked, game]);
+
+  const requestLeave = useCallback(() => {
+    setDestructiveConfirmation("leave");
+  }, []);
+
+  const cancelDestructiveConfirmation = useCallback(() => {
+    setDestructiveConfirmation(null);
+  }, []);
+
+  const restartMission = useCallback(() => {
+    if (!game) return;
+    const restartingMissionId = game.missionId;
+    const restartingTraining = isTrainingMissionId(restartingMissionId);
+    document.querySelector(".game-board-frame")?.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
+    virtualTime.current = 0;
+    tutorialStarted.current = restartingTraining ? restartingMissionId : null;
+    setInspectedId(null);
+    setMovePreview(null);
+    setEndTurnConfirmationOpen(false);
+    setDestructiveConfirmation(null);
+    setBattleMenuOpen(false);
+    setIntroVisible(false);
+    setTutorialStep(restartingTraining ? initialTutorialStep(restartingMissionId) : null);
+    setBattleResetKey((value) => value + 1);
+    startMission(restartingMissionId);
+  }, [game, startMission]);
+
+  const leaveBattle = useCallback(() => {
+    if (!game) return;
+    const destination = isTrainingMissionId(game.missionId) ? "/training" : "/";
+    document.querySelector(".game-board-frame")?.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
+    setDestructiveConfirmation(null);
+    setBattleMenuOpen(false);
+    setEndTurnConfirmationOpen(false);
+    cancelSession();
+    router.push(destination);
+  }, [cancelSession, game, router]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -1439,14 +1644,37 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         return;
       }
       if (key === "escape") {
+        if (destructiveConfirmation) {
+          event.preventDefault();
+          setDestructiveConfirmation(null);
+          return;
+        }
+        if (battleMenuOpen) {
+          event.preventDefault();
+          setBattleMenuOpen(false);
+          return;
+        }
         if (endTurnConfirmationOpen) {
           event.preventDefault();
           setEndTurnConfirmationOpen(false);
           return;
         }
-        if (tutorialRestrictsInput(tutorialStep)) return;
-        setMovePreview(null);
-        setActionMode(null);
+        if (actionMode !== null && !tutorialRestrictsInput(tutorialStep)) {
+          event.preventDefault();
+          setMovePreview(null);
+          setActionMode(null);
+          return;
+        }
+        if (!battleTransitionLocked && game?.phase === "player") {
+          event.preventDefault();
+          setBattleMenuOpen(true);
+        }
+        return;
+      }
+      if (key === "r") {
+        if (event.repeat || endTurnConfirmationOpen || destructiveConfirmation || !game || battleTransitionLocked || game.phase !== "player") return;
+        event.preventDefault();
+        requestRestart();
         return;
       }
       if ((key === " " || key === "enter") && target instanceof HTMLButtonElement) return;
@@ -1474,7 +1702,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activateAbility, controlsLocked, endTurnConfirmationOpen, game, requestEndTurn, selected, setActionMode, tutorialStep, waitSelected]);
+  }, [actionMode, activateAbility, battleMenuOpen, battleTransitionLocked, controlsLocked, destructiveConfirmation, endTurnConfirmationOpen, game, requestEndTurn, requestRestart, selected, setActionMode, tutorialStep, waitSelected]);
 
   return (
     <div className="game-battle-route">
@@ -1483,9 +1711,19 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         {!game ? <div className="game-loading"><Hourglass weight="fill" /> Loading battle…</div> : (
           <>
             <GameHud game={game} />
-            <Link href="/" className="battle-title-button" aria-label="Game menu — return to title screen" onClick={cancelSession}><List weight="bold" /></Link>
+            <button
+              type="button"
+              className="battle-title-button"
+              aria-label="Open mission menu"
+              aria-keyshortcuts="Escape"
+              data-battle-menu-trigger="true"
+              onClick={openBattleMenu}
+              disabled={battleTransitionLocked || game.phase !== "player"}
+            >
+              <List weight="bold" /><span>Menu</span><kbd>Esc</kbd>
+            </button>
             <section className="game-board-zone" aria-label="Battlefield">
-              <Board game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} movePreview={movePreview} movePreviewPath={movePreviewPath} disabled={controlsLocked} onTile={handleTile} onPreviewMove={setMovePreview} />
+              <Board key={`${game.missionId}:${battleResetKey}`} game={game} highlights={highlights} selectedUnitId={selectedUnitId} actionMode={actionMode} inspectedId={inspectedId} tutorialStep={tutorialStep} movePreview={movePreview} movePreviewPath={movePreviewPath} disabled={controlsLocked} onTile={handleTile} onPreviewMove={setMovePreview} />
             </section>
             <CombatCallout game={game} cue={combatCue} />
             <SelectedInspector game={game} selectedUnitId={selectedUnitId} inspectedId={inspectedId} />
@@ -1520,6 +1758,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         {isResolving && !introVisible && !combatCue ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}
         {tutorialStep && !introVisible && !isAnimating ? <BattleTutorial key={tutorialStep} step={tutorialStep} onContinue={continueTutorial} onSkip={skipTutorial} /> : null}
         {endTurnConfirmationOpen && game ? <EndTurnConfirmation units={remainingUnits} onReview={reviewRemainingUnits} onConfirm={confirmEndTurn} onCancel={() => setEndTurnConfirmationOpen(false)} /> : null}
+        {battleMenuOpen && !destructiveConfirmation && game ? <BattlePauseMenu isTraining={isTrainingMission} onResume={() => setBattleMenuOpen(false)} onRestart={requestRestart} onLeave={requestLeave} /> : null}
+        {destructiveConfirmation && game ? <BattleDestructiveConfirmation action={destructiveConfirmation} isTraining={isTrainingMission} onConfirm={destructiveConfirmation === "restart" ? restartMission : leaveBattle} onCancel={cancelDestructiveConfirmation} /> : null}
       </main>
     </div>
   );

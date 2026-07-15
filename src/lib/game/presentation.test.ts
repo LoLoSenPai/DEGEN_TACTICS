@@ -207,6 +207,7 @@ describe("combat presentation playback", () => {
     const beats = compilePushPlayback(state, transition.state, transition.events);
 
     expect(beats.map((beat) => beat.stage)).toEqual(["push", "status"]);
+    expect(beats[0].duration).toBe(520);
     expect(beats[1]).toMatchObject({ targetId: "data-block", statusKind: "push-blocked" });
   });
 
@@ -225,6 +226,7 @@ describe("combat presentation playback", () => {
       expect.objectContaining({ type: "collision", targetId: "data-block", damage: 0 }),
     ]));
     expect(beats.map((beat) => beat.stage)).toEqual(["push", "move", "status"]);
+    expect(beats[0].duration).toBe(580);
     expect(beats[2]).toMatchObject({ targetId: "data-block", statusKind: "push-stopped" });
   });
 

@@ -9,10 +9,11 @@ describe("player sprite sheet registry", () => {
     for (const roleSheets of Object.values(PLAYER_SPRITE_SHEETS)) {
       expect(Object.keys(roleSheets)).toEqual(["idle", "walk", "attack", "ability", "hurt", "death"]);
     }
-    expect(PLAYER_SPRITE_SHEET_URLS).toHaveLength(17);
+    expect(PLAYER_SPRITE_SHEETS.sniper.ability).toBe("/assets/sprites/spritecook/sniper-deadeye.png");
+    expect(PLAYER_SPRITE_SHEETS.sniper.ability).not.toBe(PLAYER_SPRITE_SHEETS.sniper.attack);
+    expect(PLAYER_SPRITE_SHEET_URLS).toHaveLength(18);
     for (const url of PLAYER_SPRITE_SHEET_URLS) {
       expect(existsSync(join(process.cwd(), "public", url.slice(1))), url).toBe(true);
     }
   });
 });
-
