@@ -249,7 +249,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "squad-target-drainer": {
     title: "Check the firing line",
     prompt: "Target the highlighted Drainer.",
-    body: "Sniper fires 1–3 tiles in a cardinal line. Obstacles, the Vault and Data Block block sight.",
+    body: "Sniper fires 1–3 tiles in a cardinal line. Blast Barricades, the Vault and Data Block block sight.",
     awaiting: "Click the highlighted enemy",
     icon: "target",
   },
@@ -340,7 +340,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "push-move-to-collision": {
     title: "Use the terrain",
     prompt: "Move beside the highlighted Rugger.",
-    body: "Blocked enemies can be slammed into obstacles or the edge of the board.",
+    body: "Blocked enemies can be slammed into fixed Blast Barricades or the edge of the board.",
     awaiting: "Click the highlighted tile",
     icon: "move",
   },

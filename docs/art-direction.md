@@ -103,7 +103,7 @@ When states overlap, preserve both meanings with different visual channels—for
 ### Terrain treatments
 
 - **Normal:** near-black inset plate with minimal surface noise.
-- **Obstacle:** raised slate block with a strong diagonal cut and no luminous color.
+- **Blast Barricade:** one-cell X-braced gunmetal gate with two tall pylons, bolted floor feet, amber hazard stripes, and tiny red lock lamps. It must read as fixed terrain at a glance, block movement and line of sight, and never share the Data Block's cubic silhouette or team-colored glow.
 - **Vault:** violet concentric core, stable central mark, integrity ring, and a restrained threatened pulse.
 - **Incoming breach:** broken red perimeter and inward ticks; clearly impassable.
 - **Data Block:** compact neutral cube/canister with directional seams; distinct from a destructible combatant.

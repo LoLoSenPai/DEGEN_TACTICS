@@ -137,6 +137,7 @@ export interface GameState {
   readonly defeatedEnemies: number;
   readonly initialSquadSize: number;
   readonly vaultEverDamaged: boolean;
+  readonly whaleChargeCancelled: boolean;
   readonly outcomeReason?: "vault-destroyed" | "squad-eliminated" | "survived-five-turns";
 }
 
@@ -218,6 +219,25 @@ export interface ScoreBreakdown {
   readonly rank: "S" | "A" | "B" | "C";
 }
 
+export type MissionMedalId =
+  | "vault-untouched"
+  | "full-squad"
+  | "charge-broken";
+
+export interface MissionMedal {
+  readonly id: MissionMedalId;
+  readonly name: string;
+  readonly description: string;
+  readonly earned: boolean;
+}
+
+export interface RankGoal {
+  readonly nextRank: "S" | "A" | "B" | null;
+  readonly targetScore: number | null;
+  readonly pointsNeeded: number;
+  readonly requiresVictory: boolean;
+}
+
 export interface MissionResult {
   readonly missionId: string;
   readonly outcome: MissionOutcome;
@@ -231,6 +251,7 @@ export interface MissionResult {
   readonly lostUnits: number;
   readonly xpPreview: number;
   readonly completed: boolean;
+  readonly medals: readonly MissionMedal[];
 }
 
 export interface PlayerIdentity {

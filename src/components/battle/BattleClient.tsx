@@ -13,10 +13,13 @@ import {
   HandGrabbing,
   Heart,
   Hourglass,
+  Lightning,
   List,
   Shield,
+  ShieldCheck,
   Sword,
   Target,
+  UsersThree,
   Warning,
 } from "@phosphor-icons/react";
 import {
@@ -33,6 +36,7 @@ import {
   isTrainingMissionId,
   type Enemy,
   type GameState,
+  type MissionMedalId,
   type PlayerUnit,
   type Position,
   type PushTarget,
@@ -73,7 +77,7 @@ const SPRITE_ASSETS = {
   whale: "/assets/sprites/whale.png",
   vault: "/assets/sprites/vault.png",
   "data-block": "/assets/sprites/data-block.png",
-  obstacle: "/assets/sprites/obstacle.png",
+  obstacle: "/assets/sprites/blast-barricade.png",
 } as const;
 
 type SpriteKind = keyof typeof SPRITE_ASSETS;
@@ -129,13 +133,16 @@ function attackDirectionStyle(game: GameState, entityId: string, effect?: Battle
 }
 
 function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }) {
-  if (!cue || !["attack", "impact", "death", "shield", "push", "status"].includes(cue.stage)) return null;
+  if (!cue || !["attack", "impact", "death", "shield", "push", "status", "spawn"].includes(cue.stage)) return null;
   const source = cue.sourceId ? entityName(game, cue.sourceId) : "Enemy";
   const target = cue.targetId ? entityName(game, cue.targetId) : "Squad";
   let kicker = "COMBAT";
   let message = `${source} attacks ${target}`;
 
-  if (cue.stage === "shield") {
+  if (cue.stage === "spawn") {
+    kicker = "BREACH OPEN";
+    message = `${source} tears through the breach`;
+  } else if (cue.stage === "shield") {
     kicker = "ABILITY";
     message = `Shield Wall · ${cue.amount ?? 2} armor applied`;
   } else if (cue.stage === "push") {
@@ -358,6 +365,88 @@ function missionPresentation(missionId: string) {
   };
 }
 
+type LiveMasteryStatus = "active" | "pending" | "earned" | "lost";
+
+type LiveMastery = Readonly<{
+  id: MissionMedalId;
+  label: string;
+  goal: string;
+  status: LiveMasteryStatus;
+}>;
+
+function liveMissionMasteries(game: GameState): readonly LiveMastery[] {
+  const fullSquad = game.units.filter((unit) => unit.hp > 0).length === game.initialSquadSize;
+  return [
+    {
+      id: "vault-untouched",
+      label: "Vault intact",
+      goal: "Finish without Vault damage",
+      status: game.vaultEverDamaged ? "lost" : "active",
+    },
+    {
+      id: "full-squad",
+      label: "Full squad",
+      goal: "Keep every hero alive",
+      status: fullSquad ? "active" : "lost",
+    },
+    {
+      id: "charge-broken",
+      label: "Break charge",
+      goal: "Push the charging Whale",
+      status: game.whaleChargeCancelled ? "earned" : "pending",
+    },
+  ];
+}
+
+function masteryIcon(id: MissionMedalId) {
+  if (id === "vault-untouched") return <ShieldCheck weight="fill" aria-hidden="true" />;
+  if (id === "full-squad") return <UsersThree weight="fill" aria-hidden="true" />;
+  return <Lightning weight="fill" aria-hidden="true" />;
+}
+
+function masteryStatusLabel(status: LiveMasteryStatus) {
+  if (status === "earned") return "secured";
+  if (status === "lost") return "lost";
+  if (status === "pending") return "pending";
+  return "in play";
+}
+
+function HudMasteries({ game }: { game: GameState }) {
+  if (isTrainingMissionId(game.missionId)) return null;
+  return (
+    <span className="hud-masteries" aria-label="Mission mastery objectives">
+      {liveMissionMasteries(game).map((mastery) => (
+        <span
+          key={mastery.id}
+          className={clsx("hud-mastery", `is-${mastery.status}`)}
+          role="img"
+          aria-label={`${mastery.label}: ${masteryStatusLabel(mastery.status)}. ${mastery.goal}.`}
+          title={`${mastery.label} · ${masteryStatusLabel(mastery.status)}`}
+        >
+          {masteryIcon(mastery.id)}
+          <i aria-hidden="true" />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function IntroMasteries({ game }: { game: GameState }) {
+  return (
+    <section className="intro-masteries" aria-label="Bonus mission objectives">
+      <strong>Bonus objectives</strong>
+      <div>
+        {liveMissionMasteries(game).map((mastery) => (
+          <article key={mastery.id}>
+            <span>{masteryIcon(mastery.id)}</span>
+            <div><b>{mastery.label}</b><small>{mastery.goal}</small></div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 type UnitActivationState = "ready" | "action-ready" | "done" | "ko";
 
 function unitActivationState(unit: PlayerUnit): UnitActivationState {
@@ -407,6 +496,7 @@ function GameHud({ game }: { game: GameState }) {
       <div className="hud-objective">
         <span className="hud-shield"><Shield weight="fill" /></span>
         <div><strong>{presentation.title}</strong><small>{presentation.eyebrow} · {presentation.objective}</small></div>
+        <HudMasteries game={game} />
       </div>
       <div className="hud-turn"><span>Turn</span><strong>{game.turn} / {game.maxTurns}</strong></div>
       <div className="hud-vault">
@@ -424,6 +514,7 @@ function MissionIntro({ game }: { game: GameState }) {
       <span>{presentation.eyebrow}</span>
       <h1>{presentation.title}</h1>
       <p>{presentation.objective}</p>
+      <IntroMasteries game={game} />
     </div>
   );
 }
@@ -753,7 +844,7 @@ function tileDescription({
   else if (enemy) details.push(`${enemy.name}, ${enemy.kind}, ${enemy.hp} of ${enemy.maxHp} health`);
   else if (object) details.push(`${object.name}, pushable blocker`);
   else if (samePosition(game.vault.position, position)) details.push(`Vault, ${game.vault.hp} of ${game.vault.maxHp} integrity`);
-  else if (obstacle) details.push("obstacle");
+  else if (obstacle) details.push("Blast Barricade, immovable, blocks movement and line of sight");
   else if (samePosition(game.breach.position, position) && game.breach.status === "incoming") details.push("incoming breach, impassable");
   else details.push("floor");
   if (isMove) details.push("legal move");
@@ -907,6 +998,13 @@ function Board({
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
           const playerAnimation = unit ? battleSpriteState(effects, combatCue, unit.id, unit.role) : null;
           const enemyAnimation = enemy ? enemyBattleSpriteState(effects, combatCue, enemy) : null;
+          const isWhaleSpawnCue = enemy?.kind === "whale"
+            && combatCue?.stage === "spawn"
+            && combatCue.sourceId === enemy.id;
+          const isWhaleStaggerCue = enemy?.kind === "whale"
+            && combatCue?.stage === "status"
+            && combatCue.targetId === enemy.id
+            && (combatCue.statusKind === "charge-cancelled" || combatCue.statusKind === "staggered");
           const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", pushedEffect && "is-pushed", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
@@ -958,7 +1056,7 @@ function Board({
               <span className="game-tile-coordinate" aria-hidden="true">{coordinate(position)}</span>
               {isDanger ? <Warning className="game-danger-icon" weight="fill" aria-hidden="true" /> : null}
               {destinationOrders.length > 0 ? <span className="game-intent-land">{destinationOrders.join("/")}</span> : null}
-              {obstacle ? <SpriteArt kind="obstacle" name="Obstacle" className="game-prop obstacle-prop" /> : null}
+              {obstacle ? <SpriteArt kind="obstacle" name="Blast Barricade" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
               {isVault ? (
                 <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={game.vault.id}>
@@ -985,12 +1083,22 @@ function Board({
                 </span>
               ) : null}
               {object ? <span className={clsx("game-piece object-piece", pieceCombatClass)} data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
+              {isWhaleSpawnCue ? (
+                <span key={`breach-spawn-${combatCue?.id ?? 0}`} className="game-combat-vfx is-breach-spawn" data-combat-vfx="whale-breach-spawn" aria-hidden="true">
+                  <Image src="/assets/vfx/breach-wheel.gif" alt="" fill sizes="180px" unoptimized />
+                </span>
+              ) : null}
+              {isWhaleStaggerCue ? (
+                <span key={`stagger-${combatCue?.id ?? 0}`} className="game-combat-vfx is-stagger" data-combat-vfx="whale-stagger" aria-hidden="true">
+                  <Image src="/assets/vfx/stagger-stars.gif" alt="" fill sizes="140px" unoptimized />
+                </span>
+              ) : null}
               {damageEffect ? (
                 <span key={`impact-${damageEffect.id}`} className={clsx("game-combat-vfx", damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "is-heavy" : "is-normal")} aria-hidden="true">
                   <Image src={damageEffect.kind === "heavy" || damageEffect.kind === "collision" ? "/assets/vfx/big-hit.gif" : "/assets/vfx/small-hit.gif"} alt="" fill sizes="160px" unoptimized />
                 </span>
               ) : null}
-              {shieldEffect ? (
+              {shieldEffect?.kind === "shield-hit" ? (
                 <span key={`shield-${shieldEffect.id}`} className="game-combat-vfx is-shield" aria-hidden="true">
                   <Image src="/assets/vfx/electric-shield.gif" alt="" fill sizes="160px" unoptimized />
                 </span>
@@ -1419,6 +1527,11 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         pushes: pushTargets.map((target) => ({ id: target.id, kind: target.kind, at: coordinate(target.position), canMove: target.canMove })),
       },
       vault: { hp: game.vault.hp, maxHp: game.vault.maxHp, at: coordinate(game.vault.position) },
+      mastery: liveMissionMasteries(game).map((mastery) => ({
+        id: mastery.id,
+        label: mastery.label,
+        status: mastery.status,
+      })),
       units: game.units.map((unit) => ({
         id: unit.id,
         role: unit.role,

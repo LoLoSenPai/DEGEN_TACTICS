@@ -184,6 +184,18 @@ function isMissionResult(value: unknown): value is MissionResult {
     score.lostUnits,
     score.total,
   ];
+  const medalIds = new Set(["vault-untouched", "full-squad", "charge-broken"]);
+  const validMedals = Array.isArray(result.medals)
+    && result.medals.length === 3
+    && result.medals.every((medal) =>
+      medal
+      && typeof medal === "object"
+      && medalIds.has(medal.id)
+      && typeof medal.name === "string"
+      && typeof medal.description === "string"
+      && typeof medal.earned === "boolean",
+    )
+    && new Set(result.medals.map((medal) => medal.id)).size === medalIds.size;
   return typeof result.missionId === "string"
     && (result.outcome === "victory" || result.outcome === "defeat")
     && (result.reason === "vault-destroyed" || result.reason === "squad-eliminated" || result.reason === "survived-five-turns")
@@ -196,7 +208,8 @@ function isMissionResult(value: unknown): value is MissionResult {
     && isFiniteNumber(result.survivingUnits)
     && isFiniteNumber(result.lostUnits)
     && isFiniteNumber(result.xpPreview)
-    && typeof result.completed === "boolean";
+    && typeof result.completed === "boolean"
+    && validMedals;
 }
 
 function coord(position: Position) {

@@ -192,3 +192,22 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Preserved semantic combat information in Windows reduced-motion mode: ability SVGs become static, readable signs and impact accents receive a non-animated fallback instead of disappearing. The serializer now exposes each hero's current shield value for robust browser assertions.
 - Fresh browser scenarios compared the normal Sniper shot against Deadeye, verified Shield Wall in reduced motion, exercised Batter Up collision damage, opened/closed the pause menu and retried a moved mission. Exact damage, charges, sprite sheets, shields, initial-state restoration and console logs all pass. The bundled web-game client was rerun and its final battle capture inspected.
 - Final gates pass: ESLint with zero warnings, strict TypeScript, all 62 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build. The development server is running again on port 3000.
+
+## 2026-07-15 — Mission mastery and results debrief
+
+- Added three deterministic run medals: Vault Untouched, Full Squad and Charge Broken. The engine now records Charge Broken only when a legal push actually displaces a charging Whale; blocked collision pushes cannot earn it.
+- Mission results persist the complete medal snapshot. Persisted results without a valid three-medal payload fail the existing result guard safely, while the independent personal-best score remains available.
+- Reworked the Victory/Defeat debrief with earned/missed medal states, the complete seven-line score breakdown, personal best and a pure next-rank goal that handles failed runs and mastered S runs explicitly.
+- Added focused mastery, scoring and engine assertions. The focused 46-test run and complete 65-test suite pass alongside strict TypeScript, ESLint and `git diff --check`.
+- Replayed the canonical 1,475-point S-rank victory through the real DOM. All three medals were earned, the breakdown and personal best rendered correctly, Retry/Title remained intact, and the browser console stayed empty. The final debrief was also inspected at 1280×720 and 390×844.
+
+## 2026-07-15 — Combat juice and one-cell terrain clarity
+
+- Replaced the oversized horizontal rubble wall with a generated 256×256 transparent Blast Barricade: two bolted pylons, a heavy X brace, amber hazard stripes and red lock lamps. Its 244×216 content bounds share the board baseline, remain inside one tile, and are visually distinct from the movable cubic Data Block.
+- Renamed the prop in board accessibility text and the training copy so it explicitly communicates that Blast Barricades are fixed and block movement plus Sniper line of sight.
+- Curated two additional CodeManu effects instead of importing the whole pack: a violet-red Wheel ring for the Whale breach and compact PuffAndStars feedback for charge interruption/stagger. ElectricShield now appears only on a real absorbed hit; normal and heavy impacts keep separate scale and weight.
+- Added static reduced-motion fallbacks for breach and stagger, plus a dedicated `BREACH OPEN` combat callout. The effect layer continues to replay authoritative engine events without changing targeting or damage.
+- Added compact live mastery badges to the mission HUD and readable bonus-objective cards to the two-second mission intro. Vault/full-squad goals visibly fail when lost, while Charge Broken remains pending until the exact engine flag is earned; the serializer exposes all three states.
+- Raised medal, score-breakdown and progression typography on desktop and phone results, with a shorter Charge Broken description to avoid truncation at 1280×720.
+- Visual QA inspected the mission intro, battle, new terrain, Shield absorption, Whale spawn/stagger in normal and reduced motion, hero KO, deliberate defeat, canonical 1,475-point S victory, 1024×768 board, 390×844 battle notice, and responsive results. Captured console/page errors remained empty.
+- Final code gates for this milestone pass: ESLint with zero warnings, strict TypeScript, all 65 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build. TODO: build the separate Data Extraction mission only after this revised replay/mastery loop receives a novice playtest; defer enemy SpriteCook batches until the art direction is stable.

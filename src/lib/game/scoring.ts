@@ -4,6 +4,7 @@ import type {
   MissionResult,
   ScoreBreakdown,
 } from "./types";
+import { calculateMissionMedals } from "./mastery";
 
 export const calculateScore = (
   state: GameState,
@@ -81,5 +82,6 @@ export const createMissionResult = (
     lostUnits: Math.max(0, state.initialSquadSize - survivingUnits),
     xpPreview: Math.floor(score.total / 10),
     completed: outcome === "victory",
+    medals: calculateMissionMedals(state),
   };
 };

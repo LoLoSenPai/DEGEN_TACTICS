@@ -6,11 +6,13 @@ import {
   Crosshair,
   House,
   HourglassHigh,
+  Lightning,
   ShieldCheck,
   Skull,
   Trophy,
   UsersThree,
 } from "@phosphor-icons/react";
+import type { MissionMedal, RankGoal } from "@/lib/game";
 
 export interface ResultsDisplayData {
   outcome: "victory" | "defeat";
@@ -22,12 +24,38 @@ export interface ResultsDisplayData {
   enemiesDefeated: number;
   unitsLost: number;
   bestScore: number;
-  breakdown: Array<{ label: string; value: number }>;
+  medals: readonly MissionMedal[];
+  rankGoal: RankGoal;
+  breakdown: readonly Readonly<{ label: string; value: number }>[];
 }
+
+const medalIcon = (medal: MissionMedal) => {
+  switch (medal.id) {
+    case "vault-untouched":
+      return <ShieldCheck weight="fill" aria-hidden="true" />;
+    case "full-squad":
+      return <UsersThree weight="fill" aria-hidden="true" />;
+    case "charge-broken":
+      return <Lightning weight="fill" aria-hidden="true" />;
+  }
+};
+
+const formatScoreValue = (value: number) =>
+  value > 0
+    ? `+${value.toLocaleString()}`
+    : value < 0
+      ? `−${Math.abs(value).toLocaleString()}`
+      : "—";
 
 export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; onRetry: () => void }) {
   const victory = result.outcome === "victory";
   const isBestRun = victory && result.bestScore > 0 && result.score >= result.bestScore;
+  const earnedMedals = result.medals.filter((medal) => medal.earned).length;
+  const rankProgress = result.rankGoal.nextRank === null
+    ? "Highest rank achieved"
+    : result.rankGoal.requiresVictory
+      ? `Victory unlocks Rank ${result.rankGoal.nextRank}`
+      : `${result.rankGoal.pointsNeeded.toLocaleString()} pts to Rank ${result.rankGoal.nextRank}`;
 
   return (
     <main className={`game-results ${victory ? "is-victory" : "is-defeat"}`}>
@@ -55,8 +83,13 @@ export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; o
           <div className="result-score">
             <span>Final score</span>
             <strong>{result.score.toLocaleString()}</strong>
-            {isBestRun ? <em>New best</em> : null}
+            {isBestRun ? <em>Run record</em> : null}
           </div>
+        </div>
+
+        <div className="result-progression" aria-label="Personal score progression">
+          <span>Personal best <strong>{result.bestScore > 0 ? result.bestScore.toLocaleString() : "—"}</strong></span>
+          <span>{rankProgress}</span>
         </div>
 
         <dl className="result-stats">
@@ -81,6 +114,42 @@ export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; o
             <dd>{result.unitsLost}</dd>
           </div>
         </dl>
+
+        <div className="result-debrief">
+          <section className="result-mastery" aria-labelledby="result-mastery-title">
+            <header>
+              <h2 id="result-mastery-title">Mission mastery</h2>
+              <span>{earnedMedals} / {result.medals.length} medals</span>
+            </header>
+            <div className="result-medals">
+              {result.medals.map((medal) => (
+                <article key={medal.id} className={medal.earned ? "is-earned" : "is-locked"}>
+                  <div className="result-medal-icon">{medalIcon(medal)}</div>
+                  <div>
+                    <strong>{medal.name}</strong>
+                    <span>{medal.description}</span>
+                  </div>
+                  <em>{medal.earned ? "Earned" : "Missed"}</em>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="result-breakdown" aria-labelledby="result-breakdown-title">
+            <header>
+              <h2 id="result-breakdown-title">Score breakdown</h2>
+              <strong>{result.score.toLocaleString()}</strong>
+            </header>
+            <dl>
+              {result.breakdown.map((item) => (
+                <div key={item.label}>
+                  <dt>{item.label}</dt>
+                  <dd className={item.value < 0 ? "is-penalty" : undefined}>{formatScoreValue(item.value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        </div>
 
         <div className="result-actions">
           <button type="button" className="result-button result-retry" onClick={onRetry}>

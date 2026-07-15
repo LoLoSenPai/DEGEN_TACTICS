@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./mission";
 export * from "./presentation";
 export * from "./pathfinding";
+export * from "./mastery";
 export {
   activateDeadeye,
   applyShield,

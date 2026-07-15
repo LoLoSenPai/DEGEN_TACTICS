@@ -287,6 +287,7 @@ describe("engine-valid training missions", () => {
       whaleState: "staggered",
       lockedArea: [],
     });
+    expect(interrupted.state.whaleChargeCancelled).toBe(true);
 
     const staggerPlan = calculateEnemyPlan(interrupted.state);
     expect(staggerPlan.intents[0]).toMatchObject({
@@ -789,6 +790,7 @@ describe("scripted breach and Whale", () => {
       whaleState: "staggered",
       lockedArea: [],
     });
+    expect(pushed.state.whaleChargeCancelled).toBe(true);
     const staggerPlan = calculateEnemyPlan(pushed.state);
     expect(staggerPlan.intents[0]).toMatchObject({
       action: "staggered",
@@ -811,6 +813,7 @@ describe("scripted breach and Whale", () => {
     expect(
       failedPush.events.some((event) => event.type === "whale-charge-cancelled"),
     ).toBe(false);
+    expect(failedPush.state.whaleChargeCancelled).toBe(false);
   });
 });
 

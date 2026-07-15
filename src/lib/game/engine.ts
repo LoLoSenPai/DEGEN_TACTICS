@@ -124,6 +124,7 @@ export const createInitialGameState = (
   defeatedEnemies: 0,
   initialSquadSize: definition.units.length,
   vaultEverDamaged: false,
+  whaleChargeCancelled: false,
 });
 
 export const getStateFingerprint = (state: GameState): string =>
@@ -628,6 +629,7 @@ export const pushTarget = (
   if (distance > 0 && movedWhale) {
     nextState = {
       ...nextState,
+      whaleChargeCancelled: true,
       enemies: nextState.enemies.map((enemy) =>
         enemy.id === targetId
           ? {

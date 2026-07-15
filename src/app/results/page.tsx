@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ResultsView, type ResultsDisplayData } from "@/components/results/ResultsView";
+import { calculateRankGoal } from "@/lib/game";
 import { useGameStore } from "@/store/gameStore";
 import "@/components/results/results.css";
 
@@ -37,6 +38,8 @@ export default function ResultsPage() {
     enemiesDefeated: result.enemiesDefeated,
     unitsLost: result.lostUnits,
     bestScore: bestScores[result.missionId] ?? 0,
+    medals: result.medals,
+    rankGoal: calculateRankGoal(result.score, result.outcome),
     breakdown: [
       { label: "Mission completed", value: result.score.victory },
       { label: "Vault integrity", value: result.score.vaultIntegrity },

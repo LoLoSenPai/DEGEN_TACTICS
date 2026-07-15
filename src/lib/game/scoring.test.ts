@@ -99,6 +99,11 @@ describe("mission scoring", () => {
       completed: true,
       lostUnits: 0,
       xpPreview: Math.floor(result.score.total / 10),
+      medals: [
+        expect.objectContaining({ id: "vault-untouched", earned: true }),
+        expect.objectContaining({ id: "full-squad", earned: true }),
+        expect.objectContaining({ id: "charge-broken", earned: false }),
+      ],
     });
   });
 });
