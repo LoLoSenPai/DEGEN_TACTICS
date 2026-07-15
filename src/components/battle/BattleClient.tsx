@@ -34,6 +34,7 @@ import {
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
+  pushTarget as simulatePushTarget,
   type Enemy,
   type GameState,
   type MissionMedalId,
@@ -175,9 +176,12 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
       message = `${source} changes state`;
     }
   } else if (cue.stage === "impact") {
-    kicker = cue.absorbed ? "SHIELD HIT" : "IMPACT";
+    const isCollision = cue.variant === "shove" || cue.variant === "batter-up";
+    kicker = cue.absorbed ? "SHIELD HIT" : isCollision ? "COLLISION" : "IMPACT";
     message = cue.absorbed
       ? `${target} blocks ${cue.absorbed}${cue.amount ? ` · takes ${cue.amount}` : " · no HP lost"}`
+      : isCollision
+        ? `${target} crashes · −${cue.amount ?? 0} HP`
       : `${target} takes ${cue.amount ?? 0} damage`;
   } else if (cue.stage === "death") {
     const fatalHits = cue.hits?.filter((hit) => hit.fatal) ?? [];
@@ -353,7 +357,57 @@ type HighlightState = {
   moves: readonly Position[];
   attackIds: ReadonlySet<string>;
   pushTargets: readonly PushTarget[];
+  pushPreviews: ReadonlyMap<string, PushOutcomePreview>;
 };
+
+type PushOutcomePreview = {
+  targetId: string;
+  targetKind: PushTarget["kind"];
+  ability: "shove" | "batter-up";
+  distance: number;
+  destination: Position;
+  collided: boolean;
+  collisionDamage: number;
+};
+
+function exactPushPreview(
+  game: GameState,
+  unitId: string,
+  target: PushTarget,
+  ability: PushOutcomePreview["ability"],
+): PushOutcomePreview {
+  const transition = simulatePushTarget(game, unitId, target.id, ability);
+  const movement = transition.events.find((event) => event.type === "target-pushed");
+  const collision = transition.events.find((event) => event.type === "collision");
+  return {
+    targetId: target.id,
+    targetKind: target.kind,
+    ability,
+    distance: movement?.distance ?? 0,
+    destination: movement?.to ?? target.position,
+    collided: Boolean(collision),
+    collisionDamage: collision?.damage ?? 0,
+  };
+}
+
+function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
+  if (preview.targetKind === "object") {
+    const jammed = preview.collided && preview.distance === 0;
+    return (
+      <span className={clsx("game-push-preview", jammed && "is-jammed")} aria-hidden="true">
+        <strong>{jammed ? "JAMMED" : `MOVE ${preview.distance}`}</strong>
+        <small>{preview.collided ? (jammed ? "NO DAMAGE" : "THEN STOPS") : "NO DAMAGE"}</small>
+      </span>
+    );
+  }
+  const collision = preview.collisionDamage > 0;
+  return (
+    <span className={clsx("game-push-preview", collision && "is-collision")} aria-hidden="true">
+      <strong>{collision ? "CRASH" : `PUSH ${preview.distance}`}</strong>
+      <small>{collision ? `−${preview.collisionDamage} HP` : "0 DAMAGE"}</small>
+    </span>
+  );
+}
 
 function missionPresentation(missionId: string) {
   const definition = getMissionDefinition(missionId);
@@ -483,7 +537,7 @@ function signaturePresentation(unit: PlayerUnit) {
   return {
     status,
     description: "Push up to 2 tiles. If an enemy is stopped, it takes 2 collision damage.",
-    reusable: "Shove · Reusable · Push 1 tile · 1 collision damage",
+    reusable: "Shove · Reusable · Push 1 tile · 1 damage only if blocked",
   };
 }
 
@@ -826,6 +880,7 @@ function tileDescription({
   isMove,
   isAttack,
   isPush,
+  pushPreview,
   isDanger,
 }: {
   position: Position;
@@ -837,6 +892,7 @@ function tileDescription({
   isMove: boolean;
   isAttack: boolean;
   isPush: boolean;
+  pushPreview?: PushOutcomePreview;
   isDanger: boolean;
 }) {
   const details = [coordinate(position)];
@@ -850,6 +906,18 @@ function tileDescription({
   if (isMove) details.push("legal move");
   if (isAttack) details.push("attackable target");
   if (isPush) details.push("pushable target");
+  if (pushPreview) {
+    const distance = `${pushPreview.distance} tile${pushPreview.distance === 1 ? "" : "s"}`;
+    if (pushPreview.targetKind === "enemy") {
+      details.push(pushPreview.collisionDamage > 0
+        ? `exact push preview: ${distance}, collision for ${pushPreview.collisionDamage} damage`
+        : `exact push preview: ${distance}, no damage`);
+    } else {
+      details.push(pushPreview.collided
+        ? `exact push preview: ${distance}, then stopped, no damage`
+        : `exact push preview: ${distance}, no damage`);
+    }
+  }
   if (isDanger) details.push("threatened by exact enemy intent");
   return details.join(". ");
 }
@@ -985,6 +1053,7 @@ function Board({
           const isMove = moveKeys.has(key) && actionMode === "move";
           const isAttack = Boolean(enemy && highlights.attackIds.has(enemy.id));
           const isPush = Boolean((enemy || object) && pushIds.has((enemy ?? object)?.id ?? ""));
+          const pushPreview = (enemy || object) ? highlights.pushPreviews.get((enemy ?? object)!.id) : undefined;
           const isDanger = intentData.danger.has(key);
           const destinationOrders = intentData.destinations.get(key) ?? [];
           const entityId = unit?.id ?? enemy?.id ?? object?.id ?? (isVault ? game.vault.id : undefined);
@@ -1048,7 +1117,7 @@ function Board({
                 if (movePreview && samePosition(movePreview, position)) onPreviewMove(null);
               }}
               disabled={disabled || game.phase !== "player" || (tutorialRestricted && !tutorialTileAllowed)}
-              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, isDanger })}
+              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, pushPreview, isDanger })}
               aria-selected={isSelected}
               data-coordinate={tileCoordinate}
               data-tutorial-target={isTutorialFocus ? tutorialStep ?? undefined : undefined}
@@ -1083,6 +1152,7 @@ function Board({
                 </span>
               ) : null}
               {object ? <span className={clsx("game-piece object-piece", pieceCombatClass)} data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
+              {isPush && pushPreview && (actionMode === "push" || actionMode === "ability") ? <PushPreviewBadge preview={pushPreview} /> : null}
               {isWhaleSpawnCue ? (
                 <span key={`breach-spawn-${combatCue?.id ?? 0}`} className="game-combat-vfx is-breach-spawn" data-combat-vfx="whale-breach-spawn" aria-hidden="true">
                   <Image src="/assets/vfx/breach-wheel.gif" alt="" fill sizes="180px" unoptimized />
@@ -1108,7 +1178,7 @@ function Board({
                   <Image src="/assets/vfx/anima-death.gif" alt="" fill sizes="180px" unoptimized />
                 </span>
               ) : null}
-              {damageEffect && (damageEffect.amount ?? 0) > 0 ? <span key={`damage-${damageEffect.id}`} className="game-damage-popup">−{damageEffect.amount} HP</span> : null}
+              {damageEffect && (damageEffect.amount ?? 0) > 0 ? <span key={`damage-${damageEffect.id}`} className={clsx("game-damage-popup", damageEffect.kind === "collision" && "is-collision")}>−{damageEffect.amount} HP</span> : null}
               {shieldEffect?.kind === "shield-hit" && (shieldEffect.absorbed ?? 0) > 0 ? <span key={`block-${shieldEffect.id}`} className="game-block-popup">BLOCK {shieldEffect.absorbed}</span> : null}
               {healEffect && (healEffect.amount ?? 0) > 0 ? <span key={`heal-${healEffect.id}`} className="game-heal-popup">+{healEffect.amount} HP</span> : null}
               {deathEffect ? <span key={`ko-${deathEffect.id}`} className="game-ko-popup">{isVault ? "BREACH" : "KO"}</span> : null}
@@ -1173,14 +1243,18 @@ function ActionBar({
           : "Point at a teal tile to preview the route"
         : actionMode === "attack"
           ? "Choose a cyan enemy"
-          : actionMode === "push" || actionMode === "ability"
+          : actionMode === "push" && selected.role === "pusher"
+            ? "Exact preview: CRASH deals −1 HP · a free Shove deals 0 damage"
+          : actionMode === "ability" && selected.role === "pusher"
+            ? "Exact preview: Batter Up collides for −2 HP on either attempted tile"
+          : actionMode === "ability"
             ? "Choose a highlighted target"
             : selected.role === "guardian"
               ? "Shield Wall lets nearby allies absorb one enemy hit"
               : selected.role === "sniper" && !selected.hasMoved
                 ? "Deadeye deals 4 damage, but only before moving"
                 : selected.role === "pusher"
-                  ? "Shove enemies or the Data Block · blocked enemies take collision damage"
+                  ? "Shove pushes 1 tile · only a blocked enemy loses 1 HP"
                   : "Move once, then act";
   const lastLog = log.at(-1)?.text;
 
@@ -1200,7 +1274,7 @@ function ActionBar({
         </button>
         {selected?.role === "pusher" ? (
           <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active", allowedTutorialAction === "push" && "is-tutorial-focus")} onClick={() => onMode("push")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "push")} data-tutorial-target={allowedTutorialAction === "push" ? tutorialStep ?? undefined : undefined}>
-            <HandGrabbing weight="fill" /><span>Shove</span><small className="action-resource">Reusable</small><kbd>S</kbd>
+            <HandGrabbing weight="fill" /><span>Shove</span><small className="action-resource">Push 1 · Crash 1</small><kbd>S</kbd>
           </button>
         ) : null}
         <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active", allowedTutorialAction === "ability" && "is-tutorial-focus")} onClick={onAbility} disabled={disabled || !canSignature || (tutorialRestricted && allowedTutorialAction !== "ability")} aria-keyshortcuts="3" data-tutorial-target={allowedTutorialAction === "ability" ? tutorialStep ?? undefined : undefined}>
@@ -1290,7 +1364,14 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     return [];
   }, [actionMode, game, selected]);
   const pushTargets = useMemo(() => game && selected && selected.role === "pusher" && (actionMode === "push" || actionMode === "ability") ? getPushTargets(game, selected.id) : [], [actionMode, game, selected]);
-  const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), pushTargets }), [attackTargets, moves, pushTargets]);
+  const pushPreviews = useMemo(() => {
+    const previews = new Map<string, PushOutcomePreview>();
+    if (!game || !selected || selected.role !== "pusher") return previews;
+    const ability: PushOutcomePreview["ability"] = actionMode === "ability" ? "batter-up" : "shove";
+    for (const target of pushTargets) previews.set(target.id, exactPushPreview(game, selected.id, target, ability));
+    return previews;
+  }, [actionMode, game, pushTargets, selected]);
+  const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), pushTargets, pushPreviews }), [attackTargets, moves, pushPreviews, pushTargets]);
   const movePreviewPath = useMemo(() => game && selected && movePreview && actionMode === "move"
     ? getMovementPath(game, selected.id, movePreview)
     : null, [actionMode, game, movePreview, selected]);
@@ -1524,7 +1605,20 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       highlights: {
         moves: moves.map(coordinate),
         attacks: attackTargets.map((target) => ({ id: target.id, at: coordinate(target.position) })),
-        pushes: pushTargets.map((target) => ({ id: target.id, kind: target.kind, at: coordinate(target.position), canMove: target.canMove })),
+        pushes: pushTargets.map((target) => {
+          const preview = pushPreviews.get(target.id);
+          return {
+            id: target.id,
+            kind: target.kind,
+            at: coordinate(target.position),
+            canMove: target.canMove,
+            ability: preview?.ability ?? null,
+            destination: preview ? coordinate(preview.destination) : null,
+            distance: preview?.distance ?? 0,
+            collision: preview?.collided ?? false,
+            collisionDamage: preview?.collisionDamage ?? 0,
+          };
+        }),
       },
       vault: { hp: game.vault.hp, maxHp: game.vault.maxHp, at: coordinate(game.vault.position) },
       mastery: liveMissionMasteries(game).map((mastery) => ({
@@ -1582,7 +1676,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, battleMenuOpen, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackTargets, battleMenuOpen, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushPreviews, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");

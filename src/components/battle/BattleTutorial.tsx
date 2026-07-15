@@ -340,7 +340,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "push-move-to-collision": {
     title: "Use the terrain",
     prompt: "Move beside the highlighted Rugger.",
-    body: "Blocked enemies can be slammed into fixed Blast Barricades or the edge of the board.",
+    body: "Direction does not matter: an enemy collides when its next attempted tile is a Blast Barricade, Data Block, unit, Vault or board edge.",
     awaiting: "Click the highlighted tile",
     icon: "move",
   },
@@ -354,7 +354,7 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   "push-collision": {
     title: "Create the collision",
     prompt: "Shove the highlighted Rugger.",
-    body: "Blocked enemies take 1. One-use Batter Up pushes up to two tiles and deals 2 on collision.",
+    body: "The CRASH preview means −1 HP now. A free Shove deals 0. One-use Batter Up attempts two tiles and deals −2 if either is blocked.",
     awaiting: "Click the highlighted enemy",
     icon: "push",
   },

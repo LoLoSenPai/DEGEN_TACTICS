@@ -519,6 +519,94 @@ describe("pushes, objects, and collision damage", () => {
     ).toMatchObject({ hasActed: true, signatureAvailable: false });
   });
 
+  it("applies Shove collision damage against a Data Block in all four directions", () => {
+    const scenarios = [
+      { name: "north", pusher: at(3, 4), enemy: at(3, 3), block: at(3, 2) },
+      { name: "east", pusher: at(2, 3), enemy: at(3, 3), block: at(4, 3) },
+      { name: "south", pusher: at(3, 2), enemy: at(3, 3), block: at(3, 4) },
+      { name: "west", pusher: at(4, 3), enemy: at(3, 3), block: at(2, 3) },
+    ];
+
+    for (const scenario of scenarios) {
+      const initial = createInitialGameState();
+      const state: GameState = {
+        ...initial,
+        obstacles: [],
+        vault: { ...initial.vault, position: at(6, 6) },
+        units: initial.units
+          .filter((unit) => unit.id === "pusher")
+          .map((unit) => ({ ...unit, position: scenario.pusher })),
+        enemies: initial.enemies
+          .filter((enemy) => enemy.id === "rugger-east")
+          .map((enemy) => ({ ...enemy, position: scenario.enemy })),
+        objects: initial.objects.map((object) => ({ ...object, position: scenario.block })),
+      };
+      const transition = pushTarget(state, "pusher", "rugger-east", "shove");
+
+      expect(transition.state.enemies[0], scenario.name).toMatchObject({
+        position: scenario.enemy,
+        hp: 5,
+      });
+      expect(transition.events, scenario.name).toContainEqual({
+        type: "collision",
+        sourceId: "pusher",
+        targetId: "rugger-east",
+        targetKind: "enemy",
+        damage: 1,
+        ability: "shove",
+      });
+      expect(transition.events.some((event) => event.type === "target-pushed"), scenario.name).toBe(false);
+    }
+  });
+
+  it("moves once without damage when a Shove does not attempt the blocked second tile", () => {
+    const initial = createInitialGameState();
+    const state: GameState = {
+      ...initial,
+      obstacles: [],
+      vault: { ...initial.vault, position: at(6, 6) },
+      units: initial.units
+        .filter((unit) => unit.id === "pusher")
+        .map((unit) => ({ ...unit, position: at(1, 3) })),
+      enemies: initial.enemies
+        .filter((enemy) => enemy.id === "rugger-east")
+        .map((enemy) => ({ ...enemy, position: at(2, 3) })),
+      objects: initial.objects.map((object) => ({ ...object, position: at(4, 3) })),
+    };
+    const transition = pushTarget(state, "pusher", "rugger-east", "shove");
+
+    expect(transition.state.enemies[0]).toMatchObject({ position: at(3, 3), hp: 6 });
+    expect(transition.events).toContainEqual(expect.objectContaining({
+      type: "target-pushed",
+      distance: 1,
+      ability: "shove",
+    }));
+    expect(transition.events.some((event) => event.type === "collision")).toBe(false);
+  });
+
+  it("moves one tile then deals 2 when Batter Up reaches a blocker on its second tile", () => {
+    const initial = createInitialGameState();
+    const state: GameState = {
+      ...initial,
+      obstacles: [],
+      vault: { ...initial.vault, position: at(6, 6) },
+      units: initial.units
+        .filter((unit) => unit.id === "pusher")
+        .map((unit) => ({ ...unit, position: at(1, 3) })),
+      enemies: initial.enemies
+        .filter((enemy) => enemy.id === "rugger-east")
+        .map((enemy) => ({ ...enemy, position: at(2, 3) })),
+      objects: initial.objects.map((object) => ({ ...object, position: at(4, 3) })),
+    };
+    const transition = pushTarget(state, "pusher", "rugger-east", "batter-up");
+
+    expect(transition.state.enemies[0]).toMatchObject({ position: at(3, 3), hp: 4 });
+    expect(transition.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "target-pushed", distance: 1, ability: "batter-up" }),
+      expect.objectContaining({ type: "collision", damage: 2, ability: "batter-up" }),
+    ]));
+  });
+
   it("never damages an object or blocker on a failed object push", () => {
     let state = updateUnit(createInitialGameState(), "pusher", {
       position: at(4, 5),

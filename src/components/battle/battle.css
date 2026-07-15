@@ -420,6 +420,63 @@
   box-shadow: inset 0 0 0 2px rgba(255, 215, 102, 0.25), 0 0 16px rgba(226, 169, 46, 0.3);
 }
 
+.game-push-preview {
+  position: absolute;
+  z-index: 96;
+  bottom: 3%;
+  left: 50%;
+  display: grid;
+  min-width: 76%;
+  transform: translateX(-50%);
+  border: 2px solid #f1be4e;
+  padding: 3px 5px 2px;
+  color: #fff4c9;
+  background: rgba(38, 26, 4, 0.96);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 10px rgba(234, 178, 49, 0.48);
+  font-family: var(--game-font-body);
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.game-push-preview strong {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.game-push-preview small {
+  margin-top: 2px;
+  color: #f1ca6d;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.game-push-preview.is-collision {
+  border-color: #ff6b45;
+  color: #fff1d1;
+  background: rgba(69, 16, 7, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 14px rgba(255, 80, 38, 0.7);
+}
+
+.game-push-preview.is-collision small {
+  color: #ffb34e;
+  font-size: 9px;
+}
+
+.game-push-preview.is-jammed {
+  border-color: #9aa3a6;
+  color: #e7ebea;
+  background: rgba(25, 29, 29, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72);
+}
+
+.game-push-preview.is-jammed small {
+  color: #b2bcbe;
+}
+
 .game-tile.is-selected {
   z-index: 22;
   border: 3px solid #f3bd45;
@@ -947,10 +1004,10 @@
 .piece-shield-aura {
   position: absolute;
   z-index: 3;
-  right: 7%;
-  bottom: 7%;
-  width: 86%;
-  height: 86%;
+  right: -9%;
+  bottom: -9%;
+  width: 118%;
+  height: 118%;
   border: 3px solid rgba(96, 224, 255, 0.7);
   border-radius: 50%;
   background: radial-gradient(circle, transparent 48%, rgba(71, 209, 244, 0.14) 68%, transparent 72%);
@@ -1007,6 +1064,22 @@
   text-shadow: 2px 2px 0 #050708, 0 0 9px rgba(241, 83, 76, 0.7);
   pointer-events: none;
   animation: damage-float 680ms ease-out both;
+}
+
+.game-damage-popup.is-collision {
+  top: -15%;
+  color: #ffd260;
+  font-size: 30px;
+  text-shadow: 2px 2px 0 #050708, 0 0 12px rgba(255, 129, 43, 0.9);
+}
+
+.game-damage-popup.is-collision::before {
+  display: block;
+  margin-bottom: 2px;
+  color: #fff1bd;
+  content: "COLLISION";
+  font: 900 10px/1 var(--game-font-body);
+  letter-spacing: 0.08em;
 }
 
 .game-block-popup,
