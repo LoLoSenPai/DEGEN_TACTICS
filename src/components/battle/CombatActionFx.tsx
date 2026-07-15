@@ -158,7 +158,6 @@ export function CombatActionFx({ game, cue }: { game: GameState; cue: CombatCue 
           <path className={styles.shieldAuraOuter} d={hexagonPath(sourcePoint, metrics.markerRadius * 6.15)} />
           <path className={styles.shieldAuraMiddle} d={hexagonPath(sourcePoint, metrics.markerRadius * 3.25)} />
           <path className={styles.shieldCore} d={hexagonPath(sourcePoint, metrics.markerRadius * 1.42)} />
-          <path className={styles.shieldMark} d={`M ${sourcePoint.x - metrics.markerRadius * 0.52} ${sourcePoint.y - metrics.markerRadius * 0.2} L ${sourcePoint.x} ${sourcePoint.y + metrics.markerRadius * 0.62} L ${sourcePoint.x + metrics.markerRadius * 0.52} ${sourcePoint.y - metrics.markerRadius * 0.2} L ${sourcePoint.x + metrics.markerRadius * 0.43} ${sourcePoint.y - metrics.markerRadius * 0.74} L ${sourcePoint.x} ${sourcePoint.y - metrics.markerRadius * 0.94} L ${sourcePoint.x - metrics.markerRadius * 0.43} ${sourcePoint.y - metrics.markerRadius * 0.74} Z`} />
         </g>
       ) : null}
       {(isShove || isBatterUp) && sourcePoint && targetPoint ? (

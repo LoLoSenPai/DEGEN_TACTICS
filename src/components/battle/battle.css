@@ -863,10 +863,19 @@
 }
 
 .object-piece .board-sprite {
-  right: 0.8%;
-  bottom: 1.6%;
-  width: 98.2%;
-  height: 98.2%;
+  top: 6%;
+  right: 6%;
+  bottom: auto;
+  left: 6%;
+  width: 88%;
+  height: 88%;
+}
+
+.game-piece.object-piece .piece-base {
+  right: 18%;
+  bottom: 27%;
+  width: 64%;
+  height: 18%;
 }
 
 .game-prop {
@@ -877,9 +886,9 @@
 }
 
 .obstacle-prop {
-  top: 2%;
+  top: -2%;
   right: 5%;
-  bottom: 5%;
+  bottom: auto;
   left: 5%;
   width: 90%;
   height: 93%;
@@ -2920,77 +2929,4 @@
     display: none;
   }
 
-  .game-combat-vfx {
-    display: grid;
-    inset: 9%;
-    place-items: center;
-    border: 4px solid #f4f0df;
-    border-radius: 50%;
-    opacity: 0.9;
-    background: rgb(244 240 223 / 14%);
-    box-shadow: 0 0 0 5px rgb(4 8 10 / 78%);
-  }
-
-  .game-combat-vfx img {
-    display: none;
-  }
-
-  .game-combat-vfx::before {
-    width: 42%;
-    aspect-ratio: 1;
-    border: 4px solid currentColor;
-    content: "";
-    transform: rotate(45deg);
-  }
-
-  .game-combat-vfx.is-heavy {
-    inset: 2%;
-    border-width: 7px;
-    color: #ffd260;
-  }
-
-  .game-combat-vfx.is-shield {
-    inset: 7%;
-    color: #62f4df;
-    border-color: currentColor;
-    background: rgb(45 216 194 / 18%);
-    filter: none;
-  }
-
-  .game-combat-vfx.is-shield::before {
-    border-radius: 50% 50% 56% 56%;
-  }
-
-  .game-combat-vfx.is-stagger {
-    inset: 12% 12% 24%;
-    color: #ffd05c;
-    border-color: currentColor;
-    background: rgb(255 196 59 / 16%);
-    filter: none;
-  }
-
-  .game-combat-vfx.is-breach-spawn {
-    z-index: 8;
-    inset: 3%;
-    color: #ce6aff;
-    border-color: #ff6275;
-    border-style: dashed;
-    background: rgb(157 48 224 / 20%);
-    filter: none;
-    transform: scaleY(0.72);
-  }
-
-  .game-combat-vfx.is-breach-spawn::before {
-    border-color: #ce6aff;
-    border-radius: 50%;
-    transform: none;
-  }
-
-  .game-combat-vfx.is-death {
-    inset: 12%;
-    color: #ca72ff;
-    border-style: dashed;
-    opacity: 0.72;
-    filter: grayscale(0.35);
-  }
 }

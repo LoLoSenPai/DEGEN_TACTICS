@@ -211,3 +211,11 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Raised medal, score-breakdown and progression typography on desktop and phone results, with a shorter Charge Broken description to avoid truncation at 1280×720.
 - Visual QA inspected the mission intro, battle, new terrain, Shield absorption, Whale spawn/stagger in normal and reduced motion, hero KO, deliberate defeat, canonical 1,475-point S victory, 1024×768 board, 390×844 battle notice, and responsive results. Captured console/page errors remained empty.
 - Final code gates for this milestone pass: ESLint with zero warnings, strict TypeScript, all 65 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build. TODO: build the separate Data Extraction mission only after this revised replay/mastery loop receives a novice playtest; defer enemy SpriteCook batches until the art direction is stable.
+
+## 2026-07-15 — Reduced-motion VFX cleanup and prop registration
+
+- Removed the generic circle-and-diamond impact fallback that Windows `prefers-reduced-motion` was applying to every combat effect. Short semantic raster effects now remain visible in reduced-motion mode, while decorative camera and ambient motion stay suppressed.
+- Removed the redundant central Shield Wall emblem so the cast reads as one specific expanding protection field rather than another repeated lozenge icon.
+- Gave neutral board props their own registration: the movable Data Block is centered within its tile with its gold footprint raised beneath it, and fixed Blast Barricades are optically centered independently of character foot anchors.
+- Replayed reduced-motion Pusher impact, Shield absorption, Whale breach and Whale stagger beats. The authored GIFs remain displayed, the old pseudo-element fallback has no generated content, and no console/page errors were captured. The bundled web-game client battle capture and the Shield Wall/basic attack/Batter Up suite were also visually inspected.
+- Final gates pass: ESLint with zero warnings, strict TypeScript, all 65 Vitest cases, and the optimized Next.js 15.5.12 production build.

@@ -235,8 +235,7 @@
 
 .shieldAuraOuter,
 .shieldAuraMiddle,
-.shieldCore,
-.shieldMark {
+.shieldCore {
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -265,15 +264,6 @@
   stroke-width: 10;
   filter: drop-shadow(0 0 13px #3de7d2);
   animation: shield-core-lock 430ms cubic-bezier(0.16, 0.84, 0.32, 1) 100ms both;
-}
-
-.shieldMark {
-  fill: rgb(13 35 38 / 80%);
-  stroke: #d9fff9;
-  stroke-linejoin: bevel;
-  stroke-width: 6;
-  filter: drop-shadow(0 0 8px #35e1cd);
-  animation: shield-mark 420ms ease-out 150ms both;
 }
 
 .generic { color: #f4f0df; }
@@ -382,12 +372,6 @@
   to { opacity: 0.95; transform: scale(1); }
 }
 
-@keyframes shield-mark {
-  from { opacity: 0; transform: scale(0.35); }
-  65% { opacity: 1; transform: scale(1.15); }
-  to { opacity: 0.95; transform: scale(1); }
-}
-
 @keyframes drain-flow {
   to { stroke-dashoffset: 52; }
 }
@@ -434,8 +418,7 @@
   .batterImpact,
   .shieldAuraOuter,
   .shieldAuraMiddle,
-  .shieldCore,
-  .shieldMark {
+  .shieldCore {
     animation: none;
     opacity: 1;
     transform: none;
