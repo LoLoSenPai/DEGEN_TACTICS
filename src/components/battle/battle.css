@@ -349,6 +349,31 @@
   background-color: transparent;
 }
 
+.cargo-extraction-route {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 0.08px #120c02) drop-shadow(0 0 0.12px rgba(245, 185, 55, 0.7));
+}
+
+.cargo-extraction-route polyline {
+  fill: none;
+  stroke: rgba(246, 190, 61, 0.68);
+  stroke-width: 0.075;
+  stroke-dasharray: 0.16 0.12;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: cargo-route-flow 1.3s linear infinite;
+}
+
+.cargo-extraction-route marker path {
+  fill: #ffd260;
+}
+
 .game-tile {
   position: relative;
   min-width: 0;
@@ -394,6 +419,29 @@
   border-color: #713bb0;
   background-color: rgba(64, 28, 88, 0.34);
   box-shadow: inset 0 0 0 2px rgba(167, 92, 244, 0.18);
+}
+
+.game-tile.is-extraction-zone {
+  border: 3px solid #e6ac33;
+  background-color: rgba(89, 57, 9, 0.34);
+  box-shadow: inset 0 0 0 3px rgba(255, 216, 93, 0.16), 0 0 16px rgba(230, 172, 51, 0.25);
+}
+
+.game-tile.is-extraction-zone::before {
+  position: absolute;
+  z-index: 5;
+  inset: 7%;
+  border: 2px dashed rgba(255, 220, 105, 0.78);
+  content: "";
+  pointer-events: none;
+  clip-path: polygon(13% 0, 87% 0, 100% 13%, 100% 87%, 87% 100%, 13% 100%, 0 87%, 0 13%);
+  animation: extraction-zone-pulse 1.4s ease-in-out infinite;
+}
+
+.game-tile.is-extraction-zone.is-extraction-complete {
+  border-color: #61f1d5;
+  background-color: rgba(20, 119, 100, 0.54);
+  box-shadow: inset 0 0 0 3px rgba(97, 241, 213, 0.26), 0 0 30px rgba(68, 232, 201, 0.72);
 }
 
 .game-tile.is-breach {
@@ -475,6 +523,18 @@
 
 .game-push-preview.is-jammed small {
   color: #b2bcbe;
+}
+
+.game-push-preview.is-delivery {
+  border-color: #67efd7;
+  color: #e9fff9;
+  background: rgba(5, 58, 49, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 18px rgba(78, 235, 208, 0.66);
+}
+
+.game-push-preview.is-delivery small {
+  color: #77f5de;
+  font-size: 8px;
 }
 
 .game-tile.is-selected {
@@ -1052,6 +1112,44 @@
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.extraction-zone-marker {
+  position: absolute;
+  z-index: 6;
+  right: 7%;
+  bottom: 6%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #ffd260;
+  text-shadow: 1px 1px 0 #0a0803;
+  pointer-events: none;
+}
+
+.extraction-zone-marker svg {
+  width: 15px;
+  height: 15px;
+}
+
+.extraction-zone-marker small {
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.is-extraction-complete .extraction-zone-marker {
+  color: #79f8df;
+}
+
+@keyframes cargo-route-flow {
+  to { stroke-dashoffset: -0.28; }
+}
+
+@keyframes extraction-zone-pulse {
+  0%, 100% { opacity: 0.58; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .game-damage-popup {
@@ -2332,6 +2430,35 @@
   text-transform: uppercase;
 }
 
+.mission-intro-rule {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 15px;
+  border: 1px solid rgba(233, 177, 62, 0.58);
+  padding: 8px 13px;
+  color: #fff2c5;
+  background: rgba(39, 27, 5, 0.72);
+  font-size: clamp(12px, 1.25vw, 16px);
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.mission-intro-rule > svg {
+  width: 20px;
+  height: 20px;
+  color: #f0ba48;
+}
+
+.mission-intro .mission-intro-rule > span {
+  border-left: 1px solid rgba(240, 186, 72, 0.45);
+  padding-left: 9px;
+  color: #f0ba48;
+  font-size: 0.85em;
+  letter-spacing: 0.06em;
+}
+
 .intro-masteries {
   width: min(730px, 76vw);
   margin-top: 24px;
@@ -2955,6 +3082,8 @@
   .game-piece.ally-piece .player-spritecook.board-sprite,
   .game-piece.vault-piece .board-sprite,
   .game-piece.object-piece .board-sprite,
+  .cargo-extraction-route polyline,
+  .game-tile.is-extraction-zone::before,
   .game-piece.is-active .piece-base,
   .game-tile.is-danger,
   .game-damage-popup,

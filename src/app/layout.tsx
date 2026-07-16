@@ -19,7 +19,7 @@ const bodyFont = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: "Degen Tactics",
-  description: "Every move counts. Protect the Vault in a deterministic tactical puzzle.",
+  description: "Every move counts. Command a squad through deterministic tactical operations.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

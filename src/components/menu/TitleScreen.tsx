@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowsOut,
   BookOpen,
+  CardsThree,
   GameController,
   GearSix,
   Play,
@@ -15,11 +16,13 @@ import {
 } from "@phosphor-icons/react";
 import { useGameStore } from "@/store/gameStore";
 import { preloadPlayerSpriteSheets } from "@/components/battle/playerSpriteSheets";
+import { getBattleHref, getNextOperationId, getOperationMetadata } from "@/lib/game";
 
 export function TitleScreen() {
   const router = useRouter();
   const hydrated = useGameStore((state) => state.hydrated);
   const trainingCompleted = useGameStore((state) => state.settings.trainingCompleted);
+  const completedMissionIds = useGameStore((state) => state.completedMissionIds);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [launchWarningOpen, setLaunchWarningOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -28,9 +31,13 @@ export function TitleScreen() {
     void preloadPlayerSpriteSheets();
   }, []);
 
+  const nextOperationId = getNextOperationId(completedMissionIds);
+  const nextOperation = getOperationMetadata(nextOperationId);
+  const hasCompletedOperation = completedMissionIds.length > 0;
+
   const startMission = () => {
     setLaunchWarningOpen(false);
-    router.push("/battle/protect-the-vault?intro=1&mission=protect-the-vault");
+    router.push(getBattleHref(nextOperationId));
   };
 
   const play = () => {
@@ -48,9 +55,9 @@ export function TitleScreen() {
       setLaunchWarningOpen(true);
       window.history.replaceState({}, "", "/");
     } else {
-      router.replace("/battle/protect-the-vault?intro=1&mission=protect-the-vault");
+      router.replace(getBattleHref(nextOperationId));
     }
-  }, [hydrated, router, trainingCompleted]);
+  }, [hydrated, nextOperationId, router, trainingCompleted]);
 
   useEffect(() => {
     if (!optionsOpen && !launchWarningOpen) return;
@@ -86,7 +93,11 @@ export function TitleScreen() {
         <div className="title-actions">
           <button type="button" className="title-button title-button-primary" onClick={play} disabled={!hydrated}>
             <Play weight="fill" aria-hidden="true" />
-            <span>{hydrated ? "Play as Guest" : "Loading…"}<small>Protect the Vault</small></span>
+            <span>{hydrated ? (hasCompletedOperation ? "Continue" : "Play as Guest") : "Loading…"}<small>{nextOperation?.title ?? "Protect the Vault"}</small></span>
+          </button>
+          <button type="button" className="title-button title-button-operations" onClick={() => router.push("/operations")} disabled={!hydrated}>
+            <CardsThree weight="fill" aria-hidden="true" />
+            <span>Operations <small>{hydrated ? `${completedMissionIds.length} / 2 cleared` : "Loading…"}</small></span>
           </button>
           <button type="button" className="title-button title-button-training" onClick={() => router.push("/training")} disabled={!hydrated}>
             <BookOpen weight="fill" aria-hidden="true" />
@@ -161,7 +172,7 @@ export function TitleScreen() {
             </div>
             <div className="launch-warning-actions">
               <button type="button" className="launch-continue" onClick={() => router.push("/training")} autoFocus>Continue training</button>
-              <button type="button" className="launch-anyway" onClick={startMission}>Play mission anyway</button>
+              <button type="button" className="launch-anyway" onClick={startMission}>Deploy anyway</button>
               <button type="button" className="launch-cancel" onClick={() => setLaunchWarningOpen(false)}>Cancel</button>
             </div>
           </section>

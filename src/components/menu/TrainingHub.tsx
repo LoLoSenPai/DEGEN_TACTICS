@@ -11,7 +11,7 @@ import {
   LockKey,
   Play,
 } from "@phosphor-icons/react";
-import { TRAINING_LESSONS, type TrainingMissionId } from "@/lib/game";
+import { getBattleHref, TRAINING_LESSONS, type TrainingMissionId } from "@/lib/game";
 import { useGameStore } from "@/store/gameStore";
 
 type ChapterDetail = {
@@ -48,7 +48,7 @@ export function TrainingHub() {
   const completed = useGameStore((state) => state.settings.trainingCompleted);
 
   const launchChapter = (missionId: TrainingMissionId) => {
-    router.push(`/battle/protect-the-vault?mission=${missionId}`);
+    router.push(getBattleHref(missionId));
   };
 
   return (

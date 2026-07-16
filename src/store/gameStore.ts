@@ -13,6 +13,7 @@ import {
   getMovementPath,
   getPlayerMovementPresentationDuration,
   getMissionDefinition,
+  isMissionId,
   isTrainingMissionId,
   moveUnit,
   pushTarget,
@@ -111,6 +112,7 @@ interface GameStore {
   turnBanner: string | null;
   profile: PlayerIdentity;
   bestScores: Record<string, number>;
+  completedMissionIds: string[];
   lastResult: MissionResult | null;
   settings: PersistentSettings;
   hydrated: boolean;
@@ -181,10 +183,17 @@ function isMissionResult(value: unknown): value is MissionResult {
     score.survivingUnits,
     score.flawlessSquad,
     score.untouchedVault,
+    score.tempo,
     score.lostUnits,
     score.total,
   ];
-  const medalIds = new Set(["vault-untouched", "full-squad", "charge-broken"]);
+  const medalIds = new Set([
+    "vault-untouched",
+    "full-squad",
+    "charge-broken",
+    "express-transfer",
+    "rig-untouched",
+  ]);
   const validMedals = Array.isArray(result.medals)
     && result.medals.length === 3
     && result.medals.every((medal) =>
@@ -195,10 +204,16 @@ function isMissionResult(value: unknown): value is MissionResult {
       && typeof medal.description === "string"
       && typeof medal.earned === "boolean",
     )
-    && new Set(result.medals.map((medal) => medal.id)).size === medalIds.size;
+    && new Set(result.medals.map((medal) => medal.id)).size === result.medals.length;
   return typeof result.missionId === "string"
     && (result.outcome === "victory" || result.outcome === "defeat")
-    && (result.reason === "vault-destroyed" || result.reason === "squad-eliminated" || result.reason === "survived-five-turns")
+    && (
+      result.reason === "vault-destroyed"
+      || result.reason === "squad-eliminated"
+      || result.reason === "survived-five-turns"
+      || result.reason === "data-extracted"
+      || result.reason === "extraction-timeout"
+    )
     && scoreValues.every(isFiniteNumber)
     && (score.rank === "S" || score.rank === "A" || score.rank === "B" || score.rank === "C")
     && isFiniteNumber(result.vaultHp)
@@ -210,6 +225,50 @@ function isMissionResult(value: unknown): value is MissionResult {
     && isFiniteNumber(result.xpPreview)
     && typeof result.completed === "boolean"
     && validMedals;
+}
+
+function terminalBannerFor(state: GameState, training: boolean): string {
+  if (training) return state.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN";
+  if (state.phase === "defeat") return state.outcomeReason === "extraction-timeout"
+    ? "EXTRACTION FAILED"
+    : "MISSION FAILED";
+  return state.outcomeReason === "data-extracted" ? "PACKAGE RECOVERED" : "VAULT SECURED";
+}
+
+function terminalProgress(
+  state: GameState,
+  bestScores: Record<string, number>,
+  completedMissionIds: readonly string[],
+  previousResult: MissionResult | null,
+): {
+  result: MissionResult | null;
+  bestScores: Record<string, number>;
+  completedMissionIds: string[];
+} {
+  const terminal = state.phase === "victory" || state.phase === "defeat";
+  if (!terminal || isTrainingMissionId(state.missionId)) {
+    return {
+      result: previousResult,
+      bestScores,
+      completedMissionIds: [...completedMissionIds],
+    };
+  }
+
+  const result = createMissionResult(state, state.phase);
+  if (!result.completed) {
+    return { result, bestScores, completedMissionIds: [...completedMissionIds] };
+  }
+
+  return {
+    result,
+    bestScores: {
+      ...bestScores,
+      [result.missionId]: Math.max(bestScores[result.missionId] ?? 0, result.score.total),
+    },
+    completedMissionIds: completedMissionIds.includes(result.missionId)
+      ? [...completedMissionIds]
+      : [...completedMissionIds, result.missionId],
+  };
 }
 
 function coord(position: Position) {
@@ -285,12 +344,22 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
       tone = "warning";
       text = `${event.enemyId.toUpperCase()} entered at ${coord(event.position)}.`;
       break;
+    case "object-extracted":
+      tone = "reward";
+      text = `${event.objectId.toUpperCase()} delivered to ${coord(event.position)}. Package recovered.`;
+      break;
     case "turn-started":
-      text = `Player phase ${event.turn} / 5 started.`;
+      text = `Player phase ${event.turn} started.`;
       break;
     case "mission-ended":
       tone = event.outcome === "victory" ? "reward" : "warning";
-      text = event.outcome === "victory" ? "Fracture window survived. Vault secured." : "Mission integrity lost.";
+      text = event.reason === "data-extracted"
+        ? "Package recovered. Extraction complete."
+        : event.reason === "extraction-timeout"
+          ? "Extraction window closed before delivery."
+          : event.outcome === "victory"
+            ? "Fracture window survived. Vault secured."
+            : "Mission integrity lost.";
       break;
   }
 
@@ -472,6 +541,7 @@ export const useGameStore = create<GameStore>()(
       turnBanner: null,
       profile: initialProfile,
       bestScores: {},
+      completedMissionIds: [],
       lastResult: null,
       settings: { soundMuted: true, tutorialComplete: false, trainingCompleted: 0 },
       hydrated: false,
@@ -730,6 +800,14 @@ export const useGameStore = create<GameStore>()(
 
         const finishPushPlayback = () => {
           if (generation !== sessionGeneration) return;
+          const terminal = transition.state.phase === "victory" || transition.state.phase === "defeat";
+          const training = isTrainingMissionId(transition.state.missionId);
+          const progress = terminalProgress(
+            transition.state,
+            get().bestScores,
+            get().completedMissionIds,
+            get().lastResult,
+          );
           set({
             game: transition.state,
             enemyPlan: planFor(transition.state),
@@ -740,7 +818,17 @@ export const useGameStore = create<GameStore>()(
             playbackIndex: beats.length,
             queueRemaining: 0,
             lastEvents: transition.events,
+            turnBanner: terminal ? terminalBannerFor(transition.state, training) : get().turnBanner,
+            lastResult: progress.result,
+            bestScores: progress.bestScores,
+            completedMissionIds: progress.completedMissionIds,
           });
+          if (terminal) {
+            bannerTimer = window.setTimeout(() => {
+              if (generation === sessionGeneration) set({ turnBanner: null });
+              bannerTimer = null;
+            }, 1000);
+          }
         };
 
         const playPushBeat = (index: number) => {
@@ -868,18 +956,12 @@ export const useGameStore = create<GameStore>()(
             if (generation !== sessionGeneration) return;
             const terminal = nextState.phase === "victory" || nextState.phase === "defeat";
             const training = isTrainingMissionId(nextState.missionId);
-            let result = get().lastResult;
-            let bestScores = get().bestScores;
-
-            if (terminal && !training) {
-              result = createMissionResult(nextState, nextState.phase);
-              if (result.completed) {
-                bestScores = {
-                  ...bestScores,
-                  [result.missionId]: Math.max(bestScores[result.missionId] ?? 0, result.score.total),
-                };
-              }
-            }
+            const progress = terminalProgress(
+              nextState,
+              get().bestScores,
+              get().completedMissionIds,
+              get().lastResult,
+            );
 
             set({
               game: nextState,
@@ -888,12 +970,13 @@ export const useGameStore = create<GameStore>()(
               combatCue: null,
               playbackIndex: beats.length,
               queueRemaining: 0,
-              turnBanner: terminal ? (training ? (nextState.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN") : nextState.phase === "victory" ? "VAULT SECURED" : "MISSION FAILED") : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
+              turnBanner: terminal ? terminalBannerFor(nextState, training) : `PLAYER PHASE // ${String(nextState.turn).padStart(2, "0")}`,
               log: appendEvents(get().log, transition.events, game.turn),
               effects: [],
               lastEvents: transition.events,
-              lastResult: result,
-              bestScores,
+              lastResult: progress.result,
+              bestScores: progress.bestScores,
+              completedMissionIds: progress.completedMissionIds,
             });
             bannerTimer = window.setTimeout(() => {
               if (generation === sessionGeneration) set({ turnBanner: null });
@@ -962,6 +1045,7 @@ export const useGameStore = create<GameStore>()(
       partialize: (state) => ({
         profile: state.profile,
         bestScores: state.bestScores,
+        completedMissionIds: state.completedMissionIds,
         lastResult: state.lastResult,
         settings: state.settings,
       }),
@@ -982,11 +1066,33 @@ export const useGameStore = create<GameStore>()(
           && !Array.isArray(persisted.bestScores)
           && Object.values(persisted.bestScores).every((score) => typeof score === "number" && Number.isFinite(score) && score >= 0),
         );
+        const safeScores = validScores
+          ? Object.fromEntries(
+              Object.entries(persisted.bestScores!).filter(
+                ([missionId]) => isMissionId(missionId) && !isTrainingMissionId(missionId),
+              ),
+            )
+          : currentState.bestScores;
+        const persistedCompleted = Array.isArray(persisted.completedMissionIds)
+          ? persisted.completedMissionIds.filter(
+              (missionId): missionId is string =>
+                typeof missionId === "string"
+                && isMissionId(missionId)
+                && !isTrainingMissionId(missionId),
+            )
+          : [];
+        const completedMissionIds = Array.from(new Set([
+          ...persistedCompleted,
+          ...Object.entries(safeScores)
+            .filter(([, score]) => score > 0)
+            .map(([missionId]) => missionId),
+        ]));
         const validResult = persisted.lastResult == null || isMissionResult(persisted.lastResult);
         return {
           ...currentState,
           profile: validProfile ? persisted.profile! : currentState.profile,
-          bestScores: validScores ? persisted.bestScores! : currentState.bestScores,
+          bestScores: safeScores,
+          completedMissionIds,
           lastResult: validResult ? (persisted.lastResult ?? null) : null,
           settings: {
             soundMuted: typeof persistedSettings?.soundMuted === "boolean"

@@ -6,65 +6,85 @@
 - Tailwind CSS 4 through `@tailwindcss/postcss`, with canonical CSS variables in `src/styles/tokens.css`.
 - Zustand 5 for the client command/state layer and `clsx` for conditional classes.
 - Vitest 4 for pure game and persistence tests.
-- A semantic 7×7 DOM grid; no canvas, Phaser, database, RPC, or wallet runtime.
+- A semantic 7x7 DOM grid; no canvas engine, Phaser, database, RPC, or wallet runtime.
 
-The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`.
+The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current suite contains 80 deterministic tests.
+
+## Current product surface
+
+The active product flow is intentionally game-first:
+
+```text
+Title
+  |-- Continue / Play as Guest --> dynamic Battle --> Results
+  |-- Operations ---------------> dynamic Battle --> Results
+  `-- Field Training -----------> training Battle --> Training
+```
+
+There is no required HQ, campaign map, or loadout step. The old mission and loadout URLs remain only as redirects so saved links do not strand the player.
+
+| Route | Lifecycle behavior |
+| --- | --- |
+| `/` | Hydrates local progress, shows the title menu, and deploys to the next operation |
+| `/operations` | Shows Protect the Vault and Data Extraction, including lock, completion, and best score state |
+| `/training` | Shows three optional chapters and their local completion state |
+| `/battle/[missionId]` | Validates the registry ID, starts that mission fresh, mounts controls/serializer, and rejects a locked operation |
+| `/battle/protect-the-vault` | Legacy-compatible battle entry |
+| `/results` | Reads `lastResult`, renders operation-specific scoring/medals, retries the same mission, or continues to the next unlocked operation |
+| `/missions`, `/loadout/protect-the-vault` | Redirect to `/operations` |
+
+`getBattleHref(missionId)` is the single route builder. Battle presentation and results resolve mission copy through operation metadata rather than branching on a page pathname.
 
 ## System boundaries
 
 ```text
 Route/component event
-        │
-        ▼
-Zustand command layer ──────► UI-only selection / action mode
-        │
-        ▼
+        |
+        v
+Zustand command layer ------> UI-only selection / action mode
+        |
+        v
 Pure game command(state, input)
-        │
-        ├────────► next immutable GameState
-        └────────► ordered GameEvent[]
-                         │
-                         ▼
+        |------> next immutable GameState
+        `------> ordered GameEvent[]
+                         |
+                         v
                   animation + combat log
 ```
 
-- `src/app` owns route entry points and page composition.
-- `src/components` owns rendering and interaction grouped by layout, menu, missions, loadout, battle, and results.
-- `src/lib/game` owns types, authored mission definitions, pathfinding, combat, pushes, enemy planning/resolution, scoring, selectors, and storage validation.
-- `src/store` owns the active client session, UI modes, commands, event playback queue, and the small persisted profile/result slice.
-- `src/lib/solana` is documentation-only in the MVP and defines a future integration boundary.
+- `src/app` owns Title, Operations, Training, dynamic Battle, and Results route composition.
+- `src/components` owns menu, tutorial, battlefield, animation, and result presentation.
+- `src/lib/game` owns types, the mission registry, pathfinding, combat, pushes, objective checks, enemy planning/resolution, scoring, mastery, and storage validation.
+- `src/store` owns the active client session, UI modes, commands, event playback, and the small persisted profile/result/progression slice.
+- `src/lib/solana` is documentation-only and defines a future integration boundary.
 
-Game rules must never depend on React, the router, DOM APIs, animation timing, LocalStorage, or wall-clock time.
-
-## Route lifecycle
-
-| Route | Lifecycle behavior |
-| --- | --- |
-| `/` | Reads the hydrated local profile/best score and renders HQ; all future actions explain their disabled state |
-| `/missions` | Renders the authored chapter path and routes the playable node to its briefing |
-| `/loadout/protect-the-vault` | Shows the fixed squad and calls `startMission` before routing to battle |
-| `/battle/protect-the-vault` | Ensures direct navigation receives a fresh mission, mounts keyboard controls and the text serializer, and locks commands during enemy playback |
-| `/results` | Reads `lastResult`; redirects to missions when absent; Retry resets before opening battle |
-
-HQ, missions, briefing, and results are server-safe shells with client islands only where persistence or interaction requires them. Battle is client-driven because the entire session is transient.
+Game rules never depend on React, the router, DOM APIs, animation timing, LocalStorage, or wall-clock time.
 
 ## Domain model
 
-The engine models immutable values for:
+`MissionDefinition` and `GameState` carry a discriminated objective union:
 
-- `MissionDefinition`: board dimensions, terrain, starting entities, initiative, turn limit, and scripted breach/Whale events.
-- `GameState`: mission ID, phase, turn, turns survived, entities, ability charges, damage history, and outcome. The current exact plan is stored beside it in the client command layer so End Turn can snapshot it explicitly.
-- `Tile` and coordinates: board/terrain data without component styling.
-- `PlayerUnit`, `Enemy`, `PushableObject`, and `Vault`: stable IDs, position, health/status, and per-turn activation data.
-- `EnemyIntent` and `EnemyTurnPlan`: the exact ordered future resolution.
-- `GameEvent`: presentation-neutral facts emitted by a transition.
-- `MissionResult` and `ScoreBreakdown`: terminal outcome and independently inspectable score components.
+```ts
+type MissionObjective =
+  | Readonly<{
+      kind: "survive";
+      enemyPhases: number;
+    }>
+  | Readonly<{
+      kind: "extract-object";
+      objectId: string;
+      destination: Position;
+    }>;
+```
 
-Stable entity IDs are part of deterministic ordering and must not be regenerated during a session.
+- **Protect the Vault** uses `{ kind: "survive", enemyPhases: 5 }`.
+- **Data Extraction** uses `{ kind: "extract-object", objectId: "data-block", destination: E3 }`.
+
+The objective is cloned into the immutable session state. Objective checks therefore remain deterministic and do not depend on the current URL. The mission registry also supplies starting entities, structure, terrain, turn limit, breach script, and stable IDs.
+
+Other core values are `Tile`, `PlayerUnit`, `Enemy`, `PushableObject`, `Vault`, `EnemyIntent`, `EnemyTurnPlan`, `GameEvent`, `MissionResult`, `ScoreBreakdown`, and `MissionMedal`. Stable entity IDs are part of deterministic ordering and are never regenerated during a session.
 
 ### Pure public rules
-
-The game package exposes these behavior-level functions:
 
 ```ts
 createInitialGameState(mission?)
@@ -86,7 +106,25 @@ calculateScore(state, outcome)
 createMissionResult(state, outcome, reason?)
 ```
 
-Queries return derived data without mutation. Commands return `{ state, events }`. Invalid commands return the original state with no gameplay events or use a typed invalid result; they never partially apply a rule.
+Queries derive data without mutation. Commands return `{ state, events }`. Invalid commands return the original state with no partial rule application.
+
+## Objective resolution
+
+### Survival
+
+After each exact enemy phase, the engine increments `completedEnemyPhases`. Protect the Vault wins when it reaches the configured five phases. Vault destruction or total squad loss is checked first and therefore takes precedence during phase 5.
+
+### Extraction
+
+After a successful Data Block push, the engine compares the configured object ID and final coordinate with the extraction destination. Exact delivery to E3 produces, in order:
+
+```text
+target-pushed
+object-extracted
+mission-ended (victory, data-extracted)
+```
+
+Victory is immediate; React does not infer it from tile styling. If enemy phase 5 completes without delivery, the engine returns `extraction-timeout`. Structure destruction and squad elimination retain defeat priority.
 
 ## Determinism and exact intents
 
@@ -98,27 +136,25 @@ Enemy intent is a runtime invariant, not decorative UI copy.
 4. Simulate earlier planned moves in a virtual state so later intents account for sequential occupancy.
 5. After every successful player command that changes world state, replace the displayed plan with a freshly calculated complete plan.
 6. On End Turn, snapshot the displayed plan and pass that exact value to `resolveEnemyTurn`.
-7. Resolution follows its stored paths, destinations, targets, areas, values, and order. It does not retarget, reroll, or recalculate between actions.
+7. Resolution follows stored paths, destinations, targets, areas, values, and order. It does not retarget, reroll, or recalculate between actions.
 
-Selection, hover, panel toggles, and animation progress are UI-only and do not trigger replanning. Given byte-equivalent input state, plan serialization is byte-equivalent.
+Selection, hover, tutorial copy, and animation progress are UI-only and do not trigger replanning. Identical input states produce byte-equivalent serialized plans.
 
-Scripted mission events happen at a defined boundary before the player receives control: the breach marker at turn 2 and Whale spawn at turn 3 are added before that turn's visible plan is created.
+Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn before Turn 3 planning. Data Extraction's inactive breach slot is placed under an existing obstacle and uses unreachable script turns, so it has no visible breach or Whale event.
 
 ## Events and animation
 
-Engine events describe facts such as movement, attack, damage, shield, push, collision, defeat, spawn, Whale lock/slam/stagger, turn change, and mission end. They contain stable entity/tile references and final numeric values; they contain no CSS class names or durations.
+Engine events describe movement, attack, damage, shield, push, collision, defeat, spawn, Whale state, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
 
-The store applies player-command transitions immediately and derives both the combat log and short-lived display effects from the same ordered events. End Turn snapshots the plan, locks interaction, presents the phase transition, and then applies the pure enemy transition; the battle UI presents its resulting movement/damage/impact feedback without recalculating rules. Animation cleanup cancels outstanding presentation timers on route change/unmount. Reduced-motion mode shortens presentation but preserves event order.
-
-This separation prevents a skipped animation, slow device, or reduced-motion preference from changing game rules.
+The store applies player transitions immediately and derives combat log, sprite state, path travel, impacts, shields, damage numbers, KO sequences, and banners from those ordered events. A skipped animation, slow device, or reduced-motion preference cannot change a rule result.
 
 ## Client store and persistence
 
-### Transient session slice
+### Transient session
 
-The active mission, current enemy plan, selected unit/target, action mode, hover state, valid highlights, most recent movement undo, event-derived display effects, interaction lock, and timers are memory-only.
+The active `GameState`, enemy plan, selected unit/target, action mode, hover state, highlights, one-step movement undo, event queue, display effects, interaction lock, and timers are memory-only.
 
-Undo stores the state needed to restore one movement. The token is cleared by attack, ability, Wait, End Turn, mission reset, or terminal outcome. It never enters LocalStorage.
+Undo is cleared by attack, ability, Wait, End Turn, mission reset, or terminal outcome. It never enters LocalStorage.
 
 ### Persisted slice
 
@@ -136,69 +172,63 @@ type PlayerIdentity = {
 type PersistedProfile = {
   identity: PlayerIdentity;
   bestScores: Record<string, number>;
+  completedMissionIds: string[];
   lastResult?: MissionResult;
   settings: {
     soundMuted: boolean;
+    trainingCompleted: number;
   };
 };
 ```
 
-The actual Zustand slice stores `profile`, `bestScores`, `lastResult`, and `settings` as sibling fields; the type above groups them only to show the persistence boundary. Sound is not implemented in this slice and defaults muted, leaving a stable future preference. Do not persist the active `GameState`, enemy plan, selection, undo, queue, timeouts, or animation flags.
+The Zustand slice stores these as sibling fields; the grouped type only documents the persistence boundary. Only victories append a mission ID, duplicates are removed, and completion of Protect the Vault unlocks Data Extraction. Existing best scores can also safely migrate into completion progress. A new score replaces a mission best only when higher.
 
-Storage reads are guarded by schema/version checks and `try/catch`. Missing, corrupt, incompatible, or unavailable storage produces default guest data without blocking the app. A score only replaces the mission best when a terminal run is higher. Rehydration is explicitly tracked so server HTML does not render browser-only values and cause a mismatch.
+Storage reads use version/schema guards and `try/catch`. Missing, corrupt, incompatible, or unavailable storage produces default guest data without blocking startup. Active battle state is never persisted.
 
 ## Development state serializer
 
-Battle exposes `window.render_game_to_text()` in development/test builds. It returns a deterministic string intended for browser automation and human diagnostics, not a player-facing save format.
+Battle exposes `window.render_game_to_text()` in development/test builds. The deterministic JSON string includes:
 
-The snapshot includes:
-
-- Mission ID, board size, current phase/turn, and turns survived.
-- Vault coordinate, integrity, and pristine/damaged state.
-- Every squad unit in stable-ID order: coordinate, HP, shield, moved/acted/alive state, and remaining signature charge.
-- Every enemy in plan order/stable-ID order: type, coordinate, HP, and Whale state where applicable.
-- Data Block and breach coordinates.
-- Selected unit/target, selected action mode, valid move/attack/push tiles, and interaction lock.
-- Exact intent order, path, destination, target, damage, area tiles, and special state.
+- Mission ID, board size, phase, turn, and completed enemy phases.
+- The objective kind; extraction snapshots also include object ID, destination, and delivered state.
+- Protected structure coordinate, integrity, and pristine/damaged state.
+- Squad state, signature availability, enemies, objects, breach, selection, action mode, highlights, and interaction lock.
+- Exact intent order, path, destination, target, damage, area, and special state.
 - Terminal outcome when present.
 
-Coordinates use board notation (`D4`) or a documented zero-based pair consistently. Arrays are stably ordered; do not include timestamps, DOM-generated IDs, animation elapsed time, or other nondeterministic values. Browser tests should compare semantic fields rather than use this helper to mutate the game.
+Coordinates use board notation consistently. Arrays are stably ordered; timestamps, DOM IDs, and animation elapsed time are excluded.
 
 ## UI implementation rules
 
 - Grid tiles are semantic buttons with descriptive ARIA labels and visible keyboard focus.
-- Overlays are separate visual channels. Movement fill, danger pattern, range outline, push arrow, and token can coexist.
-- Enemy danger remains visible throughout the player phase; a locked Whale zone gets highest overlay emphasis.
-- Action controls derive legality from engine selectors. Components must not duplicate range, line-of-sight, charge, or activation rules.
-- Enemy intent cards render stored plan fields directly. Never infer a target from current component state.
-- The results screen renders the stored `ScoreBreakdown`; it does not recompute ad hoc totals in JSX.
-- Below 1024px, battle renders the designed viewport notice and does not mount a compressed interactive board.
-- Disabled Daily Challenge, Leaderboard, Connect Wallet, Replay, Next Mission, and Mint Season Badge controls remain labeled and non-operative.
+- Movement, attack, push, danger, locked area, cargo route, and token overlays remain separate channels.
+- Data Extraction renders its destination and route from `game.objective`; it never hard-codes E3 in the component.
+- Action controls derive legality from engine selectors. Components do not duplicate range, line-of-sight, charge, extraction, or activation rules.
+- Enemy intent cards render stored plan fields directly.
+- Results render the stored breakdown and mission metadata. Retry uses the result mission ID; Next Operation uses the authored operation order.
+- Below 1024px, battle renders the designed viewport notice instead of a compressed board.
+- Connect Wallet remains clearly disabled; future features do not clutter the battle HUD.
 
 ## Testing strategy
 
-### Pure tests
+The current 80-test suite covers:
 
-- Movement: range, occupancy, bounds, obstacles, deterministic shortest paths, and no diagonal traversal.
-- Targeting: melee adjacency, Sniper cardinal range, and line-of-sight blockers/non-blockers.
-- Activation: move/action limits, Wait, signature charges, Deadeye restriction, and undo invalidation.
-- Combat and pushes: shields/expiry, deaths, collision boundaries, Data Block movement, Whale displacement versus blocked collision.
-- AI: Rugger lane blocking, Drainer target ties/healing/fallback, sequential occupancy, and stable initiative.
-- Intent contract: identical states produce identical plans; resolution matches previewed paths, target, areas, and values.
-- Mission script: breach warning, Whale spawn/charge/slam/cancel/stagger, phase-5 victory, and defeat precedence.
-- Scoring/storage: integrity tiers, rank boundaries, bonuses/penalties, failed rank, invalid storage fallback, and best-score non-regression.
+- Movement, occupancy, bounds, obstacles, shortest paths, and no diagonal traversal.
+- Melee/Sniper targeting, line of sight, activation limits, Wait, signatures, and undo invalidation.
+- Shields, damage, deaths, collision boundaries, Data Block movement, and Whale interruption.
+- Rugger/Drainer targeting, sequential occupancy, stable initiative, and exact-plan equivalence.
+- Protect's breach warning, Whale spawn/charge/slam/cancel/stagger, phase-5 timing, and defeat precedence.
+- Data Extraction registry/unlock/routing, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
+- Storage fallback, completed-operation migration, unlock persistence, and best-score non-regression.
 
-### Browser and visual checks
-
-Exercise HQ → missions → briefing → battle → results at 1440×900, 1280×720, and 1024×768, then verify the battle notice at 390×844. Cover a canonical victory and deliberate defeat, inspect screenshots at every route, review `render_game_to_text()` after meaningful commands, and check the browser console.
-
-Interaction coverage includes selection, movement, undo, basic attacks, all three signatures, Shove, Batter Up, Data Block push, Wait, End Turn, Whale telegraph/interruption, result persistence, reload, Retry reset, direct-results fallback, keyboard shortcuts, focus visibility, and reduced motion.
+Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review.
 
 ## Safe extension points
 
-- Add a mission by supplying a new authored `MissionDefinition` and route metadata; do not branch core rules on page path.
-- Add a unit/enemy by extending the discriminated domain types and pure selectors/resolvers before adding UI art.
+- Add an authored operation through `MissionDefinition`, registry entry, and `OperationMetadata`; use the objective union rather than branching on route names.
+- Add a new objective as a discriminated type with a pure outcome check, events, serializer fields, scoring/mastery policy, and tests before adding UI treatment.
+- Add a unit or enemy by extending domain types and pure selectors/resolvers before adding sprite art.
 - Add audio by consuming existing `GameEvent` values; audio must never drive transitions.
-- Add a backend identity/leaderboard layer behind the documented boundary without changing guest play or importing wallet code into the engine.
+- Add backend identity or leaderboard services behind the documented boundary without changing guest play or importing wallet code into the engine.
 
-See [game design](game-design.md) for exact player-facing rules, [art direction](art-direction.md) for visual constraints, and the [roadmap](roadmap.md) for intentionally deferred work.
+See [game design](game-design.md) for player-facing rules, [art direction](art-direction.md) for visual constraints, and the [roadmap](roadmap.md) for the next authored content steps.

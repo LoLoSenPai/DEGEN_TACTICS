@@ -15,18 +15,33 @@ import {
 import type { MissionMedal, RankGoal } from "@/lib/game";
 
 export interface ResultsDisplayData {
+  missionId: string;
+  missionEyebrow: string;
+  missionTitle: string;
+  missionObjective: string;
+  resultTitle: string;
+  resultMessage: string;
   outcome: "victory" | "defeat";
   score: number;
   rank: "S" | "A" | "B" | "C";
+  integrityLabel: string;
   vaultHp: number;
   vaultMaxHp: number;
+  turnLabel: string;
   turnsSurvived: number;
+  maxTurns: number;
   enemiesDefeated: number;
   unitsLost: number;
   bestScore: number;
   medals: readonly MissionMedal[];
   rankGoal: RankGoal;
   breakdown: readonly Readonly<{ label: string; value: number }>[];
+  nextOperation: Readonly<{
+    id: string;
+    eyebrow: string;
+    title: string;
+    objective: string;
+  }> | null;
 }
 
 const medalIcon = (medal: MissionMedal) => {
@@ -37,6 +52,12 @@ const medalIcon = (medal: MissionMedal) => {
       return <UsersThree weight="fill" aria-hidden="true" />;
     case "charge-broken":
       return <Lightning weight="fill" aria-hidden="true" />;
+    case "express-transfer":
+      return <HourglassHigh weight="fill" aria-hidden="true" />;
+    case "rig-untouched":
+      return <ShieldCheck weight="fill" aria-hidden="true" />;
+    default:
+      return <Trophy weight="fill" aria-hidden="true" />;
   }
 };
 
@@ -47,15 +68,30 @@ const formatScoreValue = (value: number) =>
       ? `−${Math.abs(value).toLocaleString()}`
       : "—";
 
-export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; onRetry: () => void }) {
+export function ResultsView({
+  result,
+  onRetry,
+  onNextOperation,
+}: {
+  result: ResultsDisplayData;
+  onRetry: () => void;
+  onNextOperation?: () => void;
+}) {
   const victory = result.outcome === "victory";
   const isBestRun = victory && result.bestScore > 0 && result.score >= result.bestScore;
   const earnedMedals = result.medals.filter((medal) => medal.earned).length;
-  const rankProgress = result.rankGoal.nextRank === null
+  const persistedRankProgress = result.bestScore >= 1200
+    ? "Rank S secured"
+    : result.bestScore >= 900
+      ? `${(1200 - result.bestScore).toLocaleString()} pts to Rank S`
+      : result.bestScore >= 650
+        ? `${(900 - result.bestScore).toLocaleString()} pts to Rank A`
+        : null;
+  const rankProgress = persistedRankProgress ?? (result.rankGoal.nextRank === null
     ? "Highest rank achieved"
     : result.rankGoal.requiresVictory
       ? `Victory unlocks Rank ${result.rankGoal.nextRank}`
-      : `${result.rankGoal.pointsNeeded.toLocaleString()} pts to Rank ${result.rankGoal.nextRank}`;
+      : `${result.rankGoal.pointsNeeded.toLocaleString()} pts to Rank ${result.rankGoal.nextRank}`);
 
   return (
     <main className={`game-results ${victory ? "is-victory" : "is-defeat"}`}>
@@ -69,10 +105,11 @@ export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; o
           {victory ? <Trophy size={74} weight="fill" /> : <Skull size={74} weight="fill" />}
         </div>
 
-        <p className="result-kicker">Protect the Vault</p>
+        <p className="result-kicker">{result.missionEyebrow} · {result.missionTitle}</p>
         <h1 className="result-title">{victory ? "Victory" : "Defeat"}</h1>
         <p className="result-message">
-          {victory ? "The Vault held. Extraction complete." : "The line broke. Get back in there."}
+          <strong>{result.resultTitle}</strong>
+          <span>{result.resultMessage}</span>
         </p>
 
         <div className="result-rank-score" aria-label={`Rank ${result.rank}, final score ${result.score}`}>
@@ -95,13 +132,13 @@ export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; o
         <dl className="result-stats">
           <div>
             <ShieldCheck weight="fill" aria-hidden="true" />
-            <dt>Vault</dt>
+            <dt>{result.integrityLabel}</dt>
             <dd>{Math.max(0, result.vaultHp)} / {result.vaultMaxHp}</dd>
           </div>
           <div>
             <HourglassHigh weight="fill" aria-hidden="true" />
-            <dt>Turns</dt>
-            <dd>{result.turnsSurvived} / 5</dd>
+            <dt>{result.turnLabel}</dt>
+            <dd>{result.turnsSurvived} / {result.maxTurns}</dd>
           </div>
           <div>
             <Crosshair weight="bold" aria-hidden="true" />
@@ -151,14 +188,23 @@ export function ResultsView({ result, onRetry }: { result: ResultsDisplayData; o
           </section>
         </div>
 
-        <div className="result-actions">
+        <div className={`result-actions ${result.nextOperation ? "has-next" : ""}`}>
+          {result.nextOperation && onNextOperation ? (
+            <button type="button" className="result-button result-next" onClick={onNextOperation}>
+              <Crosshair size={25} weight="bold" aria-hidden="true" />
+              <span>
+                Next operation
+                <small>{result.nextOperation.title}</small>
+              </span>
+            </button>
+          ) : null}
           <button type="button" className="result-button result-retry" onClick={onRetry}>
             <ArrowCounterClockwise size={25} weight="bold" aria-hidden="true" />
             Retry
           </button>
-          <Link className="result-button result-home" href="/">
+          <Link className="result-button result-home" href="/operations">
             <House size={25} weight="fill" aria-hidden="true" />
-            Title screen
+            Operations
           </Link>
         </div>
       </div>

@@ -8,6 +8,20 @@ export type EnemyKind = "rugger" | "drainer" | "whale";
 export type PushKind = "shove" | "batter-up";
 export type PushTargetKind = "enemy" | "object";
 export type MissionOutcome = "victory" | "defeat";
+export type MissionOutcomeReason =
+  | "vault-destroyed"
+  | "squad-eliminated"
+  | "survived-five-turns"
+  | "data-extracted"
+  | "extraction-timeout";
+
+export type MissionObjective =
+  | Readonly<{ kind: "survive"; enemyPhases: number }>
+  | Readonly<{
+      kind: "extract-object";
+      objectId: string;
+      destination: Position;
+    }>;
 
 export interface Tile {
   readonly position: Position;
@@ -48,6 +62,7 @@ export interface MissionDefinition {
   readonly name: string;
   readonly boardSize: typeof BOARD_SIZE;
   readonly maxTurns: number;
+  readonly objective: MissionObjective;
   readonly obstacles: readonly Position[];
   readonly vault: Readonly<{
     id: string;
@@ -126,6 +141,7 @@ export interface GameState {
   readonly missionId: string;
   readonly turn: number;
   readonly maxTurns: number;
+  readonly objective: MissionObjective;
   readonly completedEnemyPhases: number;
   readonly phase: GamePhase;
   readonly units: readonly PlayerUnit[];
@@ -138,7 +154,7 @@ export interface GameState {
   readonly initialSquadSize: number;
   readonly vaultEverDamaged: boolean;
   readonly whaleChargeCancelled: boolean;
-  readonly outcomeReason?: "vault-destroyed" | "squad-eliminated" | "survived-five-turns";
+  readonly outcomeReason?: MissionOutcomeReason;
 }
 
 export type IntentTarget = Readonly<{
@@ -187,6 +203,7 @@ export type GameEvent =
   | Readonly<{ type: "whale-staggered"; enemyId: string }>
   | Readonly<{ type: "breach-warning"; position: Position }>
   | Readonly<{ type: "enemy-spawned"; enemyId: string; position: Position }>
+  | Readonly<{ type: "object-extracted"; objectId: string; position: Position }>
   | Readonly<{ type: "turn-started"; turn: number }>
   | Readonly<{ type: "mission-ended"; outcome: MissionOutcome; reason: NonNullable<GameState["outcomeReason"]> }>;
 
@@ -214,6 +231,7 @@ export interface ScoreBreakdown {
   readonly survivingUnits: number;
   readonly flawlessSquad: number;
   readonly untouchedVault: number;
+  readonly tempo: number;
   readonly lostUnits: number;
   readonly total: number;
   readonly rank: "S" | "A" | "B" | "C";
@@ -222,7 +240,9 @@ export interface ScoreBreakdown {
 export type MissionMedalId =
   | "vault-untouched"
   | "full-squad"
-  | "charge-broken";
+  | "charge-broken"
+  | "express-transfer"
+  | "rig-untouched";
 
 export interface MissionMedal {
   readonly id: MissionMedalId;

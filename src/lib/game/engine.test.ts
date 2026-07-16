@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROTECT_THE_VAULT,
+  DATA_EXTRACTION,
   TRAINING_BASICS,
   TRAINING_LESSONS,
   TRAINING_MOMENTUM,
@@ -10,13 +11,17 @@ import {
   applyShield,
   attackEnemy,
   calculateEnemyPlan,
+  checkVictoryDefeat,
   createInitialGameState,
   getMissionDefinition,
+  getBattleHref,
+  getNextOperationId,
   getAttackableTargets,
   getMovementPath,
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
+  isOperationUnlocked,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
@@ -74,9 +79,18 @@ describe("engine-valid training missions", () => {
     expect(getMissionDefinition("training-basics")).toBe(TRAINING_BASICS);
     expect(getMissionDefinition("training-squad")).toBe(TRAINING_SQUAD);
     expect(getMissionDefinition("training-momentum")).toBe(TRAINING_MOMENTUM);
+    expect(getMissionDefinition("data-extraction")).toBe(DATA_EXTRACTION);
     expect(getMissionDefinition("unknown-mission")).toBe(PROTECT_THE_VAULT);
     expect(isTrainingMissionId("training-momentum")).toBe(true);
     expect(isTrainingMissionId("protect-the-vault")).toBe(false);
+  });
+
+  it("derives operation unlocks from completed missions", () => {
+    expect(getNextOperationId([])).toBe("protect-the-vault");
+    expect(isOperationUnlocked("data-extraction", [])).toBe(false);
+    expect(getNextOperationId(["protect-the-vault"])).toBe("data-extraction");
+    expect(isOperationUnlocked("data-extraction", ["protect-the-vault"])).toBe(true);
+    expect(getBattleHref("data-extraction")).toBe("/battle/data-extraction");
   });
 
   it("teaches movement, attack, and an exact resolved intent in First Contact", () => {
@@ -303,6 +317,123 @@ describe("engine-valid training missions", () => {
       enemyId: "whale-training",
     });
     expect(resolved.state.enemies[0].whaleState).toBe("ready");
+  });
+});
+
+describe("Data Extraction objective", () => {
+  it("wins immediately when the configured Data Block reaches E3", () => {
+    let state: GameState = {
+      ...createInitialGameState(DATA_EXTRACTION),
+      enemies: [],
+    };
+
+    state = pushTarget(state, "pusher", "data-block", "shove").state;
+    state = updateUnit(state, "pusher", {
+      position: at(2, 4),
+      hasMoved: false,
+      hasActed: false,
+    });
+    state = pushTarget(state, "pusher", "data-block", "shove").state;
+    state = updateUnit(state, "pusher", {
+      position: at(1, 2),
+      hasMoved: false,
+      hasActed: false,
+      signatureAvailable: true,
+    });
+
+    const extracted = pushTarget(state, "pusher", "data-block", "batter-up");
+
+    expect(extracted.state).toMatchObject({
+      phase: "victory",
+      outcomeReason: "data-extracted",
+      objects: [expect.objectContaining({ id: "data-block", position: at(4, 2) })],
+    });
+    expect(extracted.events.slice(-2)).toEqual([
+      { type: "object-extracted", objectId: "data-block", position: at(4, 2) },
+      { type: "mission-ended", outcome: "victory", reason: "data-extracted" },
+    ]);
+  });
+
+  it("does not accept the wrong object or an undelivered Block", () => {
+    const state = createInitialGameState(DATA_EXTRACTION);
+    expect(checkVictoryDefeat(state)).toEqual({ outcome: null, reason: null });
+    expect(checkVictoryDefeat({
+      ...state,
+      objects: [{ id: "decoy", name: "Decoy", position: at(4, 2) }],
+    })).toEqual({ outcome: null, reason: null });
+  });
+
+  it.each([
+    ["west", at(3, 2), at(2, 2)],
+    ["east", at(5, 2), at(6, 2)],
+    ["north", at(4, 1), at(4, 0)],
+    ["south", at(4, 3), at(4, 4)],
+  ])("accepts an exact delivery pushed from the %s", (_direction, objectPosition, pusherPosition) => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    const state: GameState = {
+      ...initial,
+      obstacles: [],
+      enemies: [],
+      vault: { ...initial.vault, position: at(6, 6) },
+      breach: { position: at(0, 6), status: "spawned" },
+      objects: [{ ...initial.objects[0], position: objectPosition }],
+      units: initial.units.map((unit, index) =>
+        unit.id === "pusher"
+          ? { ...unit, position: pusherPosition }
+          : { ...unit, position: at(index, 6) },
+      ),
+    };
+    const delivered = pushTarget(state, "pusher", "data-block", "shove");
+    expect(delivered.state).toMatchObject({ phase: "victory", outcomeReason: "data-extracted" });
+    expect(delivered.events).toContainEqual({
+      type: "object-extracted",
+      objectId: "data-block",
+      position: at(4, 2),
+    });
+  });
+
+  it("does not extract when a blocker stops the cargo before E3", () => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    const state: GameState = {
+      ...initial,
+      enemies: [],
+      obstacles: [at(3, 2)],
+      objects: [{ ...initial.objects[0], position: at(2, 2) }],
+      units: initial.units.map((unit) =>
+        unit.id === "pusher" ? { ...unit, position: at(1, 2) } : unit,
+      ),
+    };
+    const blocked = pushTarget(state, "pusher", "data-block", "batter-up");
+    expect(blocked.state.phase).toBe("player");
+    expect(blocked.state.objects[0].position).toEqual(at(2, 2));
+    expect(blocked.events.some((event) => event.type === "object-extracted")).toBe(false);
+  });
+
+  it("fails after enemy phase five and preserves defeat priority", () => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    const turnFive: GameState = {
+      ...initial,
+      turn: 5,
+      completedEnemyPhases: 4,
+      enemies: [],
+    };
+    const timedOut = resolveEnemyTurn(turnFive, calculateEnemyPlan(turnFive));
+    expect(timedOut.state).toMatchObject({
+      phase: "defeat",
+      completedEnemyPhases: 5,
+      outcomeReason: "extraction-timeout",
+    });
+
+    expect(checkVictoryDefeat({
+      ...timedOut.state,
+      vault: { ...timedOut.state.vault, hp: 0 },
+    })).toEqual({ outcome: "defeat", reason: "vault-destroyed" });
+  });
+
+  it("produces byte-equivalent enemy plans for identical extraction states", () => {
+    const first = createInitialGameState(DATA_EXTRACTION);
+    const second = createInitialGameState(DATA_EXTRACTION);
+    expect(JSON.stringify(calculateEnemyPlan(first))).toBe(JSON.stringify(calculateEnemyPlan(second)));
   });
 });
 

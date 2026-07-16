@@ -4,6 +4,7 @@ import {
   calculateScore,
   createInitialGameState,
   createMissionResult,
+  DATA_EXTRACTION,
   type GameState,
 } from "./index";
 
@@ -23,9 +24,30 @@ describe("mission scoring", () => {
       survivingUnits: 150,
       flawlessSquad: 100,
       untouchedVault: 100,
+      tempo: 0,
       lostUnits: 0,
       total: 1550,
       rank: "S",
+    });
+  });
+
+  it("rewards extraction tempo without changing Protect the Vault scoring", () => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    const state: GameState = {
+      ...initial,
+      phase: "victory",
+      completedEnemyPhases: 3,
+      outcomeReason: "data-extracted",
+    };
+    expect(calculateScore(state, "victory")).toMatchObject({
+      victory: 500,
+      vaultIntegrity: 100,
+      tempo: 200,
+      survivingUnits: 150,
+      flawlessSquad: 100,
+      untouchedVault: 100,
+      total: 1150,
+      rank: "A",
     });
   });
 

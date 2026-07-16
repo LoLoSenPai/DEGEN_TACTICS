@@ -202,6 +202,7 @@
 }
 
 .title-button-primary small,
+.title-button-operations small,
 .title-button-training small {
   display: block;
   margin-top: 5px;
@@ -217,6 +218,20 @@
   border-color: #b879ef;
   color: #ead7fb;
   background-color: #28183a;
+}
+
+.title-button-operations {
+  border-color: #d59b43;
+  color: #f3d291;
+  background-color: #2b210f;
+}
+
+.title-button-operations::after {
+  background-color: #c38b32;
+}
+
+.title-button-operations small {
+  color: #ad9365;
 }
 
 .title-button-training::after {

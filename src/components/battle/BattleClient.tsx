@@ -26,6 +26,7 @@ import {
   BOARD_SIZE,
   PROTECT_THE_VAULT,
   TRAINING_LESSONS,
+  getOperationMetadata,
   getMissionDefinition,
   getAttackableTargets,
   getMovementPath,
@@ -34,6 +35,9 @@ import {
   getPushTargets,
   getValidMoves,
   isTrainingMissionId,
+  isMissionId,
+  isOperationUnlocked,
+  isPlayableMissionId,
   pushTarget as simulatePushTarget,
   type Enemy,
   type GameState,
@@ -368,6 +372,7 @@ type PushOutcomePreview = {
   destination: Position;
   collided: boolean;
   collisionDamage: number;
+  completesObjective: boolean;
 };
 
 function exactPushPreview(
@@ -387,11 +392,20 @@ function exactPushPreview(
     destination: movement?.to ?? target.position,
     collided: Boolean(collision),
     collisionDamage: collision?.damage ?? 0,
+    completesObjective: transition.events.some((event) => event.type === "object-extracted"),
   };
 }
 
 function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
   if (preview.targetKind === "object") {
+    if (preview.completesObjective) {
+      return (
+        <span className="game-push-preview is-delivery" aria-hidden="true">
+          <strong>DELIVERY</strong>
+          <small>MISSION CLEAR</small>
+        </span>
+      );
+    }
     const jammed = preview.collided && preview.distance === 0;
     return (
       <span className={clsx("game-push-preview", jammed && "is-jammed")} aria-hidden="true">
@@ -412,10 +426,12 @@ function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
 function missionPresentation(missionId: string) {
   const definition = getMissionDefinition(missionId);
   const lesson = TRAINING_LESSONS.find((candidate) => candidate.missionId === missionId);
+  const operation = getOperationMetadata(missionId);
   return {
     title: definition.name,
-    eyebrow: lesson ? `Training ${lesson.order} / 3` : "Mission 01",
-    objective: lesson?.objective ?? "Survive 5 turns",
+    eyebrow: lesson ? `Training ${lesson.order} / 3` : operation?.eyebrow ?? "Operation",
+    objective: lesson?.objective ?? operation?.shortObjective ?? "Complete the objective",
+    integrityLabel: operation?.integrityLabel ?? definition.vault.name,
   };
 }
 
@@ -430,6 +446,33 @@ type LiveMastery = Readonly<{
 
 function liveMissionMasteries(game: GameState): readonly LiveMastery[] {
   const fullSquad = game.units.filter((unit) => unit.hp > 0).length === game.initialSquadSize;
+  if (game.objective.kind === "extract-object") {
+    const extracted = game.outcomeReason === "data-extracted";
+    return [
+      {
+        id: "express-transfer",
+        label: "Express transfer",
+        goal: "Extract by Turn 4",
+        status: extracted && game.completedEnemyPhases <= 3
+          ? "earned"
+          : game.completedEnemyPhases > 3
+            ? "lost"
+            : "active",
+      },
+      {
+        id: "rig-untouched",
+        label: "Rig untouched",
+        goal: "Finish without Rig damage",
+        status: game.vaultEverDamaged ? "lost" : "active",
+      },
+      {
+        id: "full-squad",
+        label: "Full escort",
+        goal: "Keep every hero alive",
+        status: fullSquad ? "active" : "lost",
+      },
+    ];
+  }
   return [
     {
       id: "vault-untouched",
@@ -455,6 +498,8 @@ function liveMissionMasteries(game: GameState): readonly LiveMastery[] {
 function masteryIcon(id: MissionMedalId) {
   if (id === "vault-untouched") return <ShieldCheck weight="fill" aria-hidden="true" />;
   if (id === "full-squad") return <UsersThree weight="fill" aria-hidden="true" />;
+  if (id === "rig-untouched") return <Shield weight="fill" aria-hidden="true" />;
+  if (id === "express-transfer") return <ArrowFatRight weight="fill" aria-hidden="true" />;
   return <Lightning weight="fill" aria-hidden="true" />;
 }
 
@@ -544,17 +589,21 @@ function signaturePresentation(unit: PlayerUnit) {
 function GameHud({ game }: { game: GameState }) {
   const vaultPercent = Math.max(0, Math.min(100, (game.vault.hp / game.vault.maxHp) * 100));
   const presentation = missionPresentation(game.missionId);
+  const hudIntegrityLabel = game.objective.kind === "extract-object" ? "Rig" : presentation.integrityLabel;
+  const hudObjective = game.objective.kind === "extract-object"
+    ? `Deliver cargo to ${coordinate(game.objective.destination)}`
+    : presentation.objective;
 
   return (
     <header className="game-hud" aria-label="Mission status">
       <div className="hud-objective">
         <span className="hud-shield"><Shield weight="fill" /></span>
-        <div><strong>{presentation.title}</strong><small>{presentation.eyebrow} · {presentation.objective}</small></div>
+        <div><strong>{presentation.title}</strong><small>{presentation.eyebrow} · {hudObjective}</small></div>
         <HudMasteries game={game} />
       </div>
       <div className="hud-turn"><span>Turn</span><strong>{game.turn} / {game.maxTurns}</strong></div>
       <div className="hud-vault">
-        <div><span>Vault</span><strong>{Math.max(0, game.vault.hp)} / {game.vault.maxHp}</strong></div>
+        <div><span>{hudIntegrityLabel}</span><strong>{Math.max(0, game.vault.hp)} / {game.vault.maxHp}</strong></div>
         <span className="hud-vault-bar"><i style={{ width: `${vaultPercent}%` }} /></span>
       </div>
     </header>
@@ -568,8 +617,51 @@ function MissionIntro({ game }: { game: GameState }) {
       <span>{presentation.eyebrow}</span>
       <h1>{presentation.title}</h1>
       <p>{presentation.objective}</p>
+      {game.objective.kind === "extract-object" ? (
+        <div className="mission-intro-rule"><HandGrabbing weight="fill" /> Only Pusher moves cargo <span>Shove 1 · Batter Up 2</span></div>
+      ) : null}
       <IntroMasteries game={game} />
     </div>
+  );
+}
+
+function extractionCoach(game: GameState): string | null {
+  if (game.objective.kind !== "extract-object") return null;
+  const objective = game.objective;
+  const cargo = game.objects.find((object) => object.id === objective.objectId);
+  const pusher = game.units.find((unit) => unit.role === "pusher" && unit.hp > 0);
+  if (!cargo || !pusher) return null;
+  if (cargo.position.y > objective.destination.y) {
+    return `Cargo ${coordinate(cargo.position)} → lift it north to row ${objective.destination.y + 1}`;
+  }
+  const readyWest = pusher.position.x === cargo.position.x - 1 && pusher.position.y === cargo.position.y;
+  if (!readyWest) return `Turn the corner · move west of the Block at ${coordinate(cargo.position)}`;
+  return `Delivery lined up · Batter Up reaches ${coordinate(objective.destination)} now`;
+}
+
+function CargoExtractionRoute({ game }: { game: GameState }) {
+  if (game.objective.kind !== "extract-object") return null;
+  const objective = game.objective;
+  const cargo = game.objects.find((object) => object.id === objective.objectId);
+  if (!cargo || samePosition(cargo.position, objective.destination)) return null;
+
+  const start = { x: cargo.position.x + 0.5, y: cargo.position.y + 0.5 };
+  const corner = { x: cargo.position.x + 0.5, y: objective.destination.y + 0.5 };
+  const end = { x: objective.destination.x + 0.5, y: objective.destination.y + 0.5 };
+  const points = [start, corner, end].filter((point, index, candidates) =>
+    index === 0 || point.x !== candidates[index - 1].x || point.y !== candidates[index - 1].y,
+  );
+  const route = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <svg className="cargo-extraction-route" viewBox="0 0 7 7" aria-hidden="true">
+      <defs>
+        <marker id="cargo-route-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="0.42" markerHeight="0.42" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" />
+        </marker>
+      </defs>
+      <polyline points={route} markerEnd="url(#cargo-route-arrow)" />
+    </svg>
   );
 }
 
@@ -902,6 +994,7 @@ function tileDescription({
   else if (samePosition(game.vault.position, position)) details.push(`Vault, ${game.vault.hp} of ${game.vault.maxHp} integrity`);
   else if (obstacle) details.push("Blast Barricade, immovable, blocks movement and line of sight");
   else if (samePosition(game.breach.position, position) && game.breach.status === "incoming") details.push("incoming breach, impassable");
+  else if (game.objective.kind === "extract-object" && samePosition(game.objective.destination, position)) details.push("Data Block extraction zone, deliver the configured cargo here");
   else details.push("floor");
   if (isMove) details.push("legal move");
   if (isAttack) details.push("attackable target");
@@ -1039,6 +1132,7 @@ function Board({
       data-tutorial-target={tutorialStep === "basics-read-intent" ? tutorialStep : undefined}
     >
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
+        <CargoExtractionRoute game={game} />
         <EnemyIntentPath plan={enemyPlan} />
         {movePreview && movePreviewPath ? <PlayerMovePath positions={movePreviewPath} destination={coordinate(movePreview)} /> : null}
         <CombatActionFx game={game} cue={combatCue} />
@@ -1048,6 +1142,7 @@ function Board({
           const enemy = game.enemies.find((candidate) => (candidate.hp > 0 || visibleZeroHpIds.has(candidate.id)) && samePosition(candidate.position, position));
           const object = game.objects.find((candidate) => samePosition(candidate.position, position));
           const isVault = samePosition(game.vault.position, position);
+          const isExtraction = game.objective.kind === "extract-object" && samePosition(game.objective.destination, position);
           const obstacle = game.obstacles.some((candidate) => samePosition(candidate, position));
           const isBreach = samePosition(game.breach.position, position) && game.breach.status === "incoming";
           const isMove = moveKeys.has(key) && actionMode === "move";
@@ -1091,6 +1186,8 @@ function Board({
                 "game-tile",
                 obstacle && "is-obstacle",
                 isVault && "is-vault",
+                isExtraction && "is-extraction-zone",
+                isExtraction && game.phase === "victory" && "is-extraction-complete",
                 isBreach && "is-breach",
                 isSelected && "is-selected",
                 isMove && "is-move",
@@ -1127,6 +1224,7 @@ function Board({
               {destinationOrders.length > 0 ? <span className="game-intent-land">{destinationOrders.join("/")}</span> : null}
               {obstacle ? <SpriteArt kind="obstacle" name="Blast Barricade" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
+              {isExtraction ? <span className="extraction-zone-marker" aria-hidden="true"><ArrowFatRight weight="fill" /><small>{game.phase === "victory" ? "Secured" : "Extract"}</small></span> : null}
               {isVault ? (
                 <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={game.vault.id}>
                   <span className="piece-base" />
@@ -1196,6 +1294,7 @@ function ActionBar({
   movePreview,
   movePreviewDistance,
   remainingCount,
+  objectiveHint,
   hasUndo,
   tutorialStep,
   disabled,
@@ -1211,6 +1310,7 @@ function ActionBar({
   movePreview: Position | null;
   movePreviewDistance: number;
   remainingCount: number;
+  objectiveHint?: string | null;
   hasUndo: boolean;
   tutorialStep: BattleTutorialStep;
   disabled: boolean;
@@ -1244,9 +1344,9 @@ function ActionBar({
         : actionMode === "attack"
           ? "Choose a cyan enemy"
           : actionMode === "push" && selected.role === "pusher"
-            ? "Exact preview: CRASH deals −1 HP · a free Shove deals 0 damage"
+            ? objectiveHint ?? "Exact preview: CRASH deals −1 HP · a free Shove deals 0 damage"
           : actionMode === "ability" && selected.role === "pusher"
-            ? "Exact preview: Batter Up collides for −2 HP on either attempted tile"
+            ? objectiveHint ?? "Exact preview: Batter Up collides for −2 HP on either attempted tile"
           : actionMode === "ability"
             ? "Choose a highlighted target"
             : selected.role === "guardian"
@@ -1254,7 +1354,7 @@ function ActionBar({
               : selected.role === "sniper" && !selected.hasMoved
                 ? "Deadeye deals 4 damage, but only before moving"
                 : selected.role === "pusher"
-                  ? "Shove pushes 1 tile · only a blocked enemy loses 1 HP"
+                  ? objectiveHint ?? "Shove pushes 1 tile · only a blocked enemy loses 1 HP"
                   : "Move once, then act";
   const lastLog = log.at(-1)?.text;
 
@@ -1315,6 +1415,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const actionMode = useGameStore((state) => state.actionMode);
   const lastMove = useGameStore((state) => state.lastMove);
   const lastResult = useGameStore((state) => state.lastResult);
+  const completedMissionIds = useGameStore((state) => state.completedMissionIds);
   const isResolving = useGameStore((state) => state.isResolving);
   const isAnimating = useGameStore((state) => state.isAnimating);
   const combatCue = useGameStore((state) => state.combatCue);
@@ -1394,11 +1495,18 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (!hydrated || initialized.current) return;
     initialized.current = true;
     ensureIdentity();
-    const missionToStart = requestedMissionId && (requestedMissionId === PROTECT_THE_VAULT.id || isTrainingMissionId(requestedMissionId))
+    const missionToStart = requestedMissionId && isMissionId(requestedMissionId)
       ? requestedMissionId
       : PROTECT_THE_VAULT.id;
+    if (
+      isPlayableMissionId(missionToStart)
+      && !isOperationUnlocked(missionToStart, completedMissionIds)
+    ) {
+      router.replace(`/operations?locked=${encodeURIComponent(missionToStart)}`);
+      return;
+    }
     startMission(missionToStart);
-  }, [ensureIdentity, hydrated, requestedMissionId, startMission]);
+  }, [completedMissionIds, ensureIdentity, hydrated, requestedMissionId, router, startMission]);
 
   useEffect(() => {
     activeBattleClients += 1;
@@ -1540,6 +1648,17 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       missionId: game.missionId,
       phase: game.phase,
       turn: game.turn,
+      objective: (() => {
+        const objective = game.objective;
+        return objective.kind === "extract-object"
+          ? {
+              kind: objective.kind,
+              objectId: objective.objectId,
+              destination: coordinate(objective.destination),
+              delivered: game.objects.some((object) => object.id === objective.objectId && samePosition(object.position, objective.destination)),
+            }
+          : { kind: objective.kind, enemyPhases: objective.enemyPhases };
+      })(),
       selectedUnitId,
       inspectedId,
       actionMode,
@@ -1617,10 +1736,11 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
             distance: preview?.distance ?? 0,
             collision: preview?.collided ?? false,
             collisionDamage: preview?.collisionDamage ?? 0,
+            completesObjective: preview?.completesObjective ?? false,
           };
         }),
       },
-      vault: { hp: game.vault.hp, maxHp: game.vault.maxHp, at: coordinate(game.vault.position) },
+      vault: { id: game.vault.id, name: game.vault.name, hp: game.vault.hp, maxHp: game.vault.maxHp, at: coordinate(game.vault.position) },
       mastery: liveMissionMasteries(game).map((mastery) => ({
         id: mastery.id,
         label: mastery.label,
@@ -1941,6 +2061,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
               movePreview={movePreview}
               movePreviewDistance={Math.max(0, (movePreviewPath?.length ?? 1) - 1)}
               remainingCount={remainingUnits.length}
+              objectiveHint={extractionCoach(game)}
               hasUndo={Boolean(lastMove)}
               tutorialStep={tutorialStep}
               disabled={controlsLocked || game.phase !== "player"}

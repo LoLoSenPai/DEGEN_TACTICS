@@ -91,6 +91,12 @@ export const createInitialGameState = (
   missionId: definition.id,
   turn: 1,
   maxTurns: definition.maxTurns,
+  objective: definition.objective.kind === "extract-object"
+    ? {
+        ...definition.objective,
+        destination: clonePosition(definition.objective.destination),
+      }
+    : { ...definition.objective },
   completedEnemyPhases: 0,
   phase: "player",
   units: definition.units.map((unit) => ({
@@ -132,6 +138,9 @@ export const getStateFingerprint = (state: GameState): string =>
     turn: state.turn,
     phase: state.phase,
     completedEnemyPhases: state.completedEnemyPhases,
+    objective: state.objective.kind === "extract-object"
+      ? [state.objective.kind, state.objective.objectId, positionKey(state.objective.destination)]
+      : [state.objective.kind, state.objective.enemyPhases],
     units: [...state.units]
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((unit) => [
@@ -644,6 +653,31 @@ export const pushTarget = (
     events.push({ type: "whale-charge-cancelled", enemyId: targetId });
   }
 
+  if (
+    target.kind === "object" &&
+    nextState.objective.kind === "extract-object" &&
+    nextState.objective.objectId === targetId
+  ) {
+    const extractedObject = nextState.objects.find((object) => object.id === targetId);
+    if (extractedObject && samePosition(extractedObject.position, nextState.objective.destination)) {
+      nextState = {
+        ...nextState,
+        phase: "victory",
+        outcomeReason: "data-extracted",
+      };
+      events.push({
+        type: "object-extracted",
+        objectId: targetId,
+        position: clonePosition(extractedObject.position),
+      });
+      events.push({
+        type: "mission-ended",
+        outcome: "victory",
+        reason: "data-extracted",
+      });
+    }
+  }
+
   return { state: nextState, events };
 };
 
@@ -1147,14 +1181,35 @@ export const checkVictoryDefeat = (
     return { outcome: "defeat", reason: "vault-destroyed" };
   if (livingUnits(state).length === 0)
     return { outcome: "defeat", reason: "squad-eliminated" };
-  if (
-    state.phase === "victory" ||
-    state.completedEnemyPhases >= state.maxTurns
-  ) {
-    return { outcome: "victory", reason: "survived-five-turns" };
+  if (state.objective.kind === "extract-object") {
+    const objective = state.objective;
+    const objectiveObject = state.objects.find(
+      (object) => object.id === objective.objectId,
+    );
+    if (objectiveObject && samePosition(objectiveObject.position, objective.destination)) {
+      return { outcome: "victory", reason: "data-extracted" };
+    }
+  }
+  if (state.phase === "victory") {
+    return {
+      outcome: "victory",
+      reason: state.outcomeReason ?? "survived-five-turns",
+    };
   }
   if (state.phase === "defeat")
     return { outcome: "defeat", reason: state.outcomeReason ?? "vault-destroyed" };
+  if (
+    state.objective.kind === "survive"
+    && state.completedEnemyPhases >= state.objective.enemyPhases
+  ) {
+    return { outcome: "victory", reason: "survived-five-turns" };
+  }
+  if (
+    state.objective.kind === "extract-object"
+    && state.completedEnemyPhases >= state.maxTurns
+  ) {
+    return { outcome: "defeat", reason: "extraction-timeout" };
+  }
   return { outcome: null, reason: null };
 };
 

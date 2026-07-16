@@ -230,3 +230,22 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - Browser QA verified horizontal Rugger HP changes of 6→5 for Shove and 6→4 for Batter Up, a vertical barricade collision, a free Data Block move, the enlarged shield, exact serialized previews, and empty console/page error logs. The bundled web-game client capture was rerun and inspected.
 - Final gates pass: ESLint with zero warnings, strict TypeScript, all 68 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build. The development server was restarted cleanly on port 3000.
 - Recommended next content sequence, pending a novice replay of this clearer build: Data Extraction mission → Break the Breach mission → one new enemy → a fourth hero → only then a visual 3-of-4 squad-selection flow. Keep progression horizontal through mission unlocks, medals, ranks and expert contracts rather than permanent stat upgrades.
+
+## 2026-07-16 — Data Extraction engine milestone
+
+- Generalized mission goals with deterministic `survive` and `extract-object` objectives while preserving the existing Vault and training rules.
+- Authored Operation 02, Data Extraction: a 7×7 corner-turn cargo puzzle with the Data Block at C5, extraction zone at E3, the full three-hero squad, an Extraction Rig and two enemies. The dormant breach slot stays hidden beneath a fixed barricade, so no Whale script leaks into this operation.
+- Reaching E3 with the configured Data Block now ends the mission immediately from the legal push transition and emits `object-extracted` followed by the exact mission result. Missing the delivery through enemy phase five ends in `extraction-timeout`; Rig destruction and squad elimination keep defeat priority.
+- Added extraction scoring tempo, Rig-scaled integrity points and three authored medals: Express Transfer, Rig Untouched and Full Escort. Protect the Vault scoring and medals remain covered.
+- Added operation metadata and unlock helpers for a game-first Title → Operation → Battle → Results flow, plus version-compatible completion persistence derived from completed runs and existing best scores.
+- Strict TypeScript and all 74 deterministic Vitest cases pass after the engine milestone.
+- Replaced the retired campaign/loadout entry flow with a full-screen two-poster Operations screen. Protect the Vault is immediately playable; Data Extraction visibly unlocks after the first completed operation, carries its own best score, and becomes the title screen's Continue target. Legacy `/missions` and loadout URLs now redirect to Operations.
+- Inspected fresh and unlocked Operations states at 1280×720, verified the Title → Operations → Title semantic flow and next-operation copy, and captured no browser console or page errors. Targeted TypeScript and ESLint checks pass.
+
+## 2026-07-16 — Data Extraction playable slice complete
+
+- Wired the dynamic battle route, mission-specific HUD, extraction-zone treatment, authored SVG cargo route, exact delivery preview, contextual Pusher guidance, terminal event playback, retry, mission-aware results and best-score persistence into one complete playable operation.
+- Verified the authored solution through semantic browser interactions: the squad clears the Drainer lane, turns the Data Block north, repositions the Pusher, and uses Batter Up from C3 to E3 for an immediate Turn 4 victory. The exact preview reports a two-tile delivery and mission clear before confirmation.
+- Verified the opposite path through enemy phase 5 produces Extraction Failed, Retry resets the correct mission, and the prior 1,225-point S-rank best does not regress after the failed run.
+- Visually inspected the locked and unlocked Operations screen, intro, initial board, corner setup, delivery preview, victory sequence, results, deliberate timeout defeat, 1024×768 battle and 390×844 larger-screen notice. The bundled web-game client also completed a final post-build smoke capture with no obvious rendering issues.
+- Final gates pass: ESLint with zero warnings, strict TypeScript, all 80 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build. The development server is running again on port 3000.

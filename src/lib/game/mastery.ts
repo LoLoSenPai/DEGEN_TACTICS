@@ -22,6 +22,29 @@ export const calculateMissionMedals = (
 ): readonly MissionMedal[] => {
   const survivingUnits = state.units.filter((unit) => unit.hp > 0).length;
 
+  if (state.objective.kind === "extract-object") {
+    return [
+      {
+        id: "express-transfer",
+        name: "Express Transfer",
+        description: "Extract the Data Block by Turn 4.",
+        earned: state.outcomeReason === "data-extracted" && state.completedEnemyPhases <= 3,
+      },
+      {
+        id: "rig-untouched",
+        name: "Rig Untouched",
+        description: "Finish without the Extraction Rig taking damage.",
+        earned: !state.vaultEverDamaged,
+      },
+      {
+        id: "full-squad",
+        name: "Full Escort",
+        description: "Keep every operator alive.",
+        earned: survivingUnits === state.initialSquadSize,
+      },
+    ];
+  }
+
   return [
     {
       id: "vault-untouched",

@@ -7,6 +7,7 @@ export const PROTECT_THE_VAULT = {
   name: "Protect the Vault",
   boardSize: BOARD_SIZE,
   maxTurns: 5,
+  objective: { kind: "survive", enemyPhases: 5 },
   obstacles: [position(2, 2), position(4, 2), position(2, 4), position(4, 4)],
   vault: {
     id: "vault",
@@ -110,6 +111,7 @@ export const TRAINING_BASICS = {
   name: "First Contact",
   boardSize: BOARD_SIZE,
   maxTurns: 1,
+  objective: { kind: "survive", enemyPhases: 1 },
   obstacles: [],
   vault: {
     id: "vault",
@@ -165,6 +167,7 @@ export const TRAINING_SQUAD = {
   name: "Squad Turns",
   boardSize: BOARD_SIZE,
   maxTurns: 1,
+  objective: { kind: "survive", enemyPhases: 1 },
   obstacles: [],
   vault: {
     id: "vault",
@@ -241,6 +244,7 @@ export const TRAINING_MOMENTUM = {
   name: "Push Control",
   boardSize: BOARD_SIZE,
   maxTurns: 5,
+  objective: { kind: "survive", enemyPhases: 5 },
   obstacles: [position(4, 2)],
   vault: {
     id: "vault",
@@ -297,16 +301,205 @@ export const TRAINING_MOMENTUM = {
   },
 } as const satisfies MissionDefinition;
 
+export const DATA_EXTRACTION = {
+  id: "data-extraction",
+  name: "Data Extraction",
+  boardSize: BOARD_SIZE,
+  maxTurns: 5,
+  objective: {
+    kind: "extract-object",
+    objectId: "data-block",
+    destination: position(4, 2),
+  },
+  obstacles: [
+    position(0, 1),
+    position(2, 1),
+    position(6, 1),
+    position(3, 3),
+    position(3, 4),
+  ],
+  vault: {
+    id: "extraction-rig",
+    name: "Extraction Rig",
+    position: position(5, 2),
+    maxHp: 10,
+  },
+  units: [
+    {
+      id: "guardian",
+      name: "Guardian",
+      role: "guardian",
+      position: position(5, 1),
+      maxHp: 12,
+      moveRange: 2,
+      attackDamage: 2,
+      attackRange: 1,
+      signatureName: "Shield Wall",
+    },
+    {
+      id: "sniper",
+      name: "Sniper",
+      role: "sniper",
+      position: position(1, 4),
+      maxHp: 7,
+      moveRange: 3,
+      attackDamage: 3,
+      attackRange: 3,
+      signatureName: "Deadeye",
+    },
+    {
+      id: "pusher",
+      name: "Pusher",
+      role: "pusher",
+      position: position(2, 5),
+      maxHp: 9,
+      moveRange: 2,
+      attackDamage: 1,
+      attackRange: 1,
+      signatureName: "Batter Up",
+    },
+  ],
+  enemies: [
+    {
+      id: "rugger-extraction",
+      name: "Rig Breaker",
+      kind: "rugger",
+      position: position(4, 0),
+      maxHp: 6,
+      moveRange: 2,
+      attackDamage: 3,
+      initiative: 10,
+    },
+    {
+      id: "drainer-extraction",
+      name: "Data Leech",
+      kind: "drainer",
+      position: position(1, 0),
+      maxHp: 4,
+      moveRange: 3,
+      attackDamage: 2,
+      initiative: 20,
+    },
+  ],
+  objects: [
+    {
+      id: "data-block",
+      name: "Data Block",
+      position: position(2, 4),
+    },
+  ],
+  // The common rules engine keeps one scripted breach slot. On this operation
+  // it sits under an existing barricade and never activates.
+  breach: {
+    position: position(3, 3),
+    warningTurn: 99,
+    spawnTurn: 100,
+    enemy: {
+      id: "whale-extraction-unused",
+      name: "The Whale",
+      kind: "whale",
+      position: position(3, 3),
+      maxHp: 10,
+      moveRange: 1,
+      attackDamage: 4,
+      initiative: 30,
+    },
+  },
+} as const satisfies MissionDefinition;
+
 export const DEFAULT_MISSION = PROTECT_THE_VAULT;
 
 export const MISSION_REGISTRY = {
   [PROTECT_THE_VAULT.id]: PROTECT_THE_VAULT,
+  [DATA_EXTRACTION.id]: DATA_EXTRACTION,
   [TRAINING_BASICS.id]: TRAINING_BASICS,
   [TRAINING_SQUAD.id]: TRAINING_SQUAD,
   [TRAINING_MOMENTUM.id]: TRAINING_MOMENTUM,
 } as const satisfies Readonly<Record<string, MissionDefinition>>;
 
 export type MissionId = keyof typeof MISSION_REGISTRY;
+
+export interface OperationMetadata {
+  readonly id: typeof PROTECT_THE_VAULT.id | typeof DATA_EXTRACTION.id;
+  readonly order: 1 | 2;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly shortObjective: string;
+  readonly integrityLabel: string;
+  readonly unlockAfter?: typeof PROTECT_THE_VAULT.id;
+  readonly victoryTitle: string;
+  readonly victoryMessage: string;
+  readonly defeatTitle: string;
+  readonly defeatMessage: string;
+}
+
+export const PLAYABLE_OPERATIONS = [
+  {
+    id: PROTECT_THE_VAULT.id,
+    order: 1,
+    eyebrow: "Operation 01",
+    title: PROTECT_THE_VAULT.name,
+    shortObjective: "Survive 5 turns",
+    integrityLabel: "Vault",
+    victoryTitle: "Vault Secured",
+    victoryMessage: "The Vault held. The district is still ours.",
+    defeatTitle: "Mission Failed",
+    defeatMessage: "The line broke. Get back in there.",
+  },
+  {
+    id: DATA_EXTRACTION.id,
+    order: 2,
+    eyebrow: "Operation 02",
+    title: DATA_EXTRACTION.name,
+    shortObjective: "Push the Data Block onto the extraction zone",
+    integrityLabel: "Extraction Rig",
+    unlockAfter: PROTECT_THE_VAULT.id,
+    victoryTitle: "Package Recovered",
+    victoryMessage: "The Data Block made it out.",
+    defeatTitle: "Extraction Failed",
+    defeatMessage: "The package never reached the zone.",
+  },
+] as const satisfies readonly OperationMetadata[];
+
+export type PlayableMissionId = (typeof PLAYABLE_OPERATIONS)[number]["id"];
+
+export const isMissionId = (missionId: string): missionId is MissionId =>
+  Object.prototype.hasOwnProperty.call(MISSION_REGISTRY, missionId);
+
+export const isPlayableMissionId = (
+  missionId: string,
+): missionId is PlayableMissionId =>
+  PLAYABLE_OPERATIONS.some((operation) => operation.id === missionId);
+
+export const getOperationMetadata = (
+  missionId: string,
+): OperationMetadata | null =>
+  PLAYABLE_OPERATIONS.find((operation) => operation.id === missionId) ?? null;
+
+export const isOperationUnlocked = (
+  missionId: PlayableMissionId,
+  completedMissionIds: readonly string[],
+): boolean => {
+  const operation = getOperationMetadata(missionId);
+  return Boolean(operation && (!operation.unlockAfter || completedMissionIds.includes(operation.unlockAfter)));
+};
+
+export const getNextOperationId = (
+  completedMissionIds: readonly string[],
+): PlayableMissionId =>
+  completedMissionIds.includes(PROTECT_THE_VAULT.id)
+    ? DATA_EXTRACTION.id
+    : PROTECT_THE_VAULT.id;
+
+export const getFollowingOperationId = (
+  missionId: string,
+): PlayableMissionId | null => {
+  const index = PLAYABLE_OPERATIONS.findIndex((operation) => operation.id === missionId);
+  return index >= 0 ? (PLAYABLE_OPERATIONS[index + 1]?.id ?? null) : null;
+};
+
+export const getBattleHref = (missionId: string): string =>
+  `/battle/${encodeURIComponent(missionId)}`;
 export type TrainingMissionId =
   | typeof TRAINING_BASICS.id
   | typeof TRAINING_SQUAD.id

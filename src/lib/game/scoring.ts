@@ -16,11 +16,14 @@ export const calculateScore = (
   const integrityQuartiles = Math.ceil(
     (Math.max(0, state.vault.hp) / state.vault.maxHp) * 4,
   );
-  const vaultIntegrity = integrityQuartiles * 100;
+  const vaultIntegrity = integrityQuartiles * (state.objective.kind === "extract-object" ? 25 : 100);
   const enemiesDefeated = state.defeatedEnemies * 75;
   const survivingUnits = survivingUnitCount * 50;
   const flawlessSquad = lostUnitCount === 0 ? 100 : 0;
   const untouchedVault = !state.vaultEverDamaged ? 100 : 0;
+  const tempo = outcome === "victory" && state.objective.kind === "extract-object"
+    ? Math.max(0, state.maxTurns - state.completedEnemyPhases) * 100
+    : 0;
   const lostUnits = lostUnitCount === 0 ? 0 : lostUnitCount * -50;
   const total =
     victory +
@@ -29,6 +32,7 @@ export const calculateScore = (
     survivingUnits +
     flawlessSquad +
     untouchedVault +
+    tempo +
     lostUnits;
   const rank: ScoreBreakdown["rank"] =
     outcome !== "victory"
@@ -48,6 +52,7 @@ export const calculateScore = (
     survivingUnits,
     flawlessSquad,
     untouchedVault,
+    tempo,
     lostUnits,
     total,
     rank,
@@ -64,10 +69,14 @@ export const createMissionResult = (
   const reason =
     outcomeReason ??
     (outcome === "victory"
-      ? "survived-five-turns"
+      ? state.objective.kind === "extract-object"
+        ? "data-extracted"
+        : "survived-five-turns"
       : state.vault.hp <= 0
         ? "vault-destroyed"
-        : "squad-eliminated");
+        : state.units.every((unit) => unit.hp <= 0)
+          ? "squad-eliminated"
+          : "extraction-timeout");
 
   return {
     missionId: state.missionId,
