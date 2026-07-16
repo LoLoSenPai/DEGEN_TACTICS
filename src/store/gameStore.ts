@@ -193,6 +193,7 @@ function isMissionResult(value: unknown): value is MissionResult {
     "charge-broken",
     "express-transfer",
     "rig-untouched",
+    "breach-window",
   ]);
   const validMedals = Array.isArray(result.medals)
     && result.medals.length === 3
@@ -213,6 +214,8 @@ function isMissionResult(value: unknown): value is MissionResult {
       || result.reason === "survived-five-turns"
       || result.reason === "data-extracted"
       || result.reason === "extraction-timeout"
+      || result.reason === "breach-broken"
+      || result.reason === "breach-overrun"
     )
     && scoreValues.every(isFiniteNumber)
     && (score.rank === "S" || score.rank === "A" || score.rank === "B" || score.rank === "C")
@@ -231,8 +234,14 @@ function terminalBannerFor(state: GameState, training: boolean): string {
   if (training) return state.phase === "victory" ? "LESSON CLEAR" : "TRY AGAIN";
   if (state.phase === "defeat") return state.outcomeReason === "extraction-timeout"
     ? "EXTRACTION FAILED"
-    : "MISSION FAILED";
-  return state.outcomeReason === "data-extracted" ? "PACKAGE RECOVERED" : "VAULT SECURED";
+    : state.objective.kind === "break-breach"
+      ? "BREACH OVERRUN"
+      : "MISSION FAILED";
+  return state.outcomeReason === "data-extracted"
+    ? "PACKAGE RECOVERED"
+    : state.outcomeReason === "breach-broken"
+      ? "BREACH BROKEN"
+      : "VAULT SECURED";
 }
 
 function terminalProgress(
@@ -357,6 +366,10 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
         ? "Package recovered. Extraction complete."
         : event.reason === "extraction-timeout"
           ? "Extraction window closed before delivery."
+          : event.reason === "breach-broken"
+            ? "Target neutralized. The breach is contained."
+            : event.reason === "breach-overrun"
+              ? "Counter window closed. The breach overran the Seal."
           : event.outcome === "victory"
             ? "Fracture window survived. Vault secured."
             : "Mission integrity lost.";
@@ -698,7 +711,33 @@ export const useGameStore = create<GameStore>()(
 
           const finish = () => {
             if (generation !== sessionGeneration) return;
-            set({ game: transition.state, isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+            const terminal = transition.state.phase === "victory" || transition.state.phase === "defeat";
+            const training = isTrainingMissionId(transition.state.missionId);
+            const progress = terminalProgress(
+              transition.state,
+              get().bestScores,
+              get().completedMissionIds,
+              get().lastResult,
+            );
+            set({
+              game: transition.state,
+              enemyPlan: planFor(transition.state),
+              isAnimating: false,
+              effects: [],
+              combatCue: null,
+              lastEvents: transition.events,
+              turnBanner: terminal ? terminalBannerFor(transition.state, training) : get().turnBanner,
+              lastResult: progress.result,
+              bestScores: progress.bestScores,
+              completedMissionIds: progress.completedMissionIds,
+            });
+            if (terminal) {
+              if (bannerTimer !== null) window.clearTimeout(bannerTimer);
+              bannerTimer = window.setTimeout(() => {
+                if (generation === sessionGeneration) set({ turnBanner: null });
+                bannerTimer = null;
+              }, 1000);
+            }
           };
 
           if (fatal) {

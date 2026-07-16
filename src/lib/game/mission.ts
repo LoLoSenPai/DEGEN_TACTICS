@@ -407,11 +407,98 @@ export const DATA_EXTRACTION = {
   },
 } as const satisfies MissionDefinition;
 
+export const BREAK_THE_BREACH = {
+  id: "break-the-breach",
+  name: "Break the Breach",
+  boardSize: BOARD_SIZE,
+  maxTurns: 5,
+  objective: {
+    kind: "break-breach",
+    enemyId: "breach-whale",
+    enemyPhases: 5,
+    anvilObjectId: "data-block",
+    anvilDestination: position(5, 1),
+  },
+  obstacles: [
+    position(1, 1),
+    position(6, 1),
+    position(2, 3),
+    position(2, 4),
+    position(4, 4),
+    position(6, 4),
+  ],
+  vault: {
+    id: "seal-generator",
+    name: "Seal Generator",
+    position: position(3, 3),
+    maxHp: 4,
+  },
+  units: [
+    {
+      id: "guardian",
+      name: "Guardian",
+      role: "guardian",
+      position: position(3, 2),
+      maxHp: 12,
+      moveRange: 2,
+      attackDamage: 2,
+      attackRange: 1,
+      signatureName: "Shield Wall",
+    },
+    {
+      id: "sniper",
+      name: "Sniper",
+      role: "sniper",
+      position: position(1, 2),
+      maxHp: 7,
+      moveRange: 3,
+      attackDamage: 3,
+      attackRange: 3,
+      signatureName: "Deadeye",
+    },
+    {
+      id: "pusher",
+      name: "Pusher",
+      role: "pusher",
+      position: position(5, 4),
+      maxHp: 9,
+      moveRange: 2,
+      attackDamage: 1,
+      attackRange: 1,
+      signatureName: "Batter Up",
+    },
+  ],
+  enemies: [],
+  objects: [
+    {
+      id: "data-block",
+      name: "Data Block",
+      position: position(5, 2),
+    },
+  ],
+  breach: {
+    position: position(6, 3),
+    warningTurn: 1,
+    spawnTurn: 2,
+    enemy: {
+      id: "breach-whale",
+      name: "Breach Whale",
+      kind: "whale",
+      position: position(6, 3),
+      maxHp: 12,
+      moveRange: 1,
+      attackDamage: 4,
+      initiative: 30,
+    },
+  },
+} as const satisfies MissionDefinition;
+
 export const DEFAULT_MISSION = PROTECT_THE_VAULT;
 
 export const MISSION_REGISTRY = {
   [PROTECT_THE_VAULT.id]: PROTECT_THE_VAULT,
   [DATA_EXTRACTION.id]: DATA_EXTRACTION,
+  [BREAK_THE_BREACH.id]: BREAK_THE_BREACH,
   [TRAINING_BASICS.id]: TRAINING_BASICS,
   [TRAINING_SQUAD.id]: TRAINING_SQUAD,
   [TRAINING_MOMENTUM.id]: TRAINING_MOMENTUM,
@@ -420,13 +507,16 @@ export const MISSION_REGISTRY = {
 export type MissionId = keyof typeof MISSION_REGISTRY;
 
 export interface OperationMetadata {
-  readonly id: typeof PROTECT_THE_VAULT.id | typeof DATA_EXTRACTION.id;
-  readonly order: 1 | 2;
+  readonly id:
+    | typeof PROTECT_THE_VAULT.id
+    | typeof DATA_EXTRACTION.id
+    | typeof BREAK_THE_BREACH.id;
+  readonly order: 1 | 2 | 3;
   readonly eyebrow: string;
   readonly title: string;
   readonly shortObjective: string;
   readonly integrityLabel: string;
-  readonly unlockAfter?: typeof PROTECT_THE_VAULT.id;
+  readonly unlockAfter?: typeof PROTECT_THE_VAULT.id | typeof DATA_EXTRACTION.id;
   readonly victoryTitle: string;
   readonly victoryMessage: string;
   readonly defeatTitle: string;
@@ -441,6 +531,7 @@ export const PLAYABLE_OPERATIONS = [
     title: PROTECT_THE_VAULT.name,
     shortObjective: "Survive 5 turns",
     integrityLabel: "Vault",
+    unlockAfter: undefined,
     victoryTitle: "Vault Secured",
     victoryMessage: "The Vault held. The district is still ours.",
     defeatTitle: "Mission Failed",
@@ -458,6 +549,19 @@ export const PLAYABLE_OPERATIONS = [
     victoryMessage: "The Data Block made it out.",
     defeatTitle: "Extraction Failed",
     defeatMessage: "The package never reached the zone.",
+  },
+  {
+    id: BREAK_THE_BREACH.id,
+    order: 3,
+    eyebrow: "Operation 03",
+    title: BREAK_THE_BREACH.name,
+    shortObjective: "Break the Whale's charge, then destroy it",
+    integrityLabel: "Seal Generator",
+    unlockAfter: DATA_EXTRACTION.id,
+    victoryTitle: "Breach Broken",
+    victoryMessage: "The Whale is down. The fracture is sealed.",
+    defeatTitle: "Breach Overrun",
+    defeatMessage: "The Seal collapsed before the Whale was neutralized.",
   },
 ] as const satisfies readonly OperationMetadata[];
 
@@ -486,10 +590,14 @@ export const isOperationUnlocked = (
 
 export const getNextOperationId = (
   completedMissionIds: readonly string[],
-): PlayableMissionId =>
-  completedMissionIds.includes(PROTECT_THE_VAULT.id)
-    ? DATA_EXTRACTION.id
-    : PROTECT_THE_VAULT.id;
+): PlayableMissionId => {
+  const nextOperation = PLAYABLE_OPERATIONS.find(
+    (operation) =>
+      !completedMissionIds.includes(operation.id)
+      && isOperationUnlocked(operation.id, completedMissionIds),
+  );
+  return nextOperation?.id ?? BREAK_THE_BREACH.id;
+};
 
 export const getFollowingOperationId = (
   missionId: string,

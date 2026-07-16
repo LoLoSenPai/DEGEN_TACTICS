@@ -46,6 +46,62 @@ const getUnit = (state: GameState, unitId: string): PlayerUnit | undefined =>
 const getEnemy = (state: GameState, enemyId: string): Enemy | undefined =>
   state.enemies.find((enemy) => enemy.id === enemyId && enemy.hp > 0);
 
+const completedPlayerObjectiveReason = (
+  state: GameState,
+): NonNullable<GameState["outcomeReason"]> | null => {
+  if (state.objective.kind === "extract-object") {
+    const objective = state.objective;
+    const objectiveObject = state.objects.find(
+      (object) => object.id === objective.objectId,
+    );
+    return objectiveObject
+      && samePosition(objectiveObject.position, objective.destination)
+      ? "data-extracted"
+      : null;
+  }
+
+  if (state.objective.kind === "break-breach") {
+    const objective = state.objective;
+    const targetAlive = state.enemies.some(
+      (enemy) => enemy.id === objective.enemyId && enemy.hp > 0,
+    );
+    return state.breach.status === "spawned" && !targetAlive
+      ? "breach-broken"
+      : null;
+  }
+
+  return null;
+};
+
+const terminalizePlayerObjective = (
+  state: GameState,
+  events: readonly GameEvent[],
+): GameTransition => {
+  const reason = completedPlayerObjectiveReason(state);
+  if (!reason) return { state, events };
+
+  const objectiveEvents: GameEvent[] = [];
+  if (reason === "data-extracted" && state.objective.kind === "extract-object") {
+    const objective = state.objective;
+    const objectiveObject = state.objects.find(
+      (object) => object.id === objective.objectId,
+    );
+    if (objectiveObject) {
+      objectiveEvents.push({
+        type: "object-extracted",
+        objectId: objectiveObject.id,
+        position: clonePosition(objectiveObject.position),
+      });
+    }
+  }
+  objectiveEvents.push({ type: "mission-ended", outcome: "victory", reason });
+
+  return {
+    state: { ...state, phase: "victory", outcomeReason: reason },
+    events: [...events, ...objectiveEvents],
+  };
+};
+
 const terrainBlocks = (state: GameState, candidate: Position): boolean =>
   state.obstacles.some((position) => samePosition(position, candidate)) ||
   samePosition(state.vault.position, candidate) ||
@@ -96,6 +152,11 @@ export const createInitialGameState = (
         ...definition.objective,
         destination: clonePosition(definition.objective.destination),
       }
+    : definition.objective.kind === "break-breach"
+      ? {
+          ...definition.objective,
+          anvilDestination: clonePosition(definition.objective.anvilDestination),
+        }
     : { ...definition.objective },
   completedEnemyPhases: 0,
   phase: "player",
@@ -140,7 +201,15 @@ export const getStateFingerprint = (state: GameState): string =>
     completedEnemyPhases: state.completedEnemyPhases,
     objective: state.objective.kind === "extract-object"
       ? [state.objective.kind, state.objective.objectId, positionKey(state.objective.destination)]
-      : [state.objective.kind, state.objective.enemyPhases],
+      : state.objective.kind === "break-breach"
+        ? [
+            state.objective.kind,
+            state.objective.enemyId,
+            state.objective.enemyPhases,
+            state.objective.anvilObjectId,
+            positionKey(state.objective.anvilDestination),
+          ]
+        : [state.objective.kind, state.objective.enemyPhases],
     units: [...state.units]
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((unit) => [
@@ -376,7 +445,7 @@ const performPlayerAttack = (
   ];
   if (result.defeated) events.push({ type: "enemy-defeated", enemyId });
 
-  return { state: nextState, events };
+  return terminalizePlayerObjective(nextState, events);
 };
 
 export const attackEnemy = (
@@ -653,32 +722,7 @@ export const pushTarget = (
     events.push({ type: "whale-charge-cancelled", enemyId: targetId });
   }
 
-  if (
-    target.kind === "object" &&
-    nextState.objective.kind === "extract-object" &&
-    nextState.objective.objectId === targetId
-  ) {
-    const extractedObject = nextState.objects.find((object) => object.id === targetId);
-    if (extractedObject && samePosition(extractedObject.position, nextState.objective.destination)) {
-      nextState = {
-        ...nextState,
-        phase: "victory",
-        outcomeReason: "data-extracted",
-      };
-      events.push({
-        type: "object-extracted",
-        objectId: targetId,
-        position: clonePosition(extractedObject.position),
-      });
-      events.push({
-        type: "mission-ended",
-        outcome: "victory",
-        reason: "data-extracted",
-      });
-    }
-  }
-
-  return { state: nextState, events };
+  return terminalizePlayerObjective(nextState, events);
 };
 
 export const pushEnemy = (
@@ -1181,15 +1225,8 @@ export const checkVictoryDefeat = (
     return { outcome: "defeat", reason: "vault-destroyed" };
   if (livingUnits(state).length === 0)
     return { outcome: "defeat", reason: "squad-eliminated" };
-  if (state.objective.kind === "extract-object") {
-    const objective = state.objective;
-    const objectiveObject = state.objects.find(
-      (object) => object.id === objective.objectId,
-    );
-    if (objectiveObject && samePosition(objectiveObject.position, objective.destination)) {
-      return { outcome: "victory", reason: "data-extracted" };
-    }
-  }
+  const completedReason = completedPlayerObjectiveReason(state);
+  if (completedReason) return { outcome: "victory", reason: completedReason };
   if (state.phase === "victory") {
     return {
       outcome: "victory",
@@ -1209,6 +1246,12 @@ export const checkVictoryDefeat = (
     && state.completedEnemyPhases >= state.maxTurns
   ) {
     return { outcome: "defeat", reason: "extraction-timeout" };
+  }
+  if (
+    state.objective.kind === "break-breach"
+    && state.completedEnemyPhases >= state.objective.enemyPhases
+  ) {
+    return { outcome: "defeat", reason: "breach-overrun" };
   }
   return { outcome: null, reason: null };
 };

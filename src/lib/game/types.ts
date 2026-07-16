@@ -13,7 +13,9 @@ export type MissionOutcomeReason =
   | "squad-eliminated"
   | "survived-five-turns"
   | "data-extracted"
-  | "extraction-timeout";
+  | "extraction-timeout"
+  | "breach-broken"
+  | "breach-overrun";
 
 export type MissionObjective =
   | Readonly<{ kind: "survive"; enemyPhases: number }>
@@ -21,6 +23,13 @@ export type MissionObjective =
       kind: "extract-object";
       objectId: string;
       destination: Position;
+    }>
+  | Readonly<{
+      kind: "break-breach";
+      enemyId: string;
+      enemyPhases: number;
+      anvilObjectId: string;
+      anvilDestination: Position;
     }>;
 
 export interface Tile {
@@ -242,7 +251,8 @@ export type MissionMedalId =
   | "full-squad"
   | "charge-broken"
   | "express-transfer"
-  | "rig-untouched";
+  | "rig-untouched"
+  | "breach-window";
 
 export interface MissionMedal {
   readonly id: MissionMedalId;

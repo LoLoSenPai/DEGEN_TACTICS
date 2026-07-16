@@ -8,7 +8,7 @@
 - Vitest 4 for pure game and persistence tests.
 - A semantic 7x7 DOM grid; no canvas engine, Phaser, database, RPC, or wallet runtime.
 
-The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current suite contains 80 deterministic tests.
+The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current suite contains 88 deterministic tests.
 
 ## Current product surface
 
@@ -26,7 +26,7 @@ There is no required HQ, campaign map, or loadout step. The old mission and load
 | Route | Lifecycle behavior |
 | --- | --- |
 | `/` | Hydrates local progress, shows the title menu, and deploys to the next operation |
-| `/operations` | Shows Protect the Vault and Data Extraction, including lock, completion, and best score state |
+| `/operations` | Shows all three operations, including prerequisite, completion, and best score state |
 | `/training` | Shows three optional chapters and their local completion state |
 | `/battle/[missionId]` | Validates the registry ID, starts that mission fresh, mounts controls/serializer, and rejects a locked operation |
 | `/battle/protect-the-vault` | Legacy-compatible battle entry |
@@ -74,11 +74,19 @@ type MissionObjective =
       kind: "extract-object";
       objectId: string;
       destination: Position;
+    }>
+  | Readonly<{
+      kind: "break-breach";
+      enemyId: string;
+      enemyPhases: number;
+      anvilObjectId: string;
+      anvilDestination: Position;
     }>;
 ```
 
 - **Protect the Vault** uses `{ kind: "survive", enemyPhases: 5 }`.
 - **Data Extraction** uses `{ kind: "extract-object", objectId: "data-block", destination: E3 }`.
+- **Break the Breach** uses `{ kind: "break-breach", enemyId: "breach-whale", enemyPhases: 5, anvilObjectId: "data-block", anvilDestination: F2 }`.
 
 The objective is cloned into the immutable session state. Objective checks therefore remain deterministic and do not depend on the current URL. The mission registry also supplies starting entities, structure, terrain, turn limit, breach script, and stable IDs.
 
@@ -126,6 +134,12 @@ mission-ended (victory, data-extracted)
 
 Victory is immediate; React does not infer it from tile styling. If enemy phase 5 completes without delivery, the engine returns `extraction-timeout`. Structure destruction and squad elimination retain defeat priority.
 
+### Breach target
+
+Break the Breach begins with an incoming breach and no target in `enemies`; absence before spawn is therefore not success. The Whale spawns at G4 on player Turn 2. Once `breach.status` is `spawned`, removing the exact configured `enemyId` completes the objective immediately with `breach-broken`. If it remains alive after the configured fifth enemy phase, the result is `breach-overrun`.
+
+Both `attackEnemy` and `pushTarget` pass their final immutable state through the same objective-terminal helper. A fatal basic attack, Deadeye, Shove collision, or Batter Up collision therefore appends `mission-ended` after the damage/defeat events instead of waiting for End Turn. The absent target, anvil object ID, and F2 anvil destination are included in the state fingerprint and serializer contract.
+
 ## Determinism and exact intents
 
 Enemy intent is a runtime invariant, not decorative UI copy.
@@ -140,13 +154,13 @@ Enemy intent is a runtime invariant, not decorative UI copy.
 
 Selection, hover, tutorial copy, and animation progress are UI-only and do not trigger replanning. Identical input states produce byte-equivalent serialized plans.
 
-Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn before Turn 3 planning. Data Extraction's inactive breach slot is placed under an existing obstacle and uses unreachable script turns, so it has no visible breach or Whale event.
+Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn before Turn 3 planning. Data Extraction's inactive breach slot is placed under an existing obstacle and uses unreachable script turns, so it has no visible breach or Whale event. Break the Breach starts with G4 incoming, spawns its 12-HP Whale before Turn 2 planning, and deterministically produces G4 -> F4 with the west cone E4/D3/D4/D5 when the authored setup is followed.
 
 ## Events and animation
 
 Engine events describe movement, attack, damage, shield, push, collision, defeat, spawn, Whale state, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
 
-The store applies player transitions immediately and derives combat log, sprite state, path travel, impacts, shields, damage numbers, KO sequences, and banners from those ordered events. A skipped animation, slow device, or reduced-motion preference cannot change a rule result.
+The store applies player transitions immediately and derives combat log, sprite state, path travel, impacts, shields, damage numbers, KO sequences, and banners from those ordered events. Terminal player attacks and collision pushes persist their result, best score, and completed mission only after their readable impact/death playback finishes; the already-computed engine result never changes. A skipped animation, slow device, or reduced-motion preference cannot change a rule result.
 
 ## Client store and persistence
 
@@ -176,12 +190,13 @@ type PersistedProfile = {
   lastResult?: MissionResult;
   settings: {
     soundMuted: boolean;
+    tutorialComplete: boolean;
     trainingCompleted: number;
   };
 };
 ```
 
-The Zustand slice stores these as sibling fields; the grouped type only documents the persistence boundary. Only victories append a mission ID, duplicates are removed, and completion of Protect the Vault unlocks Data Extraction. Existing best scores can also safely migrate into completion progress. A new score replaces a mission best only when higher.
+The Zustand slice stores these as sibling fields; the grouped type only documents the persistence boundary. Only victories append a mission ID, duplicates are removed, and unlocks follow Protect the Vault -> Data Extraction -> Break the Breach. Existing best scores can also safely migrate into completion progress. A new score replaces a mission best only when higher.
 
 Storage reads use version/schema guards and `try/catch`. Missing, corrupt, incompatible, or unavailable storage produces default guest data without blocking startup. Active battle state is never persisted.
 
@@ -190,7 +205,7 @@ Storage reads use version/schema guards and `try/catch`. Missing, corrupt, incom
 Battle exposes `window.render_game_to_text()` in development/test builds. The deterministic JSON string includes:
 
 - Mission ID, board size, phase, turn, and completed enemy phases.
-- The objective kind; extraction snapshots also include object ID, destination, and delivered state.
+- The objective kind; extraction snapshots include object ID, destination, and delivered state, while breach snapshots include target ID, spawned/defeated state, anvil object, and anvil destination.
 - Protected structure coordinate, integrity, and pristine/damaged state.
 - Squad state, signature availability, enemies, objects, breach, selection, action mode, highlights, and interaction lock.
 - Exact intent order, path, destination, target, damage, area, and special state.
@@ -203,6 +218,7 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 - Grid tiles are semantic buttons with descriptive ARIA labels and visible keyboard focus.
 - Movement, attack, push, danger, locked area, cargo route, and token overlays remain separate channels.
 - Data Extraction renders its destination and route from `game.objective`; it never hard-codes E3 in the component.
+- Break the Breach renders its setup route and contextual coaching from `anvilObjectId` and `anvilDestination`; it never hard-codes F2 in presentation code.
 - Action controls derive legality from engine selectors. Components do not duplicate range, line-of-sight, charge, extraction, or activation rules.
 - Enemy intent cards render stored plan fields directly.
 - Results render the stored breakdown and mission metadata. Retry uses the result mission ID; Next Operation uses the authored operation order.
@@ -211,7 +227,7 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 
 ## Testing strategy
 
-The current 80-test suite covers:
+The current 88-test suite covers:
 
 - Movement, occupancy, bounds, obstacles, shortest paths, and no diagonal traversal.
 - Melee/Sniper targeting, line of sight, activation limits, Wait, signatures, and undo invalidation.
@@ -219,9 +235,10 @@ The current 80-test suite covers:
 - Rugger/Drainer targeting, sequential occupancy, stable initiative, and exact-plan equivalence.
 - Protect's breach warning, Whale spawn/charge/slam/cancel/stagger, phase-5 timing, and defeat precedence.
 - Data Extraction registry/unlock/routing, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
+- Break the Breach registry/unlock/routing, immutable anvil data, no pre-spawn auto-win, exact Turn-2 spawn and cone, canonical charge break/stagger/anvil kill, blocked-push Seal destruction, fatal attack/collision terminalization, timeout, scoring, and medals.
 - Storage fallback, completed-operation migration, unlock persistence, and best-score non-regression.
 
-Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review.
+Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review.
 
 ## Safe extension points
 

@@ -2,10 +2,11 @@
 
 **Every move counts.** Degen Tactics is a deterministic, turn-based tactical puzzle for the web. It opens like a game: title screen, one clear deployment action, a full-screen battlefield, then a victory or defeat debrief.
 
-The current vertical slice contains two authored 7x7 operations:
+The current vertical slice contains three authored 7x7 operations:
 
 - **Protect the Vault:** survive five enemy phases while defending the district core.
 - **Data Extraction:** push the Data Block through a hostile board and deliver it to E3 before the extraction window closes.
+- **Break the Breach:** prepare an anvil, interrupt the Whale's locked slam, then destroy it before the Seal Generator falls.
 
 The MVP is guest-first and runs entirely in the browser. There is no wallet requirement, backend, token, wagering, or play-to-earn system.
 
@@ -18,7 +19,7 @@ The MVP is guest-first and runs entirely in the browser. There is no wallet requ
 - Guardian, Sniper, and Pusher units with distinct actions and one-charge signature abilities.
 - Deterministic Rugger, Drainer, and two-phase Whale behavior.
 - Exact enemy movement, target, damage, and area previews before End Turn.
-- Two objective types in the pure engine: fixed-horizon survival and object extraction.
+- Three objective types in the pure engine: fixed-horizon survival, object extraction, and breach-target destruction.
 - Per-operation best scores, mission medals, completed-operation unlocks, and a saved last result.
 - Keyboard controls, reduced-motion support, and a designed small-screen notice for battle.
 
@@ -57,7 +58,7 @@ pnpm test
 pnpm build
 ```
 
-The deterministic engine and persistence suite currently contains 80 passing tests.
+The deterministic engine and persistence suite currently contains 88 passing tests.
 
 ## How to play
 
@@ -67,6 +68,7 @@ Enemy intents are promises: the displayed path, destination, target, damage, and
 
 - In **Protect the Vault**, keep the 10-integrity Vault online through enemy phase 5.
 - In **Data Extraction**, use Shove and Batter Up to move the Data Block onto E3. Delivery wins immediately; failing to deliver by the end of enemy phase 5 loses the operation.
+- In **Break the Breach**, move the Data Block from F3 to F2 before the Whale arrives, displace its locked charge, then use the Block as an anvil to finish the 12-HP boss. The 4-integrity Seal Generator cannot survive one slam.
 - Any operation is lost immediately if its protected structure reaches 0 integrity or the entire squad is defeated.
 
 Keyboard shortcuts:
@@ -89,7 +91,7 @@ Battle is designed for viewports at least 1024px wide. Title, Operations, Traini
 | Route | Screen |
 | --- | --- |
 | `/` | Title screen and primary game menu |
-| `/operations` | Two-operation selection and local completion status |
+| `/operations` | Three-operation selection and local completion status |
 | `/training` | Three optional tutorial chapters |
 | `/battle/[missionId]` | Dynamic battle entry for an authored mission |
 | `/battle/protect-the-vault` | Legacy-compatible direct battle entry |

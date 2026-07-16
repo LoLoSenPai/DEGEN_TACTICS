@@ -190,8 +190,13 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
   } else if (cue.stage === "death") {
     const fatalHits = cue.hits?.filter((hit) => hit.fatal) ?? [];
     if (cue.statusKind === "vault-breached" || cue.targetId === game.vault.id) {
-      kicker = "VAULT BREACHED";
-      message = "Vault integrity reached zero";
+      const structureLabel = game.objective.kind === "extract-object"
+        ? "RIG"
+        : game.objective.kind === "break-breach"
+          ? "SEAL"
+          : "VAULT";
+      kicker = `${structureLabel} BREACHED`;
+      message = `${structureLabel[0]}${structureLabel.slice(1).toLowerCase()} integrity reached zero`;
     } else if (fatalHits.length > 1) {
       kicker = "MULTI KO";
       message = `${fatalHits.length} squad targets are down`;
@@ -392,11 +397,20 @@ function exactPushPreview(
     destination: movement?.to ?? target.position,
     collided: Boolean(collision),
     collisionDamage: collision?.damage ?? 0,
-    completesObjective: transition.events.some((event) => event.type === "object-extracted"),
+    completesObjective: transition.state.phase === "victory"
+      && transition.events.some((event) => event.type === "mission-ended"),
   };
 }
 
 function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
+  if (preview.targetKind === "enemy" && preview.completesObjective) {
+    return (
+      <span className="game-push-preview is-delivery" aria-hidden="true">
+        <strong>BREACH BREAK</strong>
+        <small>MISSION CLEAR</small>
+      </span>
+    );
+  }
   if (preview.targetKind === "object") {
     if (preview.completesObjective) {
       return (
@@ -473,6 +487,33 @@ function liveMissionMasteries(game: GameState): readonly LiveMastery[] {
       },
     ];
   }
+  if (game.objective.kind === "break-breach") {
+    const breachBroken = game.outcomeReason === "breach-broken";
+    return [
+      {
+        id: "charge-broken",
+        label: "Break charge",
+        goal: "Displace the charging Whale",
+        status: game.whaleChargeCancelled ? "earned" : "pending",
+      },
+      {
+        id: "breach-window",
+        label: "Counter window",
+        goal: "Neutralize by Turn 4",
+        status: breachBroken && game.completedEnemyPhases <= 3
+          ? "earned"
+          : game.completedEnemyPhases > 3
+            ? "lost"
+            : "active",
+      },
+      {
+        id: "full-squad",
+        label: "Full squad",
+        goal: "Keep every hero alive",
+        status: fullSquad ? "active" : "lost",
+      },
+    ];
+  }
   return [
     {
       id: "vault-untouched",
@@ -500,6 +541,7 @@ function masteryIcon(id: MissionMedalId) {
   if (id === "full-squad") return <UsersThree weight="fill" aria-hidden="true" />;
   if (id === "rig-untouched") return <Shield weight="fill" aria-hidden="true" />;
   if (id === "express-transfer") return <ArrowFatRight weight="fill" aria-hidden="true" />;
+  if (id === "breach-window") return <Target weight="fill" aria-hidden="true" />;
   return <Lightning weight="fill" aria-hidden="true" />;
 }
 
@@ -589,9 +631,15 @@ function signaturePresentation(unit: PlayerUnit) {
 function GameHud({ game }: { game: GameState }) {
   const vaultPercent = Math.max(0, Math.min(100, (game.vault.hp / game.vault.maxHp) * 100));
   const presentation = missionPresentation(game.missionId);
-  const hudIntegrityLabel = game.objective.kind === "extract-object" ? "Rig" : presentation.integrityLabel;
+  const hudIntegrityLabel = game.objective.kind === "extract-object"
+    ? "Rig"
+    : game.objective.kind === "break-breach"
+      ? "Seal"
+      : presentation.integrityLabel;
   const hudObjective = game.objective.kind === "extract-object"
     ? `Deliver cargo to ${coordinate(game.objective.destination)}`
+    : game.objective.kind === "break-breach"
+      ? "Break charge"
     : presentation.objective;
 
   return (
@@ -619,13 +667,36 @@ function MissionIntro({ game }: { game: GameState }) {
       <p>{presentation.objective}</p>
       {game.objective.kind === "extract-object" ? (
         <div className="mission-intro-rule"><HandGrabbing weight="fill" /> Only Pusher moves cargo <span>Shove 1 · Batter Up 2</span></div>
+      ) : game.objective.kind === "break-breach" ? (
+        <div className="mission-intro-rule"><Lightning weight="fill" /> Break the locked charge <span>Use the Data Block as an anvil</span></div>
       ) : null}
       <IntroMasteries game={game} />
     </div>
   );
 }
 
-function extractionCoach(game: GameState): string | null {
+function objectiveCoach(game: GameState): string | null {
+  if (game.objective.kind === "break-breach") {
+    const objective = game.objective;
+    const whale = game.enemies.find((enemy) => enemy.id === objective.enemyId);
+    const anvil = game.objects.find((object) => object.id === objective.anvilObjectId);
+    const pusher = game.units.find((unit) => unit.role === "pusher" && unit.hp > 0);
+    const anvilReady = Boolean(anvil && samePosition(anvil.position, objective.anvilDestination));
+    if (!anvilReady && anvil) {
+      return `Clear the lane · Shove ${coordinate(anvil.position)} north to ${coordinate(objective.anvilDestination)}`;
+    }
+    if (!whale) return "Anvil armed · stage the squad before the Whale arrives";
+    if (whale.whaleState === "charging") {
+      return `Charge locked · Shove ${coordinate(whale.position)} north, then exploit the stagger`;
+    }
+    if (whale.whaleState === "staggered") {
+      return "Whale staggered · focus fire, then Batter Up against the Block";
+    }
+    if (pusher && whale.position.x === pusher.position.x && whale.position.y === pusher.position.y - 1) {
+      return "Anvil lined up · Batter Up collides for −2 HP";
+    }
+    return "Whale exposed · place the Pusher directly south of it";
+  }
   if (game.objective.kind !== "extract-object") return null;
   const objective = game.objective;
   const cargo = game.objects.find((object) => object.id === objective.objectId);
@@ -637,6 +708,42 @@ function extractionCoach(game: GameState): string | null {
   const readyWest = pusher.position.x === cargo.position.x - 1 && pusher.position.y === cargo.position.y;
   if (!readyWest) return `Turn the corner · move west of the Block at ${coordinate(cargo.position)}`;
   return `Delivery lined up · Batter Up reaches ${coordinate(objective.destination)} now`;
+}
+
+function BreachBreakRoute({ game }: { game: GameState }) {
+  if (game.objective.kind !== "break-breach") return null;
+  const objective = game.objective;
+  const anvil = game.objects.find((object) => object.id === objective.anvilObjectId);
+  const whale = game.enemies.find((enemy) => enemy.id === objective.enemyId);
+  const anvilReady = Boolean(anvil && samePosition(anvil.position, objective.anvilDestination));
+  const from = !anvilReady && anvil
+    ? anvil.position
+    : whale && (whale.whaleState === "charging" || game.whaleChargeCancelled)
+      ? whale.position
+      : null;
+  const to = !anvilReady && anvil
+    ? objective.anvilDestination
+    : whale
+      ? objective.anvilDestination
+      : null;
+  if (!from || !to || samePosition(from, to)) return null;
+
+  return (
+    <svg className="breach-break-route" viewBox="0 0 7 7" aria-hidden="true">
+      <defs>
+        <marker id="breach-break-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="0.42" markerHeight="0.42" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" />
+        </marker>
+      </defs>
+      <line
+        x1={from.x + 0.5}
+        y1={from.y + 0.5}
+        x2={to.x + 0.5}
+        y2={to.y + 0.5}
+        markerEnd="url(#breach-break-arrow)"
+      />
+    </svg>
+  );
 }
 
 function CargoExtractionRoute({ game }: { game: GameState }) {
@@ -995,6 +1102,7 @@ function tileDescription({
   else if (obstacle) details.push("Blast Barricade, immovable, blocks movement and line of sight");
   else if (samePosition(game.breach.position, position) && game.breach.status === "incoming") details.push("incoming breach, impassable");
   else if (game.objective.kind === "extract-object" && samePosition(game.objective.destination, position)) details.push("Data Block extraction zone, deliver the configured cargo here");
+  else if (game.objective.kind === "break-breach" && samePosition(game.objective.anvilDestination, position)) details.push("collision anvil position, move the Data Block here before the Whale charges");
   else details.push("floor");
   if (isMove) details.push("legal move");
   if (isAttack) details.push("attackable target");
@@ -1133,6 +1241,7 @@ function Board({
     >
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
         <CargoExtractionRoute game={game} />
+        <BreachBreakRoute game={game} />
         <EnemyIntentPath plan={enemyPlan} />
         {movePreview && movePreviewPath ? <PlayerMovePath positions={movePreviewPath} destination={coordinate(movePreview)} /> : null}
         <CombatActionFx game={game} cue={combatCue} />
@@ -1143,6 +1252,8 @@ function Board({
           const object = game.objects.find((candidate) => samePosition(candidate.position, position));
           const isVault = samePosition(game.vault.position, position);
           const isExtraction = game.objective.kind === "extract-object" && samePosition(game.objective.destination, position);
+          const isBreachAnvil = game.objective.kind === "break-breach" && samePosition(game.objective.anvilDestination, position);
+          const isBreachAnvilReady = isBreachAnvil && Boolean(object && object.id === (game.objective.kind === "break-breach" ? game.objective.anvilObjectId : ""));
           const obstacle = game.obstacles.some((candidate) => samePosition(candidate, position));
           const isBreach = samePosition(game.breach.position, position) && game.breach.status === "incoming";
           const isMove = moveKeys.has(key) && actionMode === "move";
@@ -1188,6 +1299,8 @@ function Board({
                 isVault && "is-vault",
                 isExtraction && "is-extraction-zone",
                 isExtraction && game.phase === "victory" && "is-extraction-complete",
+                isBreachAnvil && "is-breach-anvil",
+                isBreachAnvilReady && "is-breach-anvil-ready",
                 isBreach && "is-breach",
                 isSelected && "is-selected",
                 isMove && "is-move",
@@ -1225,6 +1338,7 @@ function Board({
               {obstacle ? <SpriteArt kind="obstacle" name="Blast Barricade" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
               {isExtraction ? <span className="extraction-zone-marker" aria-hidden="true"><ArrowFatRight weight="fill" /><small>{game.phase === "victory" ? "Secured" : "Extract"}</small></span> : null}
+              {isBreachAnvil ? <span className="breach-anvil-marker" aria-hidden="true"><HandFist weight="fill" /><small>{isBreachAnvilReady ? "Armed" : "Anvil"}</small></span> : null}
               {isVault ? (
                 <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={game.vault.id}>
                   <span className="piece-base" />
@@ -1650,14 +1764,28 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       turn: game.turn,
       objective: (() => {
         const objective = game.objective;
-        return objective.kind === "extract-object"
-          ? {
+        if (objective.kind === "extract-object") {
+          return {
               kind: objective.kind,
               objectId: objective.objectId,
               destination: coordinate(objective.destination),
               delivered: game.objects.some((object) => object.id === objective.objectId && samePosition(object.position, objective.destination)),
-            }
-          : { kind: objective.kind, enemyPhases: objective.enemyPhases };
+            };
+        }
+        if (objective.kind === "break-breach") {
+          return {
+            kind: objective.kind,
+            enemyId: objective.enemyId,
+            enemyPhases: objective.enemyPhases,
+            targetSpawned: game.breach.status === "spawned",
+            targetAlive: game.enemies.some((enemy) => enemy.id === objective.enemyId && enemy.hp > 0),
+            chargeBroken: game.whaleChargeCancelled,
+            anvilObjectId: objective.anvilObjectId,
+            anvilDestination: coordinate(objective.anvilDestination),
+            anvilReady: game.objects.some((object) => object.id === objective.anvilObjectId && samePosition(object.position, objective.anvilDestination)),
+          };
+        }
+        return { kind: objective.kind, enemyPhases: objective.enemyPhases };
       })(),
       selectedUnitId,
       inspectedId,
@@ -2061,7 +2189,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
               movePreview={movePreview}
               movePreviewDistance={Math.max(0, (movePreviewPath?.length ?? 1) - 1)}
               remainingCount={remainingUnits.length}
-              objectiveHint={extractionCoach(game)}
+              objectiveHint={objectiveCoach(game)}
               hasUndo={Boolean(lastMove)}
               tutorialStep={tutorialStep}
               disabled={controlsLocked || game.phase !== "player"}

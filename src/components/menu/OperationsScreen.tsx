@@ -22,6 +22,12 @@ const OPERATION_ART = {
     prop: "/assets/sprites/data-block.png",
     className: "operation-poster-data",
   },
+  "break-the-breach": {
+    hero: "/assets/sprites/whale.png",
+    prop: "/assets/sprites/vault.png",
+    support: "/assets/sprites/data-block.png",
+    className: "operation-poster-breach",
+  },
 } as const;
 
 export function OperationsScreen() {
@@ -29,6 +35,9 @@ export function OperationsScreen() {
   const completedMissionIds = useGameStore((state) => state.completedMissionIds);
   const bestScores = useGameStore((state) => state.bestScores);
   const nextOperationId = getNextOperationId(completedMissionIds);
+  const clearedOperationCount = PLAYABLE_OPERATIONS.filter((operation) =>
+    completedMissionIds.includes(operation.id),
+  ).length;
 
   return (
     <main className="operations-screen">
@@ -43,7 +52,7 @@ export function OperationsScreen() {
         <div className="operations-heading">
           <p>Fracture Zone // Field Operations</p>
           <h1>Choose your operation</h1>
-          <span>{hydrated ? `${completedMissionIds.length} / ${PLAYABLE_OPERATIONS.length} cleared` : "Loading field data…"}</span>
+          <span>{hydrated ? `${clearedOperationCount} / ${PLAYABLE_OPERATIONS.length} cleared` : "Loading field data…"}</span>
         </div>
         <div className="operations-next" aria-live="polite">
           <small>Next deployment</small>
@@ -58,6 +67,10 @@ export function OperationsScreen() {
           const highlighted = operation.id === nextOperationId;
           const art = OPERATION_ART[operation.id];
           const score = bestScores[operation.id] ?? 0;
+          const unlockAfter = "unlockAfter" in operation ? operation.unlockAfter : null;
+          const unlockOperation = unlockAfter
+            ? PLAYABLE_OPERATIONS.find((candidate) => candidate.id === unlockAfter)
+            : null;
 
           return (
             <article
@@ -72,6 +85,7 @@ export function OperationsScreen() {
                 <span className="operation-art-ring" />
                 <Image className="operation-art-prop" src={art.prop} alt="" width={320} height={320} />
                 <Image className="operation-art-hero" src={art.hero} alt="" width={640} height={640} />
+                {"support" in art ? <Image className="operation-art-support" src={art.support} alt="" width={320} height={320} /> : null}
               </div>
 
               <div className="operation-poster-copy">
@@ -85,14 +99,18 @@ export function OperationsScreen() {
               </div>
 
               {unlocked ? (
-                <Link className="operation-deploy" href={getBattleHref(operation.id)}>
+                <Link
+                  className="operation-deploy"
+                  href={getBattleHref(operation.id)}
+                  aria-label={`${completed ? "Replay" : highlighted ? "Deploy" : "Play"} ${operation.title}`}
+                >
                   <Play weight="fill" aria-hidden="true" />
                   {completed ? "Replay" : highlighted ? "Deploy" : "Play"}
                 </Link>
               ) : (
                 <div className="operation-lock-copy">
                   <LockKey weight="fill" aria-hidden="true" />
-                  Clear Operation 01
+                  Clear {unlockOperation?.eyebrow ?? "previous operation"}
                 </div>
               )}
             </article>

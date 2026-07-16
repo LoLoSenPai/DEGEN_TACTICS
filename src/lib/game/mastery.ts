@@ -45,6 +45,29 @@ export const calculateMissionMedals = (
     ];
   }
 
+  if (state.objective.kind === "break-breach") {
+    return [
+      {
+        id: "charge-broken",
+        name: "Charge Broken",
+        description: "Interrupt the Whale's locked cone.",
+        earned: state.whaleChargeCancelled,
+      },
+      {
+        id: "breach-window",
+        name: "Breach Window",
+        description: "Destroy the Whale by player Turn 4.",
+        earned: state.outcomeReason === "breach-broken" && state.completedEnemyPhases <= 3,
+      },
+      {
+        id: "full-squad",
+        name: "Full Squad",
+        description: "Keep every operator alive.",
+        earned: survivingUnits === state.initialSquadSize,
+      },
+    ];
+  }
+
   return [
     {
       id: "vault-untouched",

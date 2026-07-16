@@ -349,7 +349,8 @@
   background-color: transparent;
 }
 
-.cargo-extraction-route {
+.cargo-extraction-route,
+.breach-break-route {
   position: absolute;
   z-index: 3;
   inset: 0;
@@ -360,7 +361,8 @@
   filter: drop-shadow(0 0 0.08px #120c02) drop-shadow(0 0 0.12px rgba(245, 185, 55, 0.7));
 }
 
-.cargo-extraction-route polyline {
+.cargo-extraction-route polyline,
+.breach-break-route line {
   fill: none;
   stroke: rgba(246, 190, 61, 0.68);
   stroke-width: 0.075;
@@ -370,8 +372,23 @@
   animation: cargo-route-flow 1.3s linear infinite;
 }
 
-.cargo-extraction-route marker path {
+.cargo-extraction-route marker path,
+.breach-break-route marker path {
   fill: #ffd260;
+}
+
+.breach-break-route {
+  filter: drop-shadow(0 0 0.1px #100703) drop-shadow(0 0 0.16px rgba(255, 101, 67, 0.82));
+}
+
+.breach-break-route line {
+  stroke: rgba(255, 116, 73, 0.88);
+  stroke-width: 0.09;
+  stroke-dasharray: 0.12 0.09;
+}
+
+.breach-break-route marker path {
+  fill: #ff8654;
 }
 
 .game-tile {
@@ -442,6 +459,29 @@
   border-color: #61f1d5;
   background-color: rgba(20, 119, 100, 0.54);
   box-shadow: inset 0 0 0 3px rgba(97, 241, 213, 0.26), 0 0 30px rgba(68, 232, 201, 0.72);
+}
+
+.game-tile.is-breach-anvil {
+  border: 3px solid #e46b3f;
+  background-color: rgba(101, 28, 15, 0.34);
+  box-shadow: inset 0 0 0 3px rgba(255, 133, 78, 0.15), 0 0 17px rgba(238, 82, 44, 0.28);
+}
+
+.game-tile.is-breach-anvil::before {
+  position: absolute;
+  z-index: 5;
+  inset: 8%;
+  border: 2px dashed rgba(255, 148, 90, 0.82);
+  content: "";
+  pointer-events: none;
+  clip-path: polygon(16% 0, 84% 0, 100% 16%, 100% 84%, 84% 100%, 16% 100%, 0 84%, 0 16%);
+  animation: extraction-zone-pulse 1.05s ease-in-out infinite;
+}
+
+.game-tile.is-breach-anvil-ready {
+  border-color: #ffbf50;
+  background-color: rgba(105, 62, 12, 0.42);
+  box-shadow: inset 0 0 0 3px rgba(255, 203, 89, 0.2), 0 0 23px rgba(255, 154, 55, 0.42);
 }
 
 .game-tile.is-breach {
@@ -1141,6 +1181,35 @@
 
 .is-extraction-complete .extraction-zone-marker {
   color: #79f8df;
+}
+
+.breach-anvil-marker {
+  position: absolute;
+  z-index: 70;
+  right: 6%;
+  bottom: 6%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #ff9c61;
+  text-shadow: 1px 1px 0 #0d0502, 0 0 7px rgba(255, 99, 52, 0.72);
+  pointer-events: none;
+}
+
+.is-breach-anvil-ready .breach-anvil-marker {
+  color: #ffd265;
+}
+
+.breach-anvil-marker svg {
+  width: 15px;
+  height: 15px;
+}
+
+.breach-anvil-marker small {
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @keyframes cargo-route-flow {
@@ -3083,7 +3152,9 @@
   .game-piece.vault-piece .board-sprite,
   .game-piece.object-piece .board-sprite,
   .cargo-extraction-route polyline,
+  .breach-break-route line,
   .game-tile.is-extraction-zone::before,
+  .game-tile.is-breach-anvil::before,
   .game-piece.is-active .piece-base,
   .game-tile.is-danger,
   .game-damage-popup,

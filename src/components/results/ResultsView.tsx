@@ -9,6 +9,7 @@ import {
   Lightning,
   ShieldCheck,
   Skull,
+  Timer,
   Trophy,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -56,6 +57,8 @@ const medalIcon = (medal: MissionMedal) => {
       return <HourglassHigh weight="fill" aria-hidden="true" />;
     case "rig-untouched":
       return <ShieldCheck weight="fill" aria-hidden="true" />;
+    case "breach-window":
+      return <Timer weight="fill" aria-hidden="true" />;
     default:
       return <Trophy weight="fill" aria-hidden="true" />;
   }

@@ -43,6 +43,10 @@ export default function ResultsPage() {
     ? getOperationMetadata(followingOperationId)
     : null;
   const integrityLabel = operation?.integrityLabel ?? mission.vault.name;
+  const isBreakTheBreach = result.missionId === "break-the-breach";
+  const isPlayerPhaseObjectiveVictory = result.outcome === "victory" && (
+    mission.objective.kind === "extract-object" || mission.objective.kind === "break-breach"
+  );
 
   const display: ResultsDisplayData = {
     missionId: result.missionId,
@@ -61,10 +65,12 @@ export default function ResultsPage() {
     integrityLabel,
     vaultHp: result.vaultHp,
     vaultMaxHp: result.vaultMaxHp,
-    turnLabel: mission.objective.kind === "extract-object"
-      ? result.outcome === "victory" ? "Extracted" : "Window"
-      : "Turns",
-    turnsSurvived: mission.objective.kind === "extract-object" && result.outcome === "victory"
+    turnLabel: isBreakTheBreach
+      ? result.outcome === "victory" ? "Neutralized" : "Window"
+      : mission.objective.kind === "extract-object"
+        ? result.outcome === "victory" ? "Extracted" : "Window"
+        : "Turns",
+    turnsSurvived: isPlayerPhaseObjectiveVictory
       ? Math.min(mission.maxTurns, result.turnsSurvived + 1)
       : result.turnsSurvived,
     maxTurns: mission.maxTurns,
@@ -81,7 +87,7 @@ export default function ResultsPage() {
       { label: "No operators lost", value: result.score.flawlessSquad },
       { label: `Untouched ${integrityLabel}`, value: result.score.untouchedVault },
       ...(result.score.tempo > 0
-        ? [{ label: "Express extraction", value: result.score.tempo }]
+        ? [{ label: isBreakTheBreach ? "Rapid neutralization" : "Express extraction", value: result.score.tempo }]
         : []),
       { label: "Casualty penalty", value: result.score.lostUnits },
     ],

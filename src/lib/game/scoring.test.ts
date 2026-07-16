@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BREAK_THE_BREACH,
   calculateScore,
   createInitialGameState,
   createMissionResult,
@@ -48,6 +49,52 @@ describe("mission scoring", () => {
       untouchedVault: 100,
       total: 1150,
       rank: "A",
+    });
+  });
+
+  it("rewards a Turn 4 breach break with the authored S-rank total", () => {
+    const initial = createInitialGameState(BREAK_THE_BREACH);
+    const turnFour: GameState = {
+      ...initial,
+      phase: "victory",
+      completedEnemyPhases: 3,
+      defeatedEnemies: 1,
+      breach: { ...initial.breach, status: "spawned" },
+      whaleChargeCancelled: true,
+      outcomeReason: "breach-broken",
+    };
+    expect(calculateScore(turnFour, "victory")).toEqual({
+      victory: 500,
+      vaultIntegrity: 200,
+      enemiesDefeated: 75,
+      survivingUnits: 150,
+      flawlessSquad: 100,
+      untouchedVault: 100,
+      tempo: 100,
+      lostUnits: 0,
+      total: 1225,
+      rank: "S",
+    });
+
+    const turnFive = calculateScore(
+      { ...turnFour, completedEnemyPhases: 4 },
+      "victory",
+    );
+    expect(turnFive).toMatchObject({ tempo: 50, total: 1175, rank: "A" });
+    expect(calculateScore(turnFour, "defeat")).toMatchObject({
+      tempo: 0,
+      rank: "C",
+    });
+    expect(createMissionResult(turnFour, "victory")).toMatchObject({
+      missionId: "break-the-breach",
+      reason: "breach-broken",
+      completed: true,
+      turnsSurvived: 3,
+      medals: [
+        expect.objectContaining({ id: "charge-broken", earned: true }),
+        expect.objectContaining({ id: "breach-window", earned: true }),
+        expect.objectContaining({ id: "full-squad", earned: true }),
+      ],
     });
   });
 

@@ -16,7 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { useGameStore } from "@/store/gameStore";
 import { preloadPlayerSpriteSheets } from "@/components/battle/playerSpriteSheets";
-import { getBattleHref, getNextOperationId, getOperationMetadata } from "@/lib/game";
+import { getBattleHref, getNextOperationId, getOperationMetadata, PLAYABLE_OPERATIONS } from "@/lib/game";
 
 export function TitleScreen() {
   const router = useRouter();
@@ -34,6 +34,9 @@ export function TitleScreen() {
   const nextOperationId = getNextOperationId(completedMissionIds);
   const nextOperation = getOperationMetadata(nextOperationId);
   const hasCompletedOperation = completedMissionIds.length > 0;
+  const clearedOperationCount = PLAYABLE_OPERATIONS.filter((operation) =>
+    completedMissionIds.includes(operation.id),
+  ).length;
 
   const startMission = () => {
     setLaunchWarningOpen(false);
@@ -97,7 +100,7 @@ export function TitleScreen() {
           </button>
           <button type="button" className="title-button title-button-operations" onClick={() => router.push("/operations")} disabled={!hydrated}>
             <CardsThree weight="fill" aria-hidden="true" />
-            <span>Operations <small>{hydrated ? `${completedMissionIds.length} / 2 cleared` : "Loading…"}</small></span>
+            <span>Operations <small>{hydrated ? `${clearedOperationCount} / ${PLAYABLE_OPERATIONS.length} cleared` : "Loading…"}</small></span>
           </button>
           <button type="button" className="title-button title-button-training" onClick={() => router.push("/training")} disabled={!hydrated}>
             <BookOpen weight="fill" aria-hidden="true" />

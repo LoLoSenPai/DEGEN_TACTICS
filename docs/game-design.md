@@ -13,14 +13,15 @@ Core pillars:
 
 ## Player journey
 
-The player lands on the Title screen and can deploy immediately as a guest. Operations exposes the two authored missions and their local completion state. Field Training is optional and split into three player-controlled chapters, so it teaches the rules without blocking the game behind one long tutorial.
+The player lands on the Title screen and can deploy immediately as a guest. Operations exposes the three authored missions and their local completion state. Field Training is optional and split into three player-controlled chapters, so it teaches the rules without blocking the game behind one long tutorial.
 
 The current sequence is:
 
 1. **Protect the Vault** - learn activation economy, exact intents, lane control, and the Whale interruption.
 2. **Data Extraction** - use the same squad rules to route a pushable objective through a hostile board.
+3. **Break the Breach** - prepare a collision anvil, interrupt a lethal locked cone, and focus down a staggered boss.
 
-Completing Operation 01 adds `protect-the-vault` to local completion progress and unlocks Operation 02. Neither operation grants permanent stat power.
+Completing Operation 01 adds `protect-the-vault` to local completion progress and unlocks Operation 02. Completing Operation 02 unlocks Operation 03. No operation grants permanent stat power.
 
 ## Shared board rules
 
@@ -162,6 +163,49 @@ Enemy pressure determines when the squad can safely execute those steps; the seq
 
 The extraction check is exact: only the configured `data-block` at E3 completes the objective. The engine emits `object-extracted` followed by `mission-ended`, and the run enters victory without waiting for another enemy phase. If the objective is still incomplete after enemy phase 5, the result is `extraction-timeout`. Structure or squad defeat takes priority at the phase boundary.
 
+## Mission 03: Break the Breach
+
+**Location:** Fracture Zone - Seal Chamber 7
+**Unlock:** Complete Data Extraction.
+**Objective:** Break the Whale's locked charge, then destroy the spawned `breach-whale` by player Turn 5.
+**Defeat:** The 4-integrity Seal Generator reaches 0, all three squad units are defeated, or enemy phase 5 ends while the Whale remains alive.
+
+### Initial map
+
+```text
+    A B C D E F G
+1   . . . . . . .
+2   . # . . . . #
+3   . N . G . B .
+4   . . # S . . W
+5   . . # . # P #
+6   . . . . . . .
+7   . . . . . . .
+```
+
+| Mark | Entity | Coordinate |
+| --- | --- | --- |
+| `G` | Guardian | D3 |
+| `N` | Sniper | B3 |
+| `P` | Pusher | F5 |
+| `S` | Seal Generator, 4 integrity | D4 |
+| `B` | Data Block / collision anvil | F3 |
+| `W` | Incoming `breach-whale`, 12 HP | G4 |
+| `#` | Obstacle | B2, G2, C4, C5, E5, G5 |
+
+G4 is already an incoming, impassable breach on player Turn 1. The Whale spawns there at the start of player Turn 2. Its first plan moves G4 to F4, faces west, and locks E4 plus D3, D4, and D5. Because D4 is in the exact area and the Seal has 4 integrity, one unresolved slam ends the operation.
+
+The objective stores both the target and the authored setup data: `enemyId: "breach-whale"`, `enemyPhases: 5`, `anvilObjectId: "data-block"`, and `anvilDestination: F2`. The absent pre-spawn target never counts as defeated. Once the breach has spawned, defeating that exact target by an attack or collision ends the mission immediately with `breach-broken`; leaving it alive through enemy phase 5 ends with `breach-overrun`.
+
+### Canonical solution
+
+1. **Turn 1 - Build the anvil:** move Pusher F5 to F4 and Shove the Data Block from F3 to F2. Reposition Guardian to E3 and Sniper to C3.
+2. **Turn 2 - Set the trap:** return Pusher to F5. The Whale advances G4 to F4 and locks its west-facing cone.
+3. **Turn 3 - Break the charge:** Shove the charging Whale north from F4 to the now-free F3. Forced movement cancels the cone and makes it lose its activation. Guardian and Sniper deal 5 damage.
+4. **Turn 4 - Use the anvil:** move Pusher to F4 and use Batter Up. The Data Block at F2 stops the Whale for 2 collision damage; Guardian and Sniper deal the remaining 5. The fatal attack emits `enemy-defeated` followed by `mission-ended` and wins immediately.
+
+If the player leaves the Data Block on F3, the Turn-3 push is blocked. It deals collision damage but does not displace the charging Whale, so the cone remains locked. The following exact 4-damage slam destroys the Seal Generator and produces immediate defeat. This failure is the operation's central readable lesson: collision damage alone does not interrupt a charge.
+
 ## Enemies and deterministic planning
 
 Enemies act by mission-defined initiative, then stable entity ID. Planning uses deterministic pathfinding and simulates earlier planned actions so later paths account for destinations already reserved by earlier enemies.
@@ -170,7 +214,7 @@ Enemies act by mission-defined initiative, then stable entity ID. Planning uses 
 | --- | ---: | ---: | ---: | ---: | --- |
 | Rugger | 6 | 2 | 3 | 10 | Advances down a deterministic structure lane; attacks a squad member blocking that lane when adjacent |
 | Drainer | 4 | 3 | 2 | 20 | Hunts the living unit with the lowest current HP; falls back to the protected structure when no unit is reachable |
-| Whale | 10 | 1 | 4 | 30 | Alternates a telegraphed cone lock with a later slam |
+| Whale | 10; 12 in Break the Breach | 1 | 4 | 30 | Alternates a telegraphed cone lock with a later slam |
 
 ### Rugger
 
@@ -195,7 +239,7 @@ The Whale is a one-tile enemy with a multi-tile ground attack. Its state machine
 
 The cone contains the tile one step forward plus the three-tile-wide rank two steps forward. Obstacles do not block the ground slam. The preview identifies every affected in-bounds tile while Charging.
 
-In Protect the Vault's normal turn-3 spawn, the Whale moves from G4 to F4, faces west, and locks E4 plus D3, D4, and D5. Moving a charging Whale with Shove or Batter Up clears the cone and changes its state to Staggered. Collision without displacement does not.
+In Protect the Vault's normal turn-3 spawn, the Whale moves from G4 to F4, faces west, and locks E4 plus D3, D4, and D5. Break the Breach uses the same exact route and cone one turn earlier, with a 12-HP boss and a one-hit Seal Generator. Moving a charging Whale with Shove or Batter Up clears the cone and changes its state to Staggered. Collision without displacement does not.
 
 ## Enemy intent contract
 
@@ -216,7 +260,7 @@ The complete turn plan is recalculated after every successful world-state-changi
 - Shields are applied before HP damage. `actualDamage` is the amount that reaches HP.
 - An entity at 0 HP is defeated and no longer blocks, moves, attacks, or receives future turns.
 - Enemy attacks can damage their planned squad target or the mission's protected structure. Collision damage follows the stricter push rules above.
-- The Vault and Extraction Rig both start at 10 integrity. Track whether the active structure ever lost integrity separately for scoring and medals.
+- The Vault and Extraction Rig start at 10 integrity; the Break the Breach Seal Generator starts at 4. Track whether the active structure ever lost integrity separately for scoring and medals.
 - Temporary shields expire after the enemy phase for which they were granted.
 
 ## Outcome, scoring, and mastery
@@ -249,6 +293,21 @@ Its medals are:
 - **Express Transfer:** extract by player Turn 4 (`completedEnemyPhases <= 3`).
 - **Rig Untouched:** finish without damaging the Extraction Rig.
 - **Full Escort:** keep every operator alive.
+
+### Break the Breach scoring
+
+Break the Breach keeps the shared +500 victory, +75 per enemy, +50 per survivor, +100 full-squad, +100 untouched-structure, and -50 casualty rules, with two boss-operation adjustments:
+
+- Seal Generator integrity is worth +50 per remaining quartile, up to +200.
+- A victory receives +50 for every unused enemy phase: `(5 - completedEnemyPhases) * 50`.
+
+The canonical Turn-4 victory with an untouched Seal and full squad scores 1,225 for rank S. An otherwise perfect Turn-5 victory scores 1,175 for rank A.
+
+Its medals are:
+
+- **Charge Broken:** displace the Whale while its cone is locked.
+- **Breach Window:** destroy the Whale by player Turn 4 (`completedEnemyPhases <= 3`).
+- **Full Squad:** keep every operator alive.
 
 | Rank | Requirement |
 | --- | --- |

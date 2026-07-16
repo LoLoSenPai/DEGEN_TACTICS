@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BREAK_THE_BREACH,
   PROTECT_THE_VAULT,
   DATA_EXTRACTION,
   TRAINING_BASICS,
@@ -15,10 +16,12 @@ import {
   createInitialGameState,
   getMissionDefinition,
   getBattleHref,
+  getFollowingOperationId,
   getNextOperationId,
   getAttackableTargets,
   getMovementPath,
   getPushTargets,
+  getStateFingerprint,
   getValidMoves,
   isTrainingMissionId,
   isOperationUnlocked,
@@ -80,6 +83,7 @@ describe("engine-valid training missions", () => {
     expect(getMissionDefinition("training-squad")).toBe(TRAINING_SQUAD);
     expect(getMissionDefinition("training-momentum")).toBe(TRAINING_MOMENTUM);
     expect(getMissionDefinition("data-extraction")).toBe(DATA_EXTRACTION);
+    expect(getMissionDefinition("break-the-breach")).toBe(BREAK_THE_BREACH);
     expect(getMissionDefinition("unknown-mission")).toBe(PROTECT_THE_VAULT);
     expect(isTrainingMissionId("training-momentum")).toBe(true);
     expect(isTrainingMissionId("protect-the-vault")).toBe(false);
@@ -90,6 +94,11 @@ describe("engine-valid training missions", () => {
     expect(isOperationUnlocked("data-extraction", [])).toBe(false);
     expect(getNextOperationId(["protect-the-vault"])).toBe("data-extraction");
     expect(isOperationUnlocked("data-extraction", ["protect-the-vault"])).toBe(true);
+    expect(isOperationUnlocked("break-the-breach", ["protect-the-vault"])).toBe(false);
+    expect(getNextOperationId(["protect-the-vault", "data-extraction"])).toBe("break-the-breach");
+    expect(isOperationUnlocked("break-the-breach", ["protect-the-vault", "data-extraction"])).toBe(true);
+    expect(getNextOperationId(["protect-the-vault", "data-extraction", "break-the-breach"])).toBe("break-the-breach");
+    expect(getFollowingOperationId("data-extraction")).toBe("break-the-breach");
     expect(getBattleHref("data-extraction")).toBe("/battle/data-extraction");
   });
 
@@ -434,6 +443,285 @@ describe("Data Extraction objective", () => {
     const first = createInitialGameState(DATA_EXTRACTION);
     const second = createInitialGameState(DATA_EXTRACTION);
     expect(JSON.stringify(calculateEnemyPlan(first))).toBe(JSON.stringify(calculateEnemyPlan(second)));
+  });
+});
+
+describe("Break the Breach objective", () => {
+  it("creates the authored boss puzzle and fingerprints its anvil data", () => {
+    const first = createInitialGameState(BREAK_THE_BREACH);
+    const second = createInitialGameState(BREAK_THE_BREACH);
+
+    expect(first).toMatchObject({
+      missionId: "break-the-breach",
+      turn: 1,
+      maxTurns: 5,
+      objective: {
+        kind: "break-breach",
+        enemyId: "breach-whale",
+        enemyPhases: 5,
+        anvilObjectId: "data-block",
+        anvilDestination: at(5, 1),
+      },
+      vault: { id: "seal-generator", position: at(3, 3), hp: 4, maxHp: 4 },
+      breach: { position: at(6, 3), status: "incoming" },
+    });
+    expect(first.units.map((unit) => [unit.id, unit.position])).toEqual([
+      ["guardian", at(3, 2)],
+      ["sniper", at(1, 2)],
+      ["pusher", at(5, 4)],
+    ]);
+    expect(first.objects).toEqual([
+      expect.objectContaining({ id: "data-block", position: at(5, 2) }),
+    ]);
+    expect(first.obstacles).toEqual([
+      at(1, 1),
+      at(6, 1),
+      at(2, 3),
+      at(2, 4),
+      at(4, 4),
+      at(6, 4),
+    ]);
+    expect(first.enemies).toEqual([]);
+    expect(checkVictoryDefeat(first)).toEqual({ outcome: null, reason: null });
+
+    if (first.objective.kind !== "break-breach" || second.objective.kind !== "break-breach") {
+      throw new Error("Expected the break-breach objective.");
+    }
+    expect(first.objective.anvilDestination).not.toBe(second.objective.anvilDestination);
+    const changed: GameState = {
+      ...first,
+      objective: { ...first.objective, anvilDestination: at(4, 1) },
+    };
+    expect(getStateFingerprint(changed)).not.toBe(getStateFingerprint(first));
+  });
+
+  it("spawns on Turn 2 and promises the exact west-facing locked cone", () => {
+    let state = createInitialGameState(BREAK_THE_BREACH);
+    const firstPlan = calculateEnemyPlan(state);
+    expect(firstPlan.intents).toEqual([]);
+    state = resolveEnemyTurn(state, firstPlan).state;
+
+    expect(state).toMatchObject({
+      turn: 2,
+      completedEnemyPhases: 1,
+      breach: { status: "spawned" },
+      enemies: [
+        expect.objectContaining({
+          id: "breach-whale",
+          position: at(6, 3),
+          hp: 12,
+          whaleState: "ready",
+        }),
+      ],
+    });
+
+    const plan = calculateEnemyPlan(state);
+    expect(plan.intents).toEqual([
+      expect.objectContaining({
+        enemyId: "breach-whale",
+        action: "charge",
+        path: [at(5, 3)],
+        destination: at(5, 3),
+        facing: "west",
+        area: [at(4, 3), at(3, 2), at(3, 3), at(3, 4)],
+        damage: 0,
+      }),
+    ]);
+    expect(JSON.stringify(plan)).toBe(JSON.stringify(calculateEnemyPlan(state)));
+  });
+
+  it("follows the full setup, charge break, stagger, anvil collision, and Turn 4 kill", () => {
+    let state = createInitialGameState(BREAK_THE_BREACH);
+
+    state = moveUnit(state, "pusher", at(5, 3)).state;
+    state = pushTarget(state, "pusher", "data-block", "shove").state;
+    expect(state.objects[0].position).toEqual(at(5, 1));
+    state = moveUnit(state, "guardian", at(4, 2)).state;
+    state = waitUnit(state, "guardian").state;
+    state = moveUnit(state, "sniper", at(2, 2)).state;
+    state = waitUnit(state, "sniper").state;
+    state = resolveEnemyTurn(state, calculateEnemyPlan(state)).state;
+
+    state = moveUnit(state, "pusher", at(5, 4)).state;
+    state = waitUnit(state, "pusher").state;
+    state = waitUnit(state, "guardian").state;
+    state = waitUnit(state, "sniper").state;
+    const chargePlan = calculateEnemyPlan(state);
+    expect(chargePlan.intents[0]).toMatchObject({
+      enemyId: "breach-whale",
+      action: "charge",
+      destination: at(5, 3),
+      area: [at(4, 3), at(3, 2), at(3, 3), at(3, 4)],
+    });
+    state = resolveEnemyTurn(state, chargePlan).state;
+
+    const interrupted = pushTarget(state, "pusher", "breach-whale", "shove");
+    expect(interrupted.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "target-pushed",
+        targetId: "breach-whale",
+        from: at(5, 3),
+        to: at(5, 2),
+        distance: 1,
+      }),
+      { type: "whale-charge-cancelled", enemyId: "breach-whale" },
+    ]));
+    state = interrupted.state;
+    expect(state).toMatchObject({ whaleChargeCancelled: true });
+    expect(state.enemies[0]).toMatchObject({
+      position: at(5, 2),
+      hp: 12,
+      whaleState: "staggered",
+      lockedArea: [],
+    });
+
+    state = attackEnemy(state, "guardian", "breach-whale").state;
+    state = attackEnemy(state, "sniper", "breach-whale").state;
+    expect(state.enemies[0].hp).toBe(7);
+    const staggerPlan = calculateEnemyPlan(state);
+    expect(staggerPlan.intents[0]).toMatchObject({
+      action: "staggered",
+      special: "stagger-skip",
+    });
+    state = resolveEnemyTurn(state, staggerPlan).state;
+    expect(state).toMatchObject({ turn: 4, completedEnemyPhases: 3, phase: "player" });
+
+    state = moveUnit(state, "pusher", at(5, 3)).state;
+    const collision = pushTarget(state, "pusher", "breach-whale", "batter-up");
+    expect(collision.events).toContainEqual({
+      type: "collision",
+      sourceId: "pusher",
+      targetId: "breach-whale",
+      targetKind: "enemy",
+      damage: 2,
+      ability: "batter-up",
+    });
+    state = collision.state;
+    expect(state.enemies[0]).toMatchObject({ position: at(5, 2), hp: 5 });
+    state = attackEnemy(state, "guardian", "breach-whale").state;
+    const finalAttack = attackEnemy(state, "sniper", "breach-whale");
+
+    expect(finalAttack.state).toMatchObject({
+      phase: "victory",
+      outcomeReason: "breach-broken",
+      completedEnemyPhases: 3,
+      defeatedEnemies: 1,
+    });
+    expect(finalAttack.state.enemies).toEqual([]);
+    expect(finalAttack.events.slice(-2)).toEqual([
+      { type: "enemy-defeated", enemyId: "breach-whale" },
+      { type: "mission-ended", outcome: "victory", reason: "breach-broken" },
+    ]);
+  });
+
+  it("leaves a blocked charge active and loses the 4 HP Seal to the promised slam", () => {
+    let state = createInitialGameState(BREAK_THE_BREACH);
+    state = resolveEnemyTurn(state, calculateEnemyPlan(state)).state;
+    state = resolveEnemyTurn(state, calculateEnemyPlan(state)).state;
+
+    const blocked = pushTarget(state, "pusher", "breach-whale", "shove");
+    expect(blocked.events).toContainEqual({
+      type: "collision",
+      sourceId: "pusher",
+      targetId: "breach-whale",
+      targetKind: "enemy",
+      damage: 1,
+      ability: "shove",
+    });
+    expect(blocked.state.enemies[0]).toMatchObject({
+      position: at(5, 3),
+      hp: 11,
+      whaleState: "charging",
+    });
+    expect(blocked.state.whaleChargeCancelled).toBe(false);
+
+    const slamPlan = calculateEnemyPlan(blocked.state);
+    expect(slamPlan.intents[0]).toMatchObject({
+      action: "slam",
+      targets: expect.arrayContaining([
+        expect.objectContaining({ id: "seal-generator", expectedDamage: 4 }),
+      ]),
+    });
+    const defeated = resolveEnemyTurn(blocked.state, slamPlan);
+    expect(defeated.state).toMatchObject({
+      phase: "defeat",
+      outcomeReason: "vault-destroyed",
+      completedEnemyPhases: 2,
+      vault: { hp: 0 },
+    });
+  });
+
+  it("also terminalizes a fatal anvil collision during the player phase", () => {
+    const initial = createInitialGameState(BREAK_THE_BREACH);
+    const target = BREAK_THE_BREACH.breach.enemy;
+    const state: GameState = {
+      ...initial,
+      breach: { ...initial.breach, status: "spawned" },
+      enemies: [{
+        ...target,
+        position: at(5, 2),
+        hp: 2,
+        whaleState: "ready",
+        lockedArea: [],
+      }],
+      objects: [{ ...initial.objects[0], position: at(5, 1) }],
+      units: initial.units.map((unit) =>
+        unit.id === "pusher" ? { ...unit, position: at(5, 3) } : unit,
+      ),
+    };
+
+    const finished = pushTarget(state, "pusher", "breach-whale", "batter-up");
+    expect(finished.state).toMatchObject({
+      phase: "victory",
+      outcomeReason: "breach-broken",
+      defeatedEnemies: 1,
+    });
+    expect(finished.events).toEqual(expect.arrayContaining([
+      { type: "enemy-defeated", enemyId: "breach-whale" },
+      {
+        type: "collision",
+        sourceId: "pusher",
+        targetId: "breach-whale",
+        targetKind: "enemy",
+        damage: 2,
+        ability: "batter-up",
+      },
+    ]));
+    expect(finished.events.at(-1)).toEqual({
+      type: "mission-ended",
+      outcome: "victory",
+      reason: "breach-broken",
+    });
+  });
+
+  it("times out after phase five when the spawned target remains alive", () => {
+    const initial = createInitialGameState(BREAK_THE_BREACH);
+    const target = BREAK_THE_BREACH.breach.enemy;
+    const turnFive: GameState = {
+      ...initial,
+      turn: 5,
+      completedEnemyPhases: 4,
+      breach: { ...initial.breach, status: "spawned" },
+      enemies: [{
+        ...target,
+        position: { ...target.position },
+        hp: target.maxHp,
+        whaleState: "staggered",
+        lockedArea: [],
+      }],
+    };
+    const timedOut = resolveEnemyTurn(turnFive, calculateEnemyPlan(turnFive));
+    expect(timedOut.state).toMatchObject({
+      phase: "defeat",
+      completedEnemyPhases: 5,
+      outcomeReason: "breach-overrun",
+      vault: { hp: 4 },
+    });
+    expect(timedOut.events.at(-1)).toEqual({
+      type: "mission-ended",
+      outcome: "defeat",
+      reason: "breach-overrun",
+    });
   });
 });
 

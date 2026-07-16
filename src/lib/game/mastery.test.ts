@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BREAK_THE_BREACH,
   calculateMissionMedals,
   calculateRankGoal,
   calculateScore,
@@ -52,6 +53,35 @@ describe("mission mastery", () => {
       expect.objectContaining({ id: "express-transfer", earned: false }),
       expect.objectContaining({ id: "rig-untouched", earned: false }),
       expect.objectContaining({ id: "full-squad", earned: true }),
+    ]);
+  });
+
+  it("evaluates charge, Turn 4 window, and squad medals for the breach boss", () => {
+    const initial = createInitialGameState(BREAK_THE_BREACH);
+    expect(calculateMissionMedals({
+      ...initial,
+      phase: "victory",
+      breach: { ...initial.breach, status: "spawned" },
+      whaleChargeCancelled: true,
+      completedEnemyPhases: 3,
+      outcomeReason: "breach-broken",
+    })).toEqual([
+      expect.objectContaining({ id: "charge-broken", earned: true }),
+      expect.objectContaining({ id: "breach-window", earned: true }),
+      expect.objectContaining({ id: "full-squad", earned: true }),
+    ]);
+
+    expect(calculateMissionMedals({
+      ...initial,
+      phase: "victory",
+      breach: { ...initial.breach, status: "spawned" },
+      completedEnemyPhases: 4,
+      outcomeReason: "breach-broken",
+      units: initial.units.map((unit, index) => index === 0 ? { ...unit, hp: 0 } : unit),
+    })).toEqual([
+      expect.objectContaining({ id: "charge-broken", earned: false }),
+      expect.objectContaining({ id: "breach-window", earned: false }),
+      expect.objectContaining({ id: "full-squad", earned: false }),
     ]);
   });
 
