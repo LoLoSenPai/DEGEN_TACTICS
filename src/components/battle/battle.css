@@ -548,6 +548,13 @@
   box-shadow: inset 0 0 0 2px rgba(135, 218, 250, 0.28), 0 0 16px rgba(74, 188, 238, 0.3);
 }
 
+.game-tile.is-hack {
+  border: 3px solid #65d9ff;
+  background-color: rgba(29, 77, 117, 0.68);
+  background-image: repeating-linear-gradient(90deg, rgba(117, 228, 255, 0.12) 0 3px, transparent 3px 10px);
+  box-shadow: inset 0 0 0 2px rgba(137, 226, 255, 0.26), 0 0 18px rgba(73, 184, 255, 0.34);
+}
+
 .game-tile.is-push {
   border: 3px solid #e2a92e;
   background-color: rgba(111, 78, 17, 0.82);
@@ -600,14 +607,14 @@
   font-size: 9px;
 }
 
-.game-push-preview.is-jammed {
+.game-push-preview.is-blocked {
   border-color: #9aa3a6;
   color: #e7ebea;
   background: rgba(25, 29, 29, 0.97);
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72);
 }
 
-.game-push-preview.is-jammed small {
+.game-push-preview.is-blocked small {
   color: #b2bcbe;
 }
 
@@ -657,6 +664,52 @@
   font-weight: 950;
   letter-spacing: 0.035em;
   white-space: nowrap;
+}
+
+.game-hack-preview {
+  position: absolute;
+  z-index: 99;
+  bottom: 2%;
+  left: 50%;
+  display: grid;
+  min-width: 92%;
+  transform: translateX(-50%);
+  border: 2px solid #70dcff;
+  padding: 4px 5px 3px;
+  color: #e9fbff;
+  background: rgba(6, 34, 53, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.76), 0 0 16px rgba(77, 197, 255, 0.56);
+  font-family: var(--game-font-body);
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.game-hack-preview strong {
+  color: #8de8ff;
+  font-size: 9px;
+  letter-spacing: 0.065em;
+}
+
+.game-hack-preview small {
+  margin-top: 2px;
+  color: #d5f5ff;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+
+.game-hack-preview.is-blackout {
+  border-color: #c882ff;
+  background: rgba(38, 13, 61, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.76), 0 0 18px rgba(180, 92, 255, 0.58);
+}
+
+.game-hack-preview.is-blackout strong {
+  color: #e5b4ff;
 }
 
 .game-tile.is-selected {
@@ -867,7 +920,8 @@
 
 .piece-guardian .player-spritecook.board-sprite,
 .piece-sniper .player-spritecook.board-sprite,
-.piece-pusher .player-spritecook.board-sprite {
+.piece-pusher .player-spritecook.board-sprite,
+.piece-hacker .player-spritecook.board-sprite {
   right: 0;
   bottom: 12%;
   width: 100%;
@@ -932,6 +986,24 @@
 
 .player-spritecook.role-pusher.is-ability .player-spritecook-frames {
   animation: spritecook-frames-8 580ms linear both;
+}
+
+.piece-hacker .board-sprite {
+  right: 2%;
+  bottom: 10%;
+  width: 96%;
+  height: 102%;
+}
+
+.piece-hacker .player-spritecook.board-sprite {
+  right: 0;
+  bottom: 12%;
+  width: 100%;
+  height: 100%;
+}
+
+.player-spritecook.role-hacker.is-ability .player-spritecook-frames {
+  animation: spritecook-frames-8 760ms linear both;
 }
 
 .piece-rugger .board-sprite {
@@ -1297,6 +1369,41 @@
 .enemy-guard-badge svg {
   width: 10px;
   height: 10px;
+}
+
+.enemy-disruption-badge {
+  position: absolute;
+  z-index: 38;
+  right: -5px;
+  bottom: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 2px solid #6bdcff;
+  padding: 2px 4px;
+  color: #dff9ff;
+  background-color: #0a4963;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 13px rgba(74, 196, 255, 0.58);
+  font-size: 7px;
+  font-weight: 1000;
+  letter-spacing: 0.07em;
+  line-height: 1;
+}
+
+.enemy-disruption-badge.is-blackout {
+  border-color: #cc84ff;
+  color: #f2dcff;
+  background-color: #4c176e;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 15px rgba(188, 92, 255, 0.64);
+}
+
+.enemy-disruption-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.game-piece.is-disrupted .board-sprite {
+  filter: brightness(1.22) saturate(0.72) drop-shadow(0 0 8px rgba(87, 209, 255, 0.7));
 }
 
 .breach-marker {
@@ -2166,6 +2273,50 @@
   text-transform: uppercase;
 }
 
+.inspector-disruption {
+  border-top: 1px solid #2a7b9b;
+  padding: 9px 10px;
+  color: #dbf8ff;
+  background: rgba(5, 48, 68, 0.88);
+}
+
+.inspector-disruption > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.inspector-disruption svg {
+  width: 18px;
+  height: 18px;
+  color: #6cddff;
+}
+
+.inspector-disruption strong {
+  color: #9cecff;
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.inspector-disruption p {
+  margin: 7px 0 0;
+  color: #c4e4ec;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.inspector-disruption.is-blackout {
+  border-color: #8143a8;
+  background: rgba(48, 15, 70, 0.9);
+}
+
+.inspector-disruption.is-blackout svg,
+.inspector-disruption.is-blackout strong {
+  color: #deb0ff;
+}
+
 .inspector-intent {
   display: flex;
   flex-direction: column;
@@ -2360,6 +2511,15 @@
 .action-attack {
   color: #73cbff;
   background-color: #102b3a;
+}
+
+.action-jam {
+  color: #77ddff;
+  background-color: #0c3348;
+}
+
+.action-jam .action-resource {
+  color: #a6eaff;
 }
 
 .action-push {

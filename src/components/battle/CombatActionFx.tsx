@@ -37,6 +37,8 @@ const traceVariant = (variant: CombatCue["variant"]) => {
   if (variant === "shove") return styles.shove;
   if (variant === "batter-up") return styles.batterUp;
   if (variant === "shield-wall") return styles.shieldWall;
+  if (variant === "hacker-jam") return styles.hackerJam;
+  if (variant === "hacker-blackout") return styles.hackerBlackout;
   return styles.generic;
 };
 
@@ -87,7 +89,7 @@ const chevronPath = (from: FxPoint, to: FxPoint, amount: number, size: number) =
 export function CombatActionFx({ game, cue }: { game: GameState; cue: CombatCue | null }) {
   const rawId = useId().replaceAll(":", "");
   if (!cue || !cue.variant || !["attack", "push", "shield", "status"].includes(cue.stage)) return null;
-  if (cue.stage === "status" && cue.statusKind !== "drain-heal") return null;
+  if (cue.stage === "status" && !["drain-heal", "blackout-cast", "blackout-hold"].includes(cue.statusKind ?? "")) return null;
 
   const source = cue.stage === "push" ? cue.from ?? positionFor(game, cue.sourceId) : positionFor(game, cue.sourceId);
   const target = cue.stage === "push" ? cue.to ?? positionFor(game, cue.targetId) : positionFor(game, cue.targetId);
@@ -101,7 +103,9 @@ export function CombatActionFx({ game, cue }: { game: GameState; cue: CombatCue 
   const areaPoints = (cue.area ?? [])
     .map((position) => pointForIntentGrid(position, metrics))
     .filter((point): point is NonNullable<typeof point> => point !== null);
-  const variantClass = traceVariant(cue.variant);
+  const isHackerJam = cue.variant === "hacker-jam";
+  const isHackerBlackout = cue.variant === "hacker-blackout" || cue.statusKind === "blackout-hold";
+  const variantClass = isHackerBlackout ? styles.hackerBlackout : traceVariant(cue.variant);
   const arrowId = `${rawId}-combat-arrow`;
   const isDeadeye = cue.variant === "deadeye";
   const isSniperShot = cue.variant === "sniper-shot";
@@ -165,6 +169,20 @@ export function CombatActionFx({ game, cue }: { game: GameState; cue: CombatCue 
           <path className={styles.pushChevron} d={chevronPath(sourcePoint, targetPoint, isBatterUp ? 0.34 : 0.5, pushChevronSize)} />
           {isBatterUp ? <path className={`${styles.pushChevron} ${styles.pushChevronSecond}`} d={chevronPath(sourcePoint, targetPoint, 0.66, pushChevronSize)} /> : null}
           {isBatterUp ? <circle className={styles.batterImpact} cx={targetPoint.x} cy={targetPoint.y} r={metrics.markerRadius * 0.9} /> : null}
+        </g>
+      ) : null}
+      {isHackerJam && targetPoint ? (
+        <g className={styles.hackerJamSequence}>
+          <circle className={styles.hackerJamOuter} cx={targetPoint.x} cy={targetPoint.y} r={metrics.markerRadius * 1.12} />
+          <circle className={styles.hackerJamInner} cx={targetPoint.x} cy={targetPoint.y} r={metrics.markerRadius * 0.7} />
+          <path className={styles.hackerJamMinus} d={`M ${targetPoint.x - metrics.markerRadius * 0.42} ${targetPoint.y} H ${targetPoint.x + metrics.markerRadius * 0.42}`} />
+        </g>
+      ) : null}
+      {isHackerBlackout && targetPoint ? (
+        <g className={styles.hackerBlackoutSequence}>
+          <circle className={styles.hackerBlackoutOuter} cx={targetPoint.x} cy={targetPoint.y} r={metrics.markerRadius * 1.32} />
+          <circle className={styles.hackerBlackoutInner} cx={targetPoint.x} cy={targetPoint.y} r={metrics.markerRadius * 0.78} />
+          <path className={styles.hackerBlackoutCut} d={`M ${targetPoint.x - metrics.markerRadius * 0.42} ${targetPoint.y - metrics.markerRadius * 0.42} L ${targetPoint.x + metrics.markerRadius * 0.42} ${targetPoint.y + metrics.markerRadius * 0.42} M ${targetPoint.x + metrics.markerRadius * 0.42} ${targetPoint.y - metrics.markerRadius * 0.42} L ${targetPoint.x - metrics.markerRadius * 0.42} ${targetPoint.y + metrics.markerRadius * 0.42}`} />
         </g>
       ) : null}
       {sourcePoint && !isDeadeye && !isShieldWall ? <circle className={styles.sourcePulse} cx={sourcePoint.x} cy={sourcePoint.y} r={metrics.markerRadius * 0.72} /> : null}

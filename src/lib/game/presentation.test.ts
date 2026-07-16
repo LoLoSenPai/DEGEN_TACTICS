@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateEnemyPlan, createInitialGameState, pushTarget, resolveEnemyTurn } from "./engine";
-import { DATA_EXTRACTION, TRAINING_BASICS, TRAINING_MOMENTUM, TRAINING_SQUAD } from "./mission";
+import { blackoutEnemy, calculateEnemyPlan, createInitialGameState, jamEnemy, moveUnit, pushTarget, resolveEnemyTurn } from "./engine";
+import { DATA_EXTRACTION, TRAINING_BASICS, TRAINING_MOMENTUM, TRAINING_OVERRIDE, TRAINING_SQUAD } from "./mission";
 import {
   compileEnemyPlayback,
   compilePushPlayback,
@@ -34,6 +34,31 @@ describe("combat presentation playback", () => {
       path: [{ x: 3, y: 1 }, { x: 3, y: 2 }],
     });
     expect(beats[0].duration).toBe(360);
+  });
+
+  it("plays Jam movement and damage before clearing the disruption", () => {
+    const initial = createInitialGameState(TRAINING_OVERRIDE);
+    const jammed = jamEnemy(initial, "hacker", "rugger-override").state;
+    const resolved = resolveEnemyTurn(jammed, calculateEnemyPlan(jammed));
+    const beats = compileEnemyPlayback(jammed, resolved.state, resolved.events);
+
+    expect(beats.map((beat) => beat.stage)).toEqual(["move", "attack", "impact", "status", "status"]);
+    expect(beats[2]).toMatchObject({ sourceId: "rugger-override", targetId: "hacker", amount: 1 });
+    expect(beats[3]).toMatchObject({ sourceId: "rugger-override", statusKind: "jam-cleared" });
+    expect(beats[3].state.enemies.find((enemy) => enemy.id === "rugger-override")?.disruption?.kind).toBe("jam");
+    expect(beats[4]).toMatchObject({ sourceId: "sentinel-override", statusKind: "intercept-grid" });
+  });
+
+  it("gives Blackout HOLD its own readable status beat", () => {
+    const initial = createInitialGameState(TRAINING_OVERRIDE);
+    const moved = moveUnit(initial, "hacker", { x: 6, y: 2 }).state;
+    const blackedOut = blackoutEnemy(moved, "hacker", "sentinel-override").state;
+    const resolved = resolveEnemyTurn(blackedOut, calculateEnemyPlan(blackedOut));
+    const beats = compileEnemyPlayback(blackedOut, resolved.state, resolved.events);
+    const hold = beats.find((beat) => beat.statusKind === "blackout-hold");
+
+    expect(hold).toMatchObject({ stage: "status", sourceId: "sentinel-override", targetId: "sentinel-override", duration: 760 });
+    expect(hold?.state.enemies.find((enemy) => enemy.id === "sentinel-override")?.disruption?.kind).toBe("blackout");
   });
 
   it("keeps a lethal target visible for a dedicated death beat", () => {

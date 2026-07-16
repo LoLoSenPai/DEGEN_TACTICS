@@ -5,13 +5,16 @@ import { PLAYER_SPRITE_SHEETS, PLAYER_SPRITE_SHEET_URLS } from "./playerSpriteSh
 
 describe("player sprite sheet registry", () => {
   it("maps every hero motion and points at the shipped files", () => {
-    expect(Object.keys(PLAYER_SPRITE_SHEETS)).toEqual(["guardian", "sniper", "pusher"]);
+    expect(Object.keys(PLAYER_SPRITE_SHEETS)).toEqual(["guardian", "sniper", "pusher", "hacker"]);
     for (const roleSheets of Object.values(PLAYER_SPRITE_SHEETS)) {
       expect(Object.keys(roleSheets)).toEqual(["idle", "walk", "attack", "ability", "hurt", "death"]);
     }
     expect(PLAYER_SPRITE_SHEETS.sniper.ability).toBe("/assets/sprites/spritecook/sniper-deadeye.png");
     expect(PLAYER_SPRITE_SHEETS.sniper.ability).not.toBe(PLAYER_SPRITE_SHEETS.sniper.attack);
-    expect(PLAYER_SPRITE_SHEET_URLS).toHaveLength(18);
+    expect(PLAYER_SPRITE_SHEETS.hacker.attack).toBe("/assets/sprites/spritecook/hacker-jam.png");
+    expect(PLAYER_SPRITE_SHEETS.hacker.ability).toBe("/assets/sprites/spritecook/hacker-blackout.png");
+    expect(PLAYER_SPRITE_SHEETS.hacker.ability).not.toBe(PLAYER_SPRITE_SHEETS.hacker.attack);
+    expect(PLAYER_SPRITE_SHEET_URLS).toHaveLength(24);
     for (const url of PLAYER_SPRITE_SHEET_URLS) {
       expect(existsSync(join(process.cwd(), "public", url.slice(1))), url).toBe(true);
     }

@@ -1,12 +1,13 @@
 import {
   TRAINING_BASICS,
   TRAINING_MOMENTUM,
+  TRAINING_OVERRIDE,
   TRAINING_SQUAD,
   type TrainingMissionId,
 } from "@/lib/game";
 import type { BattleTutorialStep } from "@/components/battle/BattleTutorial";
 
-export type TutorialAction = "attack" | "ability" | "push" | "wait" | "end-turn";
+export type TutorialAction = "attack" | "jam" | "ability" | "push" | "wait" | "end-turn";
 
 const COORDINATE_TARGETS: Partial<Record<Exclude<BattleTutorialStep, null>, string>> = {
   "basics-select-guardian": "D4",
@@ -30,6 +31,13 @@ const COORDINATE_TARGETS: Partial<Record<Exclude<BattleTutorialStep, null>, stri
   "push-locked-cone": "F4",
   "push-select-charging": "E5",
   "push-cancel-whale": "F4",
+  "hacker-select-one": "D3",
+  "hacker-target-rugger": "D1",
+  "hacker-select-two": "D3",
+  "hacker-move-blackout": "G3",
+  "hacker-target-sentinel": "G2",
+  "hacker-select-sniper": "A2",
+  "hacker-attack-rugger": "D2",
 };
 
 const ACTION_TARGETS: Partial<Record<Exclude<BattleTutorialStep, null>, TutorialAction>> = {
@@ -45,6 +53,11 @@ const ACTION_TARGETS: Partial<Record<Exclude<BattleTutorialStep, null>, Tutorial
   "push-wait": "wait",
   "push-end-turn-three": "end-turn",
   "push-choose-shove-whale": "push",
+  "hacker-choose-jam": "jam",
+  "hacker-end-turn-one": "end-turn",
+  "hacker-choose-blackout": "ability",
+  "hacker-choose-attack": "attack",
+  "hacker-end-turn-two": "end-turn",
 };
 
 export const tutorialCoordinate = (step: BattleTutorialStep) =>
@@ -59,19 +72,22 @@ export const initialTutorialStep = (missionId: string): BattleTutorialStep => {
   if (missionId === TRAINING_BASICS.id) return "basics-intro";
   if (missionId === TRAINING_SQUAD.id) return "squad-intro";
   if (missionId === TRAINING_MOMENTUM.id) return "push-intro";
+  if (missionId === TRAINING_OVERRIDE.id) return "hacker-intro";
   return null;
 };
 
-export const trainingLessonForMission = (missionId: string): 1 | 2 | 3 | null => {
+export const trainingLessonForMission = (missionId: string): 1 | 2 | 3 | 4 | null => {
   if (missionId === TRAINING_BASICS.id) return 1;
   if (missionId === TRAINING_SQUAD.id) return 2;
   if (missionId === TRAINING_MOMENTUM.id) return 3;
+  if (missionId === TRAINING_OVERRIDE.id) return 4;
   return null;
 };
 
-export const trainingMissionForProgress = (completed: 0 | 1 | 2 | 3): TrainingMissionId | null => {
+export const trainingMissionForProgress = (completed: 0 | 1 | 2 | 3 | 4): TrainingMissionId | null => {
   if (completed === 0) return TRAINING_BASICS.id;
   if (completed === 1) return TRAINING_SQUAD.id;
   if (completed === 2) return TRAINING_MOMENTUM.id;
+  if (completed === 3) return TRAINING_OVERRIDE.id;
   return null;
 };

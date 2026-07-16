@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   CheckCircle,
+  Circuitry,
   Crosshair,
   Cube,
   Eye,
@@ -13,6 +14,7 @@ import {
   Warning,
 } from "@phosphor-icons/react";
 import { useCallback, useLayoutEffect, useState, type CSSProperties } from "react";
+import { useModalFocusTrap } from "./useModalFocusTrap";
 
 export type BattleTutorialStep =
   | "basics-intro"
@@ -59,9 +61,26 @@ export type BattleTutorialStep =
   | "push-choose-shove-whale"
   | "push-cancel-whale"
   | "training-complete"
+  | "hacker-intro"
+  | "hacker-select-one"
+  | "hacker-choose-jam"
+  | "hacker-target-rugger"
+  | "hacker-end-turn-one"
+  | "hacker-watch-jam"
+  | "hacker-jam-result"
+  | "hacker-select-two"
+  | "hacker-move-blackout"
+  | "hacker-choose-blackout"
+  | "hacker-target-sentinel"
+  | "hacker-select-sniper"
+  | "hacker-choose-attack"
+  | "hacker-attack-rugger"
+  | "hacker-end-turn-two"
+  | "hacker-watch-blackout"
+  | "hacker-complete"
   | null;
 
-type TutorialIconKind = "shield" | "move" | "attack" | "target" | "intent" | "push" | "block" | "warning" | "complete";
+type TutorialIconKind = "shield" | "move" | "attack" | "target" | "intent" | "push" | "block" | "hack" | "warning" | "complete";
 
 type TutorialCopy = {
   title: string;
@@ -127,10 +146,31 @@ const PUSH_STEPS = [
   "push-cancel-whale",
 ] as const;
 
+const HACKER_STEPS = [
+  "hacker-intro",
+  "hacker-select-one",
+  "hacker-choose-jam",
+  "hacker-target-rugger",
+  "hacker-end-turn-one",
+  "hacker-watch-jam",
+  "hacker-jam-result",
+  "hacker-select-two",
+  "hacker-move-blackout",
+  "hacker-choose-blackout",
+  "hacker-target-sentinel",
+  "hacker-select-sniper",
+  "hacker-choose-attack",
+  "hacker-attack-rugger",
+  "hacker-end-turn-two",
+  "hacker-watch-blackout",
+  "hacker-complete",
+] as const;
+
 const LESSONS: readonly LessonMeta[] = [
   { label: "Chapter 1 / 3 · The Turn Loop", steps: BASICS_STEPS },
   { label: "Chapter 2 / 3 · Squad Tactics", steps: SQUAD_STEPS },
   { label: "Chapter 3 / 3 · Push Control", steps: PUSH_STEPS },
+  { label: "Specialist Lab · System Control", steps: HACKER_STEPS },
 ];
 
 const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
@@ -435,6 +475,125 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
     awaiting: "Click the highlighted Whale",
     icon: "push",
   },
+  "hacker-intro": {
+    title: "Rewrite the enemy turn",
+    prompt: "Jam weakens one exact activation. Blackout deletes one.",
+    body: "Both hacks use a clear cardinal line at range 1-3 and ignore Interception Grid. Jam is reusable; Blackout has one mission charge.",
+    action: "Start specialist lab",
+    icon: "hack",
+  },
+  "hacker-select-one": {
+    title: "Choose Hacker",
+    prompt: "Select Hacker on D3.",
+    body: "The Rugger currently plans to move to D2 and hit Hacker for exactly 3 damage.",
+    awaiting: "Click the highlighted Hacker",
+    icon: "hack",
+  },
+  "hacker-choose-jam": {
+    title: "Open Jam",
+    prompt: "Choose the reusable Jam action.",
+    body: "Jam keeps the enemy's route and target, but reduces this activation's damage by 2.",
+    awaiting: "Press 2 or click Jam",
+    icon: "hack",
+  },
+  "hacker-target-rugger": {
+    title: "Jam the threat",
+    prompt: "Target the Rugger on D1.",
+    body: "The preview will change from 3 to 1 damage before you commit the enemy phase.",
+    awaiting: "Click the highlighted Rugger",
+    icon: "target",
+  },
+  "hacker-end-turn-one": {
+    title: "Read the rewrite",
+    prompt: "The route is unchanged. The hit now reads 3 to 1 damage.",
+    body: "Sniper stays ready on purpose: this phase isolates Jam so you can see its exact result.",
+    awaiting: "Press Space or click End Turn",
+    icon: "intent",
+  },
+  "hacker-watch-jam": {
+    title: "Watch Jam resolve",
+    prompt: "Follow the Rugger to D2 and watch the reduced hit.",
+    body: "Jam lasts through this enemy's ordered activation, then clears automatically.",
+    awaiting: "Enemy phase in progress",
+    icon: "hack",
+  },
+  "hacker-jam-result": {
+    title: "Damage rewritten",
+    prompt: "Hacker lost 1 HP instead of 3.",
+    body: "Jam is reusable every turn. The Sentinel now protects the Rugger on its horizontal grid.",
+    action: "Try Blackout",
+    icon: "complete",
+  },
+  "hacker-select-two": {
+    title: "Set up Blackout",
+    prompt: "Select Hacker again.",
+    body: "Hacker can move first and still use either control action.",
+    awaiting: "Click Hacker on D3",
+    icon: "hack",
+  },
+  "hacker-move-blackout": {
+    title: "Reach the controller",
+    prompt: "Move Hacker to G3.",
+    body: "From there, the Sentinel on G2 is one tile away in a clear cardinal line.",
+    awaiting: "Click the highlighted G3 tile",
+    icon: "move",
+  },
+  "hacker-choose-blackout": {
+    title: "Spend Blackout",
+    prompt: "Choose the one-charge Blackout ability.",
+    body: "Blackout turns the target's next exact activation into HOLD: no move, attack, area or support effect.",
+    awaiting: "Press 3 or click Blackout",
+    icon: "hack",
+  },
+  "hacker-target-sentinel": {
+    title: "Cut the grid",
+    prompt: "Blackout the Sentinel on G2.",
+    body: "Its amber guard lanes disappear immediately, before the enemy phase begins.",
+    awaiting: "Click the highlighted Sentinel",
+    icon: "target",
+  },
+  "hacker-select-sniper": {
+    title: "Exploit the opening",
+    prompt: "Select Sniper on A2.",
+    body: "The Sentinel now previews HOLD. The Rugger no longer has an interceptor.",
+    awaiting: "Click the highlighted Sniper",
+    icon: "target",
+  },
+  "hacker-choose-attack": {
+    title: "Take the clear shot",
+    prompt: "Choose Attack.",
+    body: "Sniper can reach D2 at exact cardinal range 3.",
+    awaiting: "Press 2 or click Attack",
+    icon: "attack",
+  },
+  "hacker-attack-rugger": {
+    title: "Fire through the gap",
+    prompt: "Attack the Rugger on D2.",
+    body: "With the grid offline, all 3 damage lands on the intended target instead of the Sentinel.",
+    awaiting: "Click the highlighted Rugger",
+    icon: "target",
+  },
+  "hacker-end-turn-two": {
+    title: "Commit the shutdown",
+    prompt: "End the turn and watch HOLD resolve.",
+    body: "The Rugger may still advance. The blacked-out Sentinel cannot move, guard or intercept this activation.",
+    awaiting: "Press Space or click End Turn",
+    icon: "intent",
+  },
+  "hacker-watch-blackout": {
+    title: "Enemy system offline",
+    prompt: "Watch the Sentinel lose its activation.",
+    body: "Blackout is consumed only now, at the target's exact place in initiative order.",
+    awaiting: "Enemy phase in progress",
+    icon: "hack",
+  },
+  "hacker-complete": {
+    title: "Hacker certified",
+    prompt: "Weaken the hit, shut down support, exploit the opening.",
+    body: "Jam is your repeatable safety valve. Save the single Blackout charge for the activation that would break your plan.",
+    action: "Back to training",
+    icon: "complete",
+  },
   "training-complete": {
     title: "Training complete",
     prompt: "Protect the Vault for five turns.",
@@ -444,12 +603,14 @@ const COPY: Record<Exclude<BattleTutorialStep, null>, TutorialCopy> = {
   },
 };
 
-const INTRO_STEPS = new Set<Exclude<BattleTutorialStep, null>>(["basics-intro", "squad-intro", "push-intro"]);
+const INTRO_STEPS = new Set<Exclude<BattleTutorialStep, null>>(["basics-intro", "squad-intro", "push-intro", "hacker-intro"]);
 
 const OBSERVE_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
   "basics-watch-enemy",
   "squad-watch-shield",
   "push-watch-charge",
+  "hacker-watch-jam",
+  "hacker-watch-blackout",
 ]);
 
 const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
@@ -461,6 +622,9 @@ const CENTERED_STEPS = new Set<Exclude<BattleTutorialStep, null>>([
   "push-breach-warning",
   "push-whale-arrives",
   "training-complete",
+  "hacker-intro",
+  "hacker-jam-result",
+  "hacker-complete",
 ]);
 
 function lessonProgress(step: Exclude<BattleTutorialStep, null>) {
@@ -482,12 +646,19 @@ function lessonProgress(step: Exclude<BattleTutorialStep, null>) {
           { name: "Deadeye", through: "squad-target-drainer" },
           { name: "Resolve", through: "squad-shield-explained" },
         ]
-      : [
-          { name: "Objects", through: "push-data-block" },
-          { name: "Collision", through: "push-collision" },
-          { name: "Charge", through: "push-locked-cone" },
-          { name: "Interrupt", through: "push-cancel-whale" },
-        ];
+      : step.startsWith("push-")
+        ? [
+            { name: "Objects", through: "push-data-block" },
+            { name: "Collision", through: "push-collision" },
+            { name: "Charge", through: "push-locked-cone" },
+            { name: "Interrupt", through: "push-cancel-whale" },
+          ]
+        : [
+            { name: "Jam", through: "hacker-target-rugger" },
+            { name: "Observe", through: "hacker-jam-result" },
+            { name: "Blackout", through: "hacker-target-sentinel" },
+            { name: "Exploit", through: "hacker-complete" },
+          ];
 
   const stepIndex = lesson.steps.indexOf(step);
   const phaseIndex = phases.findIndex(({ through }) => stepIndex <= lesson.steps.indexOf(through as (typeof lesson.steps)[number]));
@@ -507,6 +678,7 @@ function TutorialIcon({ kind }: { kind: TutorialIconKind }) {
   if (kind === "intent") return <Eye weight="fill" />;
   if (kind === "push") return <HandGrabbing weight="fill" />;
   if (kind === "block") return <Cube weight="fill" />;
+  if (kind === "hack") return <Circuitry weight="fill" />;
   if (kind === "warning") return <Warning weight="fill" />;
   if (kind === "complete") return <CheckCircle weight="fill" />;
   return <Shield weight="fill" />;
@@ -591,6 +763,7 @@ export function BattleTutorial({
   const progress = lessonProgress(step);
   const isCentered = isTutorialCenteredStep(step);
   const isObserving = OBSERVE_STEPS.has(step);
+  const dialogRef = useModalFocusTrap(isCentered);
   const spotlight = useTutorialSpotlight(step);
   const titleId = `tutorial-title-${step}`;
   const bodyId = `tutorial-body-${step}`;
@@ -605,6 +778,7 @@ export function BattleTutorial({
     <>
       {!isObserving && (spotlight ? <span className="tutorial-spotlight" style={spotlightStyle} aria-hidden="true" /> : <span className="tutorial-modal-scrim" aria-hidden="true" />)}
       <aside
+        ref={dialogRef}
         className={`battle-tutorial-card tutorial-step-${step}${isCentered ? " is-centered" : " is-contextual"}${isObserving ? " is-observing" : ""}`}
         data-tutorial-step={step}
         role={isCentered ? "dialog" : "status"}
@@ -624,7 +798,7 @@ export function BattleTutorial({
         <strong className="tutorial-prompt">{copy.prompt}</strong>
         <p id={bodyId}>{copy.body}</p>
         <footer>
-          {step !== "training-complete" ? (
+          {step !== "training-complete" && step !== "hacker-complete" ? (
             <button
               type="button"
               className="tutorial-skip"

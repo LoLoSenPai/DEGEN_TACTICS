@@ -7,10 +7,12 @@ import {
   TRAINING_BASICS,
   TRAINING_LESSONS,
   TRAINING_MOMENTUM,
+  TRAINING_OVERRIDE,
   TRAINING_SQUAD,
   activateDeadeye,
   applyShield,
   attackEnemy,
+  blackoutEnemy,
   calculateEnemyPlan,
   checkVictoryDefeat,
   createInitialGameState,
@@ -20,6 +22,7 @@ import {
   getNextOperationId,
   getAttackableTargets,
   getEnemyInterceptor,
+  getHackableTargets,
   getMovementPath,
   getPushTargets,
   getSentinelGuardArea,
@@ -27,6 +30,7 @@ import {
   getValidMoves,
   isTrainingMissionId,
   isOperationUnlocked,
+  jamEnemy,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
@@ -75,15 +79,17 @@ const whaleTurnThreeState = (): GameState => ({
 });
 
 describe("engine-valid training missions", () => {
-  it("registers the three ordered lessons and safely falls back for unknown IDs", () => {
+  it("registers the four ordered lessons and safely falls back for unknown IDs", () => {
     expect(TRAINING_LESSONS.map((lesson) => [lesson.order, lesson.missionId])).toEqual([
       [1, "training-basics"],
       [2, "training-squad"],
       [3, "training-momentum"],
+      [4, "training-override"],
     ]);
     expect(getMissionDefinition("training-basics")).toBe(TRAINING_BASICS);
     expect(getMissionDefinition("training-squad")).toBe(TRAINING_SQUAD);
     expect(getMissionDefinition("training-momentum")).toBe(TRAINING_MOMENTUM);
+    expect(getMissionDefinition("training-override")).toBe(TRAINING_OVERRIDE);
     expect(getMissionDefinition("data-extraction")).toBe(DATA_EXTRACTION);
     expect(getMissionDefinition("break-the-breach")).toBe(BREAK_THE_BREACH);
     expect(getMissionDefinition("unknown-mission")).toBe(PROTECT_THE_VAULT);
@@ -328,6 +334,192 @@ describe("engine-valid training missions", () => {
       enemyId: "whale-training",
     });
     expect(resolved.state.enemies[0].whaleState).toBe("ready");
+  });
+});
+
+describe("Hacker disruption", () => {
+  it("authors a two-turn specialist lesson with the intended stats and exact opening threat", () => {
+    const state = createInitialGameState(TRAINING_OVERRIDE);
+    expect(state).toMatchObject({ missionId: "training-override", maxTurns: 2 });
+    expect(state.units.find((unit) => unit.id === "hacker")).toMatchObject({
+      role: "hacker",
+      position: at(3, 2),
+      hp: 6,
+      moveRange: 3,
+      attackDamage: 0,
+      attackRange: 3,
+      signatureName: "Blackout",
+    });
+    expect(calculateEnemyPlan(state).intents[0]).toMatchObject({
+      enemyId: "rugger-override",
+      action: "attack",
+      path: [at(3, 1)],
+      destination: at(3, 1),
+      target: { id: "hacker", expectedDamage: 3 },
+      damage: 3,
+    });
+  });
+
+  it("targets cardinal range 1-3 through combatants but not diagonals or LOS blockers", () => {
+    const initial = createInitialGameState(TRAINING_OVERRIDE);
+    expect(getHackableTargets(initial, "hacker").map((enemy) => enemy.id)).toEqual(["rugger-override"]);
+    expect(getAttackableTargets(initial, "hacker")).toEqual([]);
+    expect(attackEnemy(initial, "hacker", "rugger-override").events[0]).toMatchObject({ type: "action-rejected" });
+
+    const combatantBetween: GameState = {
+      ...initial,
+      units: initial.units.map((unit) => unit.id === "sniper" ? { ...unit, position: at(3, 1) } : unit),
+    };
+    expect(getHackableTargets(combatantBetween, "hacker").some((enemy) => enemy.id === "rugger-override")).toBe(true);
+
+    const obstacleBetween: GameState = { ...initial, obstacles: [at(3, 1)] };
+    expect(getHackableTargets(obstacleBetween, "hacker")).toEqual([]);
+    const objectBetween: GameState = { ...initial, objects: [{ id: "blocker", name: "Blocker", position: at(3, 1) }] };
+    expect(getHackableTargets(objectBetween, "hacker")).toEqual([]);
+
+    const diagonalSentinel: GameState = {
+      ...initial,
+      enemies: initial.enemies.map((enemy) => enemy.id === "sentinel-override" ? { ...enemy, position: at(5, 1) } : enemy),
+    };
+    expect(getHackableTargets(diagonalSentinel, "hacker").some((enemy) => enemy.id === "sentinel-override")).toBe(false);
+  });
+
+  it("Jam preserves path and target while rewriting exact damage from 3 to 1", () => {
+    const initial = createInitialGameState(TRAINING_OVERRIDE);
+    const stalePlan = calculateEnemyPlan(initial);
+    const jammed = jamEnemy(initial, "hacker", "rugger-override");
+    expect(jammed.events).toEqual([{
+      type: "enemy-disrupted",
+      unitId: "hacker",
+      enemyId: "rugger-override",
+      kind: "jam",
+      damageReduction: 2,
+    }]);
+    expect(jammed.state.units.find((unit) => unit.id === "hacker")).toMatchObject({
+      hasActed: true,
+      signatureAvailable: true,
+    });
+    expect(getStateFingerprint(jammed.state)).not.toBe(getStateFingerprint(initial));
+
+    const plan = calculateEnemyPlan(jammed.state);
+    expect(plan.intents[0]).toMatchObject({
+      enemyId: "rugger-override",
+      action: "attack",
+      path: [at(3, 1)],
+      destination: at(3, 1),
+      target: { id: "hacker", expectedDamage: 1 },
+      damage: 1,
+      disruption: "jam",
+      damageReduction: 2,
+    });
+    expect(JSON.stringify(plan)).toBe(JSON.stringify(calculateEnemyPlan(jammed.state)));
+    expect(resolveEnemyTurn(jammed.state, stalePlan).events[0]).toMatchObject({ type: "action-rejected" });
+
+    const resolved = resolveEnemyTurn(jammed.state, plan);
+    expect(resolved.state.units.find((unit) => unit.id === "hacker")?.hp).toBe(5);
+    expect(resolved.state.enemies.find((enemy) => enemy.id === "rugger-override")).toMatchObject({
+      position: at(3, 1),
+      disruption: undefined,
+    });
+    expect(resolved.events).toContainEqual({ type: "damage", sourceId: "rugger-override", targetId: "hacker", amount: 1, absorbed: 0 });
+    expect(resolved.events).toContainEqual({ type: "enemy-disruption-resolved", enemyId: "rugger-override", kind: "jam" });
+  });
+
+  it("allows move then Blackout, removes the Sentinel grid immediately, and resolves an exact HOLD", () => {
+    let state = jamEnemy(createInitialGameState(TRAINING_OVERRIDE), "hacker", "rugger-override").state;
+    state = resolveEnemyTurn(state, calculateEnemyPlan(state)).state;
+    state = moveUnit(state, "hacker", at(6, 2)).state;
+    expect(getHackableTargets(state, "hacker", { blackout: true }).map((enemy) => enemy.id)).toContain("sentinel-override");
+
+    const blackedOut = blackoutEnemy(state, "hacker", "sentinel-override");
+    expect(blackedOut.state.units.find((unit) => unit.id === "hacker")).toMatchObject({
+      hasMoved: true,
+      hasActed: true,
+      signatureAvailable: false,
+    });
+    expect(getSentinelGuardArea(blackedOut.state, "sentinel-override")).toEqual([]);
+    expect(getEnemyInterceptor(blackedOut.state, "rugger-override")).toBeUndefined();
+
+    const direct = attackEnemy(blackedOut.state, "sniper", "rugger-override");
+    expect(direct.events).not.toContainEqual(expect.objectContaining({ type: "attack-intercepted" }));
+    expect(direct.events).toContainEqual(expect.objectContaining({ type: "unit-attacked", enemyId: "rugger-override", damage: 3 }));
+    const plan = calculateEnemyPlan(direct.state);
+    expect(plan.intents.find((intent) => intent.enemyId === "sentinel-override")).toMatchObject({
+      action: "hold",
+      path: [],
+      targets: [],
+      area: [],
+      damage: 0,
+      special: "system-shutdown",
+      disruption: "blackout",
+      originalAction: "guard",
+    });
+
+    const resolved = resolveEnemyTurn(direct.state, plan);
+    expect(resolved.state.phase).toBe("victory");
+    expect(resolved.state.completedEnemyPhases).toBe(2);
+    expect(resolved.state.enemies.find((enemy) => enemy.id === "sentinel-override")?.disruption).toBeUndefined();
+    expect(resolved.events).toContainEqual({ type: "enemy-disruption-resolved", enemyId: "sentinel-override", kind: "blackout" });
+  });
+
+  it("does not spend the Hacker action or signature on invalid disruption targets", () => {
+    const initial = createInitialGameState(TRAINING_OVERRIDE);
+    const jammed = jamEnemy(initial, "hacker", "sentinel-override");
+    const blackedOut = blackoutEnemy(initial, "hacker", "sentinel-override");
+    expect(jammed.state).toBe(initial);
+    expect(blackedOut.state).toBe(initial);
+    expect(jammed.events[0]).toMatchObject({ type: "action-rejected" });
+    expect(initial.units.find((unit) => unit.id === "hacker")).toMatchObject({ hasActed: false, signatureAvailable: true });
+  });
+
+  it("keeps zero-damage Drain from healing and rewrites or cancels a locked Whale slam exactly", () => {
+    const base = createInitialGameState(TRAINING_OVERRIDE);
+    const drainerState: GameState = {
+      ...base,
+      enemies: [{
+        id: "drainer-override",
+        name: "Drainer",
+        kind: "drainer",
+        position: at(3, 0),
+        hp: 3,
+        maxHp: 4,
+        moveRange: 3,
+        attackDamage: 2,
+        initiative: 10,
+      }],
+    };
+    const jammedDrainer = jamEnemy(drainerState, "hacker", "drainer-override").state;
+    const drainPlan = calculateEnemyPlan(jammedDrainer);
+    expect(drainPlan.intents[0]).toMatchObject({ action: "attack", damage: 0, target: { id: "hacker", expectedDamage: 0 } });
+    const drained = resolveEnemyTurn(jammedDrainer, drainPlan);
+    expect(drained.state.units.find((unit) => unit.id === "hacker")?.hp).toBe(6);
+    expect(drained.state.enemies[0].hp).toBe(3);
+    expect(drained.events.some((event) => event.type === "enemy-healed")).toBe(false);
+
+    const chargingWhale: Enemy = {
+      id: "whale-override",
+      name: "Whale",
+      kind: "whale",
+      position: at(3, 0),
+      hp: 10,
+      maxHp: 10,
+      moveRange: 1,
+      attackDamage: 4,
+      initiative: 10,
+      whaleState: "charging",
+      lockedArea: [at(3, 2)],
+      facing: "south",
+    };
+    const whaleState: GameState = { ...base, enemies: [chargingWhale], breach: { position: at(6, 6), status: "spawned" } };
+    const jammedWhale = jamEnemy(whaleState, "hacker", "whale-override").state;
+    expect(calculateEnemyPlan(jammedWhale).intents[0]).toMatchObject({ action: "slam", damage: 2, targets: [{ id: "hacker", expectedDamage: 2 }] });
+
+    const blackedOutWhale = blackoutEnemy(whaleState, "hacker", "whale-override").state;
+    const blackoutPlan = calculateEnemyPlan(blackedOutWhale);
+    expect(blackoutPlan.intents[0]).toMatchObject({ action: "hold", originalAction: "slam", area: [], damage: 0 });
+    const held = resolveEnemyTurn(blackedOutWhale, blackoutPlan);
+    expect(held.state.units.find((unit) => unit.id === "hacker")?.hp).toBe(6);
+    expect(held.state.enemies[0]).toMatchObject({ whaleState: "ready", lockedArea: [], disruption: undefined });
   });
 });
 

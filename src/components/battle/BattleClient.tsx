@@ -9,6 +9,7 @@ import {
   ArrowFatRight,
   ArrowUUpLeft,
   Boot,
+  Circuitry,
   HandFist,
   HandGrabbing,
   Heart,
@@ -26,10 +27,13 @@ import {
   BOARD_SIZE,
   PROTECT_THE_VAULT,
   TRAINING_LESSONS,
+  blackoutEnemy as simulateBlackoutEnemy,
+  calculateEnemyPlan,
   getOperationMetadata,
   getMissionDefinition,
   getAttackableTargets,
   getEnemyInterceptor,
+  getHackableTargets,
   getMovementPath,
   getPlayerMovementPresentationDuration,
   getReducedPlayerMovementPresentationDuration,
@@ -40,6 +44,7 @@ import {
   isMissionId,
   isOperationUnlocked,
   isPlayableMissionId,
+  jamEnemy as simulateJamEnemy,
   pushTarget as simulatePushTarget,
   type Enemy,
   type EnemyTurnPlan,
@@ -74,6 +79,7 @@ import {
   tutorialCoordinate,
   tutorialRestrictsInput,
 } from "@/components/battle/BattleTraining";
+import { useModalFocusTrap } from "@/components/battle/useModalFocusTrap";
 
 declare global {
   interface Window {
@@ -88,6 +94,7 @@ const SPRITE_ASSETS = {
   guardian: "/assets/sprites/guardian.png",
   sniper: "/assets/sprites/sniper.png",
   pusher: "/assets/sprites/pusher.png",
+  hacker: "/assets/sprites/hacker.png",
   rugger: "/assets/sprites/rugger.png",
   drainer: "/assets/sprites/drainer.png",
   whale: "/assets/sprites/whale.png",
@@ -198,6 +205,15 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
     } else if (cue.statusKind === "intercept-grid") {
       kicker = "INTERCEPTION GRID";
       message = cue.targetId ? `${source} protects ${target}` : `${source} locks its guard lanes`;
+    } else if (cue.statusKind === "blackout-cast") {
+      kicker = "BLACKOUT";
+      message = `${source} shuts down ${target}`;
+    } else if (cue.statusKind === "blackout-hold") {
+      kicker = "SYSTEM OFFLINE";
+      message = `${source} loses this activation`;
+    } else if (cue.statusKind === "jam-cleared") {
+      kicker = "JAM RESOLVED";
+      message = `${source} clears the interference after activating`;
     } else {
       kicker = "STATUS";
       message = `${source} changes state`;
@@ -229,7 +245,9 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
     }
   } else {
     kicker = source.toUpperCase();
-    message = cue.variant === "deadeye"
+    message = cue.variant === "hacker-jam"
+      ? `Jams ${target} · next damage −2`
+      : cue.variant === "deadeye"
       ? `Deadeye fires on ${target}`
       : cue.variant === "sniper-shot"
         ? `Fires on ${target}`
@@ -284,6 +302,7 @@ function battleSpriteState(
     (role === "guardian" && cue.stage === "shield" && cue.variant === "shield-wall")
     || (role === "sniper" && cue.stage === "attack" && cue.variant === "deadeye")
     || (role === "pusher" && cue.stage === "push" && cue.variant === "batter-up")
+    || (role === "hacker" && cue.stage === "status" && cue.statusKind === "blackout-cast")
   );
   if (abilityEffect || abilityCue) return { motion: "ability", effectId: abilityEffect?.id ?? cue?.id ?? 0 };
 
@@ -330,6 +349,7 @@ function enemyBattleSpriteState(
     if (cue.statusKind === "drain-heal") return { motion: "heal", effectId: cue.id };
     if (cue.statusKind === "cone-locked") return { motion: "lock", effectId: cue.id };
     if (enemy.kind === "sentinel" && cue.statusKind === "intercept-grid") return { motion: "guard", effectId: cue.id };
+    if (cue.statusKind === "blackout-hold") return { motion: "stagger", effectId: cue.id };
     if (cue.statusKind === "charge-cancelled" || cue.statusKind === "staggered") return { motion: "stagger", effectId: cue.id };
     return { motion: "idle", effectId: cue.id };
   }
@@ -425,9 +445,47 @@ type HighlightState = {
   moves: readonly Position[];
   attackIds: ReadonlySet<string>;
   attackPreviews: ReadonlyMap<string, AttackOutcomePreview>;
+  hackIds: ReadonlySet<string>;
+  hackPreviews: ReadonlyMap<string, HackOutcomePreview>;
   pushTargets: readonly PushTarget[];
   pushPreviews: ReadonlyMap<string, PushOutcomePreview>;
 };
+
+type HackOutcomePreview = {
+  targetId: string;
+  kind: "jam" | "blackout";
+  actionBefore: string;
+  actionAfter: string;
+  damageBefore: number;
+  damageAfter: number;
+  gridOffline: boolean;
+};
+
+function exactHackPreview(
+  game: GameState,
+  plan: EnemyTurnPlan | null,
+  unitId: string,
+  target: Enemy,
+  kind: HackOutcomePreview["kind"],
+): HackOutcomePreview {
+  const transition = kind === "blackout"
+    ? simulateBlackoutEnemy(game, unitId, target.id)
+    : simulateJamEnemy(game, unitId, target.id);
+  const nextPlan = calculateEnemyPlan(transition.state);
+  const before = plan?.intents.find((intent) => intent.enemyId === target.id);
+  const after = nextPlan.intents.find((intent) => intent.enemyId === target.id);
+  return {
+    targetId: target.id,
+    kind,
+    actionBefore: before?.action ?? "idle",
+    actionAfter: after?.action ?? "idle",
+    damageBefore: before?.damage ?? 0,
+    damageAfter: after?.damage ?? 0,
+    gridOffline: target.kind === "sentinel"
+      && getSentinelGuardArea(game, target.id).length > 0
+      && getSentinelGuardArea(transition.state, target.id).length === 0,
+  };
+}
 
 export function exactAttackPreview(
   game: GameState,
@@ -493,8 +551,8 @@ function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
     }
     const jammed = preview.collided && preview.distance === 0;
     return (
-      <span className={clsx("game-push-preview", jammed && "is-jammed")} aria-hidden="true">
-        <strong>{jammed ? "JAMMED" : `MOVE ${preview.distance}`}</strong>
+      <span className={clsx("game-push-preview", jammed && "is-blocked")} aria-hidden="true">
+        <strong>{jammed ? "BLOCKED" : `MOVE ${preview.distance}`}</strong>
         <small>{preview.collided ? (jammed ? "NO DAMAGE" : "THEN STOPS") : "NO DAMAGE"}</small>
       </span>
     );
@@ -518,13 +576,27 @@ function AttackPreviewBadge({ preview }: { preview: AttackOutcomePreview }) {
   );
 }
 
+function HackPreviewBadge({ preview }: { preview: HackOutcomePreview }) {
+  const blackout = preview.kind === "blackout";
+  return (
+    <span className={clsx("game-hack-preview", blackout && "is-blackout")} aria-hidden="true">
+      <strong>{blackout ? "BLACKOUT · HOLD" : "JAM"}</strong>
+      <small>{blackout
+        ? `${preview.actionBefore.toUpperCase()} → HOLD`
+        : preview.gridOffline
+          ? "GRID → OFFLINE"
+          : `${preview.damageBefore} → ${preview.damageAfter} DMG`}</small>
+    </span>
+  );
+}
+
 function missionPresentation(missionId: string) {
   const definition = getMissionDefinition(missionId);
   const lesson = TRAINING_LESSONS.find((candidate) => candidate.missionId === missionId);
   const operation = getOperationMetadata(missionId);
   return {
     title: definition.name,
-    eyebrow: lesson ? `Training ${lesson.order} / 3` : operation?.eyebrow ?? "Operation",
+    eyebrow: lesson ? (lesson.order === 4 ? "Optional specialist lab" : `Training ${lesson.order} / 3`) : operation?.eyebrow ?? "Operation",
     objective: lesson?.objective ?? operation?.shortObjective ?? "Complete the objective",
     integrityLabel: operation?.integrityLabel ?? definition.vault.name,
   };
@@ -701,6 +773,11 @@ function signaturePresentation(unit: PlayerUnit) {
   if (unit.role === "sniper") return {
     status,
     description: "Deal 4 damage at cardinal range 1–3. Must be used before moving and spends both movement and action.",
+  };
+  if (unit.role === "hacker") return {
+    status,
+    description: "Blackout turns one enemy's next activation into HOLD: no move, target, damage, area, guard, charge or drain.",
+    reusable: "Jam · Reusable · Cardinal range 1–3 · Next activation damage −2",
   };
   return {
     status,
@@ -960,6 +1037,7 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
   let maxHp: number | null = null;
   let move: number | null = null;
   let damage: number | null = null;
+  let range: number | null = null;
   let subtitle = "Pushable object";
   let signature: ReturnType<typeof signaturePresentation> | null = null;
   let guardedBy: Enemy | undefined;
@@ -970,7 +1048,8 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
     hp = readout.value.hp;
     maxHp = readout.value.maxHp;
     move = readout.value.moveRange;
-    damage = readout.value.attackDamage;
+    damage = readout.value.role === "hacker" ? null : readout.value.attackDamage;
+    range = readout.value.role === "hacker" ? readout.value.attackRange : null;
     subtitle = activationLabel(readout.value);
     signature = signaturePresentation(readout.value);
   } else if (readout.category === "enemy") {
@@ -1014,11 +1093,12 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
       <div className="inspector-stats">
         {move !== null ? <span><Boot weight="fill" /><small>Move</small><strong>{move}</strong></span> : null}
         {damage !== null ? <span><Sword weight="fill" /><small>Damage</small><strong>{damage}</strong></span> : null}
+        {range !== null ? <span><Circuitry weight="fill" /><small>Hack range</small><strong>{range}</strong></span> : null}
       </div>
       {signature && readout.category === "unit" ? (
         <div className="inspector-ability" data-ability-card={readout.value.signatureName} data-charges-remaining={readout.value.signatureAvailable ? 1 : 0}>
           <div>
-            <Shield weight="fill" />
+            {readout.value.role === "hacker" ? <Circuitry weight="fill" /> : <Shield weight="fill" />}
             <strong>{readout.value.signatureName}</strong>
             <span>{signature.status}</span>
           </div>
@@ -1031,20 +1111,30 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
           <div>
             <ShieldCheck weight="fill" aria-hidden="true" />
             <strong>Interception Grid</strong>
-            <span>{guardedBy || guardedEnemies.length > 0 ? "Active" : "Arming"}</span>
+            <span>{readout.value.disruption ? "Offline" : guardedBy || guardedEnemies.length > 0 ? "Active" : "Arming"}</span>
           </div>
-          <p>{readout.value.kind === "sentinel"
-            ? guardedNames.length > 0
-              ? `Direct attacks against ${guardedNames.join(", ")} are redirected here.`
-              : "Aligned hostiles will redirect direct attacks to this Sentinel."
-            : `Direct attacks against ${readout.value.name} hit ${guardedBy?.name ?? "the Sentinel"} instead.`}</p>
-          <small>Pushes and collisions bypass the grid.</small>
+          <p>{readout.value.disruption
+            ? "Interception Grid is offline. Direct attacks stay on their intended target."
+            : readout.value.kind === "sentinel"
+              ? guardedNames.length > 0
+                ? `Direct attacks against ${guardedNames.join(", ")} are redirected here.`
+                : "Aligned hostiles will redirect direct attacks to this Sentinel."
+              : `Direct attacks against ${readout.value.name} hit ${guardedBy?.name ?? "the Sentinel"} instead.`}</p>
+          <small>{readout.value.disruption ? "Jam or Blackout disabled this grid until its ordered activation." : "Pushes, collisions and hacks bypass the grid."}</small>
+        </div>
+      ) : null}
+      {readout.category === "enemy" && readout.value.disruption ? (
+        <div className={clsx("inspector-disruption", `is-${readout.value.disruption.kind}`)} data-enemy-disruption={readout.value.disruption.kind}>
+          <div><Circuitry weight="fill" /><strong>{readout.value.disruption.kind === "blackout" ? "Blacked out" : "Jammed"}</strong></div>
+          <p>{readout.value.disruption.kind === "blackout"
+            ? "Next activation becomes HOLD. Movement, targets, damage, areas and support are removed."
+            : "Next activation keeps its route and target but deals 2 less damage."}</p>
         </div>
       ) : null}
       {intent ? (
         <div className="inspector-intent">
           <span>Intent #{intent.order}</span>
-          <strong>{intent.special === "intercept-grid" ? "Interception Grid" : intent.action}</strong>
+          <strong>{intent.action === "hold" ? "HOLD · SYSTEM OFFLINE" : intent.special === "intercept-grid" ? "Interception Grid" : intent.action}</strong>
           <small>{intent.special === "intercept-grid"
             ? `${intent.path.length > 0 ? intent.path.map(coordinate).join(" → ") : "Hold"} · Guards ${guardedNames.join(", ") || "aligned hostiles"}`
             : `${intent.path.length > 0 ? intent.path.map(coordinate).join(" → ") : "Hold"} · ${intent.target ? entityName(game, intent.target.id) : intent.area.length > 0 ? `${intent.area.length} tiles` : "No target"}`}</small>
@@ -1127,55 +1217,6 @@ function EndTurnConfirmation({
 }
 
 type BattleDestructiveAction = "restart" | "leave";
-
-const MODAL_FOCUSABLE_SELECTOR = [
-  "button:not([disabled])",
-  "[href]",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
-
-function useModalFocusTrap() {
-  const dialogRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    const focusables = () => [...dialog.querySelectorAll<HTMLElement>(MODAL_FOCUSABLE_SELECTOR)]
-      .filter((element) => element.getClientRects().length > 0);
-    const initialFocus = dialog.querySelector<HTMLElement>("[autofocus]") ?? focusables()[0] ?? dialog;
-    initialFocus.focus();
-
-    const trapFocus = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const available = focusables();
-      if (available.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = available[0];
-      const last = available[available.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", trapFocus);
-    return () => {
-      document.removeEventListener("keydown", trapFocus);
-      previousFocus?.focus();
-    };
-  }, []);
-
-  return dialogRef;
-}
 
 function BattlePauseMenu({
   isTraining,
@@ -1267,8 +1308,10 @@ function tileDescription({
   obstacle,
   isMove,
   isAttack,
+  isHack,
   isPush,
   attackPreview,
+  hackPreview,
   pushPreview,
   isDanger,
 }: {
@@ -1280,8 +1323,10 @@ function tileDescription({
   obstacle: boolean;
   isMove: boolean;
   isAttack: boolean;
+  isHack: boolean;
   isPush: boolean;
   attackPreview?: AttackOutcomePreview;
+  hackPreview?: HackOutcomePreview;
   pushPreview?: PushOutcomePreview;
   isDanger: boolean;
 }) {
@@ -1300,11 +1345,16 @@ function tileDescription({
     if (enemy.kind === "sentinel") details.push("Sentinel Interception Grid redirects direct attacks against aligned hostiles here");
     if (interceptor) details.push(`guarded by ${interceptor.name} at ${coordinate(interceptor.position)}; direct attacks are intercepted`);
     if (game.objective.kind === "extract-object" && samePosition(game.objective.destination, position)) details.push("blocks the Data Block extraction zone");
+    if (enemy.disruption) details.push(enemy.disruption.kind === "blackout" ? "blacked out; next activation is HOLD" : "jammed; next activation damage reduced by 2");
   }
   if (isMove) details.push("legal move");
   if (isAttack) details.push("attackable target");
+  if (isHack) details.push("hackable target; hacks ignore interception");
   if (isPush) details.push("pushable target");
   if (attackPreview?.intercepted) details.push(`exact attack preview: intended target ${entityName(game, attackPreview.intendedId)}, intercepted by ${attackPreview.receiverName} for ${attackPreview.damage} damage`);
+  if (hackPreview) details.push(hackPreview.kind === "blackout"
+    ? `exact Blackout preview: ${hackPreview.actionBefore} becomes HOLD with no movement, target, area or damage`
+    : `exact Jam preview: ${hackPreview.damageBefore} damage becomes ${hackPreview.damageAfter}; route and target stay exact`);
   if (pushPreview) {
     const distance = `${pushPreview.distance} tile${pushPreview.distance === 1 ? "" : "s"}`;
     if (pushPreview.targetKind === "enemy") {
@@ -1457,8 +1507,10 @@ function Board({
           const isBreach = samePosition(game.breach.position, position) && game.breach.status === "incoming";
           const isMove = moveKeys.has(key) && actionMode === "move";
           const isAttack = Boolean(enemy && highlights.attackIds.has(enemy.id));
+          const isHack = Boolean(enemy && highlights.hackIds.has(enemy.id));
           const isPush = Boolean((enemy || object) && pushIds.has((enemy ?? object)?.id ?? ""));
           const attackPreview = enemy ? highlights.attackPreviews.get(enemy.id) : undefined;
+          const hackPreview = enemy ? highlights.hackPreviews.get(enemy.id) : undefined;
           const pushPreview = (enemy || object) ? highlights.pushPreviews.get((enemy ?? object)!.id) : undefined;
           const interceptor = enemy ? getEnemyInterceptor(game, enemy.id) : undefined;
           const isSentinelSource = enemy?.kind === "sentinel";
@@ -1473,6 +1525,7 @@ function Board({
           const deathEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "death");
           const healEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "heal");
           const pushedEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "push");
+          const hackEffect = [...targetEffects].reverse().find((candidate) => candidate.kind === "hack");
           const isHit = Boolean(damageEffect || shieldEffect?.kind === "shield-hit");
           const playerAnimation = unit ? battleSpriteState(effects, combatCue, unit.id, unit.role) : null;
           const enemyAnimation = enemy ? enemyBattleSpriteState(effects, combatCue, enemy) : null;
@@ -1483,7 +1536,7 @@ function Board({
             && combatCue?.stage === "status"
             && combatCue.targetId === enemy.id
             && (combatCue.statusKind === "charge-cancelled" || combatCue.statusKind === "staggered");
-          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", pushedEffect && "is-pushed", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
+          const pieceCombatClass = clsx(attackEffect && "is-attacking", isHit && "is-hit", pushedEffect && "is-pushed", hackEffect && "is-disrupted", shieldEffect && "has-shield-vfx", shieldEffect?.kind === "shield-hit" && "is-shield-hit", deathEffect && "is-dying", healEffect && "is-healing");
           const pieceCombatStyle = entityId ? attackDirectionStyle(game, entityId, attackEffect) : undefined;
           const order = enemy ? intentData.orders.get(enemy.id) : undefined;
           const isSelected = unit?.id === selectedUnitId || Boolean(entityId && entityId === inspectedId);
@@ -1509,6 +1562,7 @@ function Board({
                 isSelected && "is-selected",
                 isMove && "is-move",
                 isAttack && (actionMode === "attack" || actionMode === "ability") && "is-attack",
+                isHack && (actionMode === "jam" || actionMode === "ability") && "is-hack",
                 isPush && (actionMode === "push" || actionMode === "ability") && "is-push",
                 isDanger && "is-danger",
                 intentData.locked.has(key) && "is-locked-danger",
@@ -1531,7 +1585,7 @@ function Board({
                 if (movePreview && samePosition(movePreview, position)) onPreviewMove(null);
               }}
               disabled={disabled || game.phase !== "player" || (tutorialRestricted && !tutorialTileAllowed)}
-              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, attackPreview, pushPreview, isDanger })}
+              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isHack, isPush, attackPreview, hackPreview, pushPreview, isDanger })}
               aria-selected={isSelected}
               data-coordinate={tileCoordinate}
               data-tutorial-target={isTutorialFocus ? tutorialStep ?? undefined : undefined}
@@ -1565,11 +1619,13 @@ function Board({
                   {enemyAnimation ? <EnemyBattleSprite enemy={enemy} state={enemyAnimation} /> : null}
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%` }} /></span>
                   {order ? <span className="enemy-order">{order}</span> : null}
-                  {interceptor ? <span className="enemy-guard-badge"><ShieldCheck weight="fill" />GUARD</span> : null}
+                   {interceptor ? <span className="enemy-guard-badge"><ShieldCheck weight="fill" />GUARD</span> : null}
+                   {enemy.disruption ? <span className={clsx("enemy-disruption-badge", `is-${enemy.disruption.kind}`)}><Circuitry weight="fill" />{enemy.disruption.kind === "blackout" ? "HOLD" : "JAM"}</span> : null}
                 </span>
               ) : null}
               {object ? <span className={clsx("game-piece object-piece", pieceCombatClass)} data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
               {isAttack && attackPreview ? <AttackPreviewBadge preview={attackPreview} /> : null}
+              {isHack && hackPreview ? <HackPreviewBadge preview={hackPreview} /> : null}
               {isPush && pushPreview && (actionMode === "push" || actionMode === "ability") ? <PushPreviewBadge preview={pushPreview} /> : null}
               {isWhaleSpawnCue ? (
                 <span key={`breach-spawn-${combatCue?.id ?? 0}`} className="game-combat-vfx is-breach-spawn" data-combat-vfx="whale-breach-spawn" aria-hidden="true">
@@ -1663,6 +1719,8 @@ function ActionBar({
           : "Point at a teal tile to preview the route"
         : actionMode === "attack"
           ? "Choose a cyan enemy"
+          : actionMode === "jam"
+            ? "Choose a cyan enemy · exact damage updates before you commit"
           : actionMode === "push" && selected.role === "pusher"
             ? objectiveHint ?? "Exact preview: CRASH deals −1 HP · a free Shove deals 0 damage"
           : actionMode === "ability" && selected.role === "pusher"
@@ -1675,7 +1733,9 @@ function ActionBar({
                 ? "Deadeye deals 4 damage, but only before moving"
                 : selected.role === "pusher"
                   ? objectiveHint ?? "Shove pushes 1 tile · only a blocked enemy loses 1 HP"
-                  : "Move once, then act";
+                  : selected.role === "hacker"
+                    ? "Jam is reusable · Blackout has one mission charge"
+                    : "Move once, then act";
   const lastLog = log.at(-1)?.text;
 
   return (
@@ -1689,8 +1749,8 @@ function ActionBar({
         <button type="button" className={clsx("game-action-button action-move", actionMode === "move" && "is-active")} onClick={() => onMode("move")} disabled={disabled || !canMove || tutorialRestricted} aria-keyshortcuts="1">
           <Boot weight="fill" /><span>Move</span><kbd>1</kbd>
         </button>
-        <button type="button" className={clsx("game-action-button action-attack", actionMode === "attack" && "is-active", allowedTutorialAction === "attack" && "is-tutorial-focus")} onClick={() => onMode("attack")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "attack")} aria-keyshortcuts="2" data-tutorial-target={allowedTutorialAction === "attack" ? tutorialStep ?? undefined : undefined}>
-          <Sword weight="fill" /><span>Attack</span><kbd>2</kbd>
+        <button type="button" className={clsx("game-action-button", selected?.role === "hacker" ? "action-jam" : "action-attack", actionMode === (selected?.role === "hacker" ? "jam" : "attack") && "is-active", (allowedTutorialAction === "attack" || allowedTutorialAction === "jam") && "is-tutorial-focus")} onClick={() => onMode(selected?.role === "hacker" ? "jam" : "attack")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== (selected?.role === "hacker" ? "jam" : "attack"))} aria-keyshortcuts="2" data-tutorial-target={allowedTutorialAction === (selected?.role === "hacker" ? "jam" : "attack") ? tutorialStep ?? undefined : undefined}>
+          {selected?.role === "hacker" ? <Circuitry weight="fill" /> : <Sword weight="fill" />}<span>{selected?.role === "hacker" ? "Jam" : "Attack"}</span>{selected?.role === "hacker" ? <small className="action-resource">Reusable · Range 3 · −2 DMG</small> : null}<kbd>2</kbd>
         </button>
         {selected?.role === "pusher" ? (
           <button type="button" className={clsx("game-action-button action-push", actionMode === "push" && "is-active", allowedTutorialAction === "push" && "is-tutorial-focus")} onClick={() => onMode("push")} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "push")} data-tutorial-target={allowedTutorialAction === "push" ? tutorialStep ?? undefined : undefined}>
@@ -1698,7 +1758,7 @@ function ActionBar({
           </button>
         ) : null}
         <button type="button" className={clsx("game-action-button action-ability", actionMode === "ability" && "is-active", allowedTutorialAction === "ability" && "is-tutorial-focus")} onClick={onAbility} disabled={disabled || !canSignature || (tutorialRestricted && allowedTutorialAction !== "ability")} aria-keyshortcuts="3" data-tutorial-target={allowedTutorialAction === "ability" ? tutorialStep ?? undefined : undefined}>
-          {selected?.role === "guardian" ? <Shield weight="fill" /> : selected?.role === "pusher" ? <HandFist weight="fill" /> : <Target weight="fill" />}
+          {selected?.role === "guardian" ? <Shield weight="fill" /> : selected?.role === "pusher" ? <HandFist weight="fill" /> : selected?.role === "hacker" ? <Circuitry weight="fill" /> : <Target weight="fill" />}
           <span>{selected?.signatureName ?? "Ability"}</span>{signatureStatus ? <small className="action-resource">{signatureStatus}</small> : null}<kbd>3</kbd>
         </button>
         <button type="button" className={clsx("game-action-button action-wait", allowedTutorialAction === "wait" && "is-tutorial-focus")} onClick={onWait} disabled={disabled || !canAct || (tutorialRestricted && allowedTutorialAction !== "wait")} data-tutorial-target={allowedTutorialAction === "wait" ? tutorialStep ?? undefined : undefined}>
@@ -1753,6 +1813,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const setActionMode = useGameStore((state) => state.setActionMode);
   const moveSelected = useGameStore((state) => state.moveSelected);
   const attackSelected = useGameStore((state) => state.attackSelected);
+  const jamSelected = useGameStore((state) => state.jamSelected);
+  const blackoutSelected = useGameStore((state) => state.blackoutSelected);
   const shieldSelected = useGameStore((state) => state.shieldSelected);
   const pushSelected = useGameStore((state) => state.pushSelected);
   const waitSelected = useGameStore((state) => state.waitSelected);
@@ -1791,6 +1853,17 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     for (const target of attackTargets) previews.set(target.id, exactAttackPreview(game, selected, target, deadeye));
     return previews;
   }, [actionMode, attackTargets, game, selected]);
+  const hackTargets = useMemo(() => {
+    if (!game || !selected || selected.role !== "hacker" || (actionMode !== "jam" && actionMode !== "ability")) return [];
+    return getHackableTargets(game, selected.id, { blackout: actionMode === "ability" });
+  }, [actionMode, game, selected]);
+  const hackPreviews = useMemo(() => {
+    const previews = new Map<string, HackOutcomePreview>();
+    if (!game || !selected || selected.role !== "hacker") return previews;
+    const kind: HackOutcomePreview["kind"] = actionMode === "ability" ? "blackout" : "jam";
+    for (const target of hackTargets) previews.set(target.id, exactHackPreview(game, enemyPlan, selected.id, target, kind));
+    return previews;
+  }, [actionMode, enemyPlan, game, hackTargets, selected]);
   const pushTargets = useMemo(() => game && selected && selected.role === "pusher" && (actionMode === "push" || actionMode === "ability") ? getPushTargets(game, selected.id) : [], [actionMode, game, selected]);
   const pushPreviews = useMemo(() => {
     const previews = new Map<string, PushOutcomePreview>();
@@ -1799,7 +1872,15 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     for (const target of pushTargets) previews.set(target.id, exactPushPreview(game, selected.id, target, ability));
     return previews;
   }, [actionMode, game, pushTargets, selected]);
-  const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), attackPreviews, pushTargets, pushPreviews }), [attackPreviews, attackTargets, moves, pushPreviews, pushTargets]);
+  const highlights = useMemo<HighlightState>(() => ({
+    moves,
+    attackIds: new Set(attackTargets.map((enemy) => enemy.id)),
+    attackPreviews,
+    hackIds: new Set(hackTargets.map((enemy) => enemy.id)),
+    hackPreviews,
+    pushTargets,
+    pushPreviews,
+  }), [attackPreviews, attackTargets, hackPreviews, hackTargets, moves, pushPreviews, pushTargets]);
   const movePreviewPath = useMemo(() => game && selected && movePreview && actionMode === "move"
     ? getMovementPath(game, selected.id, movePreview)
     : null, [actionMode, game, movePreview, selected]);
@@ -1857,7 +1938,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   }, [hydrated, introDuration, missionId]);
 
   useEffect(() => {
-    if (!hydrated || !battleSpritesReady || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
+    if (!hydrated || !battleSpritesReady || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId) return;
     tutorialStarted.current = game.missionId;
     setTutorialStep(initialTutorialStep(game.missionId));
   }, [battleSpritesReady, game, hydrated, introVisible]);
@@ -1931,6 +2012,35 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     } else if (tutorialStep === "push-cancel-whale" && lastEvents.some((event) => event.type === "whale-charge-cancelled" && event.enemyId === "whale-training")) {
       completeTrainingLesson(3);
       setTutorialStep("training-complete");
+    } else if (tutorialStep === "hacker-select-one" && selectedUnitId === "hacker") {
+      setTutorialStep("hacker-choose-jam");
+    } else if (tutorialStep === "hacker-choose-jam" && actionMode === "jam") {
+      setTutorialStep("hacker-target-rugger");
+    } else if (tutorialStep === "hacker-target-rugger" && lastEvents.some((event) => event.type === "enemy-disrupted" && event.enemyId === "rugger-override" && event.kind === "jam")) {
+      setTutorialStep("hacker-end-turn-one");
+    } else if (tutorialStep === "hacker-end-turn-one" && isResolving) {
+      setTutorialStep("hacker-watch-jam");
+    } else if (tutorialStep === "hacker-watch-jam" && !isResolving && game.turn === 2 && turnBanner === null) {
+      setTutorialStep("hacker-jam-result");
+    } else if (tutorialStep === "hacker-select-two" && selectedUnitId === "hacker") {
+      setTutorialStep("hacker-move-blackout");
+    } else if (tutorialStep === "hacker-move-blackout" && unitMovedTo("hacker", "G3")) {
+      setTutorialStep("hacker-choose-blackout");
+    } else if (tutorialStep === "hacker-choose-blackout" && actionMode === "ability") {
+      setTutorialStep("hacker-target-sentinel");
+    } else if (tutorialStep === "hacker-target-sentinel" && lastEvents.some((event) => event.type === "enemy-disrupted" && event.enemyId === "sentinel-override" && event.kind === "blackout")) {
+      setTutorialStep("hacker-select-sniper");
+    } else if (tutorialStep === "hacker-select-sniper" && selectedUnitId === "sniper") {
+      setTutorialStep("hacker-choose-attack");
+    } else if (tutorialStep === "hacker-choose-attack" && actionMode === "attack") {
+      setTutorialStep("hacker-attack-rugger");
+    } else if (tutorialStep === "hacker-attack-rugger" && lastEvents.some((event) => event.type === "unit-attacked" && event.unitId === "sniper" && event.enemyId === "rugger-override")) {
+      setTutorialStep("hacker-end-turn-two");
+    } else if (tutorialStep === "hacker-end-turn-two" && isResolving) {
+      setTutorialStep("hacker-watch-blackout");
+    } else if (tutorialStep === "hacker-watch-blackout" && !isResolving && game.phase === "victory" && turnBanner === null) {
+      completeTrainingLesson(4);
+      setTutorialStep("hacker-complete");
     }
   }, [actionMode, completeTrainingLesson, game, isResolving, lastEvents, selectedUnitId, turnBanner, tutorialStep]);
 
@@ -2087,6 +2197,19 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
             fatal: preview?.fatal ?? false,
           };
         }),
+        hacks: hackTargets.map((target) => {
+          const preview = hackPreviews.get(target.id);
+          return {
+            id: target.id,
+            at: coordinate(target.position),
+            kind: preview?.kind ?? null,
+            actionBefore: preview?.actionBefore ?? null,
+            actionAfter: preview?.actionAfter ?? null,
+            damageBefore: preview?.damageBefore ?? 0,
+            damageAfter: preview?.damageAfter ?? 0,
+            gridOffline: preview?.gridOffline ?? false,
+          };
+        }),
         pushes: pushTargets.map((target) => {
           const preview = pushPreviews.get(target.id);
           return {
@@ -2133,6 +2256,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         at: coordinate(enemy.position),
         hp: enemy.hp,
         whaleState: enemy.whaleState,
+        disruption: enemy.disruption ?? null,
         guardedBy: getEnemyInterceptor(game, enemy.id)?.id ?? null,
         guardArea: enemy.kind === "sentinel" ? getSentinelGuardArea(game, enemy.id).map(coordinate) : [],
       })),
@@ -2148,6 +2272,9 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         area: intent.area.map(coordinate),
         damage: intent.damage,
         special: intent.special,
+        disruption: intent.disruption ?? null,
+        damageReduction: intent.damageReduction ?? 0,
+        originalAction: intent.originalAction ?? null,
         guardedEnemyIds: intent.guardedEnemyIds ?? [],
         supportTargets: (intent.supportTargets ?? []).map((target) => ({ id: target.id, at: coordinate(target.position), effect: target.effect })),
       })) ?? [],
@@ -2155,6 +2282,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         running: tutorialStep !== null,
         step: tutorialStep,
         lessonsCompleted: trainingCompleted,
+        coreLessonsCompleted: Math.min(trainingCompleted, 3),
+        specialistCompleted: trainingCompleted >= 4,
         allowedCoordinate: tutorialCoordinate(tutorialStep),
         allowedAction: tutorialAction(tutorialStep),
       },
@@ -2180,7 +2309,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackPreviews, attackTargets, battleMenuOpen, battleSpritesReady, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, pushPreviews, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackPreviews, attackTargets, battleMenuOpen, battleSpritesReady, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, hackPreviews, hackTargets, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, pushPreviews, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
@@ -2211,6 +2340,13 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     else if (tutorialStep === "push-whale-arrives") setTutorialStep("push-select-for-whale");
     else if (tutorialStep === "push-locked-cone") setTutorialStep("push-select-charging");
     else if (tutorialStep === "training-complete") {
+      setTutorialStep(null);
+      setInspectedId(null);
+      router.push("/training");
+    }
+    else if (tutorialStep === "hacker-intro") setTutorialStep("hacker-select-one");
+    else if (tutorialStep === "hacker-jam-result") setTutorialStep("hacker-select-two");
+    else if (tutorialStep === "hacker-complete") {
       setTutorialStep(null);
       setInspectedId(null);
       router.push("/training");
@@ -2249,6 +2385,12 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       moveSelected(position);
       return;
     }
+    if (enemy && selected?.role === "hacker" && (actionMode === "jam" || actionMode === "ability") && highlights.hackIds.has(enemy.id)) {
+      setInspectedId(enemy.id);
+      if (actionMode === "ability") blackoutSelected(enemy.id);
+      else jamSelected(enemy.id);
+      return;
+    }
     if (enemy && (actionMode === "attack" || (actionMode === "ability" && selected?.role === "sniper")) && highlights.attackIds.has(enemy.id)) {
       setInspectedId(enemy.id);
       attackSelected(enemy.id, actionMode === "ability");
@@ -2261,13 +2403,13 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       return;
     }
     setInspectedId(enemy?.id ?? object?.id ?? (samePosition(game.vault.position, position) ? game.vault.id : null));
-  }, [actionMode, attackSelected, controlsLocked, game, highlights.attackIds, moveSelected, moves, pushSelected, pushTargets, selectUnit, selected, tutorialAllowsTile]);
+  }, [actionMode, attackSelected, blackoutSelected, controlsLocked, game, highlights.attackIds, highlights.hackIds, jamSelected, moveSelected, moves, pushSelected, pushTargets, selectUnit, selected, tutorialAllowsTile]);
 
   const handleActionMode = useCallback((mode: ActionMode) => {
     if (tutorialRestrictsInput(tutorialStep)) {
       const allowed = tutorialAction(tutorialStep);
-      if ((mode === "attack" && allowed !== "attack") || (mode === "push" && allowed !== "push")) return;
-      if (mode !== "attack" && mode !== "push") return;
+      if ((mode === "attack" && allowed !== "attack") || (mode === "jam" && allowed !== "jam") || (mode === "push" && allowed !== "push")) return;
+      if (mode !== "attack" && mode !== "jam" && mode !== "push") return;
     }
     setActionMode(mode);
   }, [setActionMode, tutorialStep]);
@@ -2393,6 +2535,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       if (tutorialRestrictsInput(tutorialStep)) {
         const allowed = tutorialAction(tutorialStep);
         if (allowed === "attack" && key === "2" && selected && !selected.hasActed) setActionMode("attack");
+        else if (allowed === "jam" && key === "2" && selected?.role === "hacker" && !selected.hasActed) setActionMode("jam");
         else if (allowed === "ability" && key === "3") activateAbility();
         else if (allowed === "push" && key === "s" && selected?.role === "pusher" && !selected.hasActed) setActionMode("push");
         else if (allowed === "wait" && key === "w" && selected && !selected.hasActed) waitSelected();
@@ -2406,7 +2549,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         event.preventDefault();
         requestEndTurn();
       } else if (key === "1" && selected && !selected.hasMoved && !selected.hasActed) setActionMode("move");
-      else if (key === "2" && selected && !selected.hasActed) setActionMode("attack");
+      else if (key === "2" && selected && !selected.hasActed) setActionMode(selected.role === "hacker" ? "jam" : "attack");
       else if (key === "3" && selected && !selected.hasActed && selected.signatureAvailable && (selected.role !== "sniper" || !selected.hasMoved)) activateAbility();
       else if (key === "s" && selected?.role === "pusher" && !selected.hasActed) setActionMode("push");
       else if (key === "w" && selected && !selected.hasActed) waitSelected();
@@ -2464,7 +2607,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
             <Hourglass weight="fill" /> Preparing battle animations
           </div>
         ) : null}
-        {turnBanner && !introVisible && (!tutorialStep || ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep)) ? (
+        {turnBanner && !introVisible && (!tutorialStep || ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge", "hacker-watch-jam", "hacker-watch-blackout"].includes(tutorialStep)) ? (
           <div className={clsx("game-turn-banner", tutorialStep && "is-tutorial-watch")} role="status">{turnBanner}</div>
         ) : null}
         {isResolving && !introVisible && !combatCue ? <div className="enemy-phase-label"><Hourglass weight="fill" /> Enemy phase</div> : null}

@@ -301,6 +301,83 @@ export const TRAINING_MOMENTUM = {
   },
 } as const satisfies MissionDefinition;
 
+export const TRAINING_OVERRIDE = {
+  id: "training-override",
+  name: "System Override",
+  boardSize: BOARD_SIZE,
+  maxTurns: 2,
+  objective: { kind: "survive", enemyPhases: 2 },
+  obstacles: [],
+  vault: {
+    id: "training-relay",
+    name: "Training Relay",
+    position: position(3, 5),
+    maxHp: 10,
+  },
+  units: [
+    {
+      id: "hacker",
+      name: "Hacker",
+      role: "hacker",
+      position: position(3, 2),
+      maxHp: 6,
+      moveRange: 3,
+      attackDamage: 0,
+      attackRange: 3,
+      signatureName: "Blackout",
+    },
+    {
+      id: "sniper",
+      name: "Sniper",
+      role: "sniper",
+      position: position(0, 1),
+      maxHp: 7,
+      moveRange: 3,
+      attackDamage: 3,
+      attackRange: 3,
+      signatureName: "Deadeye",
+    },
+  ],
+  enemies: [
+    {
+      id: "rugger-override",
+      name: "Training Rugger",
+      kind: "rugger",
+      position: position(3, 0),
+      maxHp: 6,
+      moveRange: 2,
+      attackDamage: 3,
+      initiative: 10,
+    },
+    {
+      id: "sentinel-override",
+      name: "Lane Sentinel",
+      kind: "sentinel",
+      position: position(6, 1),
+      maxHp: 6,
+      moveRange: 0,
+      attackDamage: 0,
+      initiative: 20,
+    },
+  ],
+  objects: [],
+  breach: {
+    position: position(6, 6),
+    warningTurn: 99,
+    spawnTurn: 100,
+    enemy: {
+      id: "whale-training-override-unused",
+      name: "The Whale",
+      kind: "whale",
+      position: position(6, 6),
+      maxHp: 10,
+      moveRange: 1,
+      attackDamage: 4,
+      initiative: 30,
+    },
+  },
+} as const satisfies MissionDefinition;
+
 export const DATA_EXTRACTION = {
   id: "data-extraction",
   name: "Data Extraction",
@@ -502,6 +579,7 @@ export const MISSION_REGISTRY = {
   [TRAINING_BASICS.id]: TRAINING_BASICS,
   [TRAINING_SQUAD.id]: TRAINING_SQUAD,
   [TRAINING_MOMENTUM.id]: TRAINING_MOMENTUM,
+  [TRAINING_OVERRIDE.id]: TRAINING_OVERRIDE,
 } as const satisfies Readonly<Record<string, MissionDefinition>>;
 
 export type MissionId = keyof typeof MISSION_REGISTRY;
@@ -611,10 +689,11 @@ export const getBattleHref = (missionId: string): string =>
 export type TrainingMissionId =
   | typeof TRAINING_BASICS.id
   | typeof TRAINING_SQUAD.id
-  | typeof TRAINING_MOMENTUM.id;
+  | typeof TRAINING_MOMENTUM.id
+  | typeof TRAINING_OVERRIDE.id;
 
 export interface TrainingLessonMetadata {
-  readonly order: 1 | 2 | 3;
+  readonly order: 1 | 2 | 3 | 4;
   readonly missionId: TrainingMissionId;
   readonly title: string;
   readonly objective: string;
@@ -638,6 +717,12 @@ export const TRAINING_LESSONS = [
     missionId: TRAINING_MOMENTUM.id,
     title: "Push Control",
     objective: "Push objects, cause collisions, and interrupt a locked attack.",
+  },
+  {
+    order: 4,
+    missionId: TRAINING_OVERRIDE.id,
+    title: "System Override",
+    objective: "Rewrite one exact intent, then shut down an enemy activation.",
   },
 ] as const satisfies readonly TrainingLessonMetadata[];
 

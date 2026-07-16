@@ -40,6 +40,12 @@ const CHAPTER_DETAILS = {
     sprite: "/assets/sprites/pusher.png",
     skills: ["Push objects", "Collision damage", "Interrupt the Whale"],
   },
+  "training-override": {
+    label: "Specialist Lab",
+    duration: "4 min",
+    sprite: "/assets/sprites/hacker.png",
+    skills: ["Jam exact damage", "Blackout", "Break guard grids"],
+  },
 } as const satisfies Record<TrainingMissionId, ChapterDetail>;
 
 export function TrainingHub() {
@@ -69,12 +75,12 @@ export function TrainingHub() {
           <div>
             <p>Field training</p>
             <h1 id="training-title">Choose a chapter</h1>
-            <span>Three short playable simulations. Finish one, then decide when to continue.</span>
+            <span>Three short core simulations, plus one optional specialist lab for the Hacker.</span>
           </div>
           <div className="training-overall" aria-live="polite">
-            <strong data-training-progress={hydrated ? completed : 0}>{hydrated ? completed : 0}<small>/3</small></strong>
+            <strong data-training-progress={hydrated ? Math.min(completed, 3) : 0}>{hydrated ? Math.min(completed, 3) : 0}<small>/3</small></strong>
             <div>
-              <span>{hydrated ? `${completed} chapter${completed === 1 ? "" : "s"} complete` : "Loading progress"}</span>
+              <span>{hydrated ? (completed >= 4 ? "Core clear · Hacker certified" : `${Math.min(completed, 3)} core chapter${completed === 1 ? "" : "s"} complete`) : "Loading progress"}</span>
               <i aria-hidden="true">
                 {[1, 2, 3].map((step) => <b key={step} className={hydrated && step <= completed ? "is-complete" : undefined} />)}
               </i>
@@ -92,7 +98,7 @@ export function TrainingHub() {
             return (
               <article
                 key={lesson.missionId}
-                className={`training-chapter${isComplete ? " is-complete" : isNext ? " is-next" : " is-locked"}`}
+                className={`training-chapter${lesson.order === 4 ? " is-specialist" : ""}${isComplete ? " is-complete" : isNext ? " is-next" : " is-locked"}`}
                 aria-labelledby={`chapter-${lesson.order}-title`}
                 data-training-chapter={lesson.missionId}
                 data-training-status={isComplete ? "complete" : isNext ? "available" : "locked"}
@@ -105,7 +111,7 @@ export function TrainingHub() {
 
                 <div className="training-chapter-copy">
                   <div className="training-chapter-meta">
-                    <span>Chapter {lesson.order} · {detail.label}</span>
+                    <span>{lesson.order === 4 ? "Optional specialist" : `Chapter ${lesson.order}`} · {detail.label}</span>
                     <span><Clock weight="fill" aria-hidden="true" /> {detail.duration}</span>
                   </div>
                   <h2 id={`chapter-${lesson.order}-title`}>{lesson.title}</h2>
@@ -117,7 +123,7 @@ export function TrainingHub() {
 
                 <footer>
                   <span className="training-chapter-status">
-                    {isComplete ? <><CheckCircle weight="fill" /> Complete</> : isNext ? <><Play weight="fill" /> Up next</> : <><LockKey weight="fill" /> Clear chapter {lesson.order - 1}</>}
+                    {isComplete ? <><CheckCircle weight="fill" /> Complete</> : isNext ? <><Play weight="fill" /> {lesson.order === 4 ? "Specialist lab" : "Up next"}</> : <><LockKey weight="fill" /> {lesson.order === 4 ? "Clear core training" : `Clear chapter ${lesson.order - 1}`}</>}
                   </span>
                   <button
                     type="button"

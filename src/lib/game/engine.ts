@@ -229,6 +229,8 @@ export const getStateFingerprint = (state: GameState): string =>
         enemy.whaleState ?? null,
         enemy.facing ?? null,
         enemy.lockedArea?.map(positionKey) ?? [],
+        enemy.disruption?.kind ?? null,
+        enemy.disruption?.sourceUnitId ?? null,
       ]),
     objects: [...state.objects]
       .sort((left, right) => left.id.localeCompare(right.id))
@@ -322,7 +324,7 @@ export const getSentinelGuardArea = (
   sentinelId: string,
 ): Position[] => {
   const sentinel = getEnemy(state, sentinelId);
-  if (!sentinel || sentinel.kind !== "sentinel") return [];
+  if (!sentinel || sentinel.kind !== "sentinel" || sentinel.disruption) return [];
 
   const area: Position[] = [];
   for (const { delta } of CARDINAL_DIRECTIONS) {
@@ -345,7 +347,7 @@ export const getEnemyInterceptor = (
   targetEnemyId: string,
 ): Enemy | undefined => {
   const target = getEnemy(state, targetEnemyId);
-  if (!target || target.kind === "sentinel") return undefined;
+  if (!target || target.kind === "sentinel" || target.disruption) return undefined;
 
   return state.enemies
     .filter(
@@ -375,6 +377,7 @@ export const getAttackableTargets = (
     state.phase !== "player" ||
     !unit ||
     unit.hp <= 0 ||
+    unit.role === "hacker" ||
     unit.hasActed ||
     (options.deadeye &&
       (unit.role !== "sniper" || unit.hasMoved || !unit.signatureAvailable))
@@ -531,6 +534,74 @@ export const activateDeadeye = (
   unitId: string,
   enemyId: string,
 ): GameTransition => performPlayerAttack(state, unitId, enemyId, true);
+
+export const getHackableTargets = (
+  state: GameState,
+  unitId: string,
+  options: Readonly<{ blackout?: boolean }> = {},
+): Enemy[] => {
+  const unit = getUnit(state, unitId);
+  if (
+    state.phase !== "player" ||
+    !unit ||
+    unit.hp <= 0 ||
+    unit.role !== "hacker" ||
+    unit.hasActed ||
+    (options.blackout && !unit.signatureAvailable)
+  ) {
+    return [];
+  }
+
+  return state.enemies.filter((enemy) => {
+    if (enemy.hp <= 0) return false;
+    const distance = manhattanDistance(unit.position, enemy.position);
+    return distance >= 1
+      && distance <= unit.attackRange
+      && hasLineOfSight(state, unit.position, enemy.position);
+  });
+};
+
+const disruptEnemy = (
+  state: GameState,
+  unitId: string,
+  enemyId: string,
+  kind: "jam" | "blackout",
+): GameTransition => {
+  const targets = getHackableTargets(state, unitId, { blackout: kind === "blackout" });
+  if (!targets.some((enemy) => enemy.id === enemyId)) {
+    return reject(state, `${kind === "blackout" ? "Blackout" : "Jam"} cannot target that enemy.`);
+  }
+
+  const nextState = markUnitActed({
+    ...state,
+    enemies: state.enemies.map((enemy) => enemy.id === enemyId
+      ? { ...enemy, disruption: { kind, sourceUnitId: unitId } }
+      : enemy),
+  }, unitId, kind === "blackout" ? { signatureAvailable: false } : undefined);
+
+  return {
+    state: nextState,
+    events: [{
+      type: "enemy-disrupted",
+      unitId,
+      enemyId,
+      kind,
+      damageReduction: kind === "jam" ? 2 : 0,
+    }],
+  };
+};
+
+export const jamEnemy = (
+  state: GameState,
+  unitId: string,
+  enemyId: string,
+): GameTransition => disruptEnemy(state, unitId, enemyId, "jam");
+
+export const blackoutEnemy = (
+  state: GameState,
+  unitId: string,
+  enemyId: string,
+): GameTransition => disruptEnemy(state, unitId, enemyId, "blackout");
 
 export const waitUnit = (
   state: GameState,
@@ -1137,6 +1208,23 @@ const calculateWhaleIntent = (
   };
 };
 
+const calculateUndisruptedEnemyIntent = (
+  state: GameState,
+  enemy: Enemy,
+  order: number,
+): EnemyIntent => {
+  switch (enemy.kind) {
+    case "rugger":
+      return calculateRuggerIntent(state, enemy, order);
+    case "drainer":
+      return calculateDrainerIntent(state, enemy, order);
+    case "sentinel":
+      return calculateSentinelIntent(state, enemy, order);
+    case "whale":
+      return calculateWhaleIntent(state, enemy, order);
+  }
+};
+
 export const calculateEnemyIntent = (
   state: GameState,
   enemyId: string,
@@ -1155,16 +1243,42 @@ export const calculateEnemyIntent = (
       .findIndex((candidate) => candidate.id === enemyId) +
       1;
 
-  switch (enemy.kind) {
-    case "rugger":
-      return calculateRuggerIntent(state, enemy, resolvedOrder);
-    case "drainer":
-      return calculateDrainerIntent(state, enemy, resolvedOrder);
-    case "sentinel":
-      return calculateSentinelIntent(state, enemy, resolvedOrder);
-    case "whale":
-      return calculateWhaleIntent(state, enemy, resolvedOrder);
+  if (enemy.disruption?.kind === "blackout") {
+    const cleanEnemy: Enemy = { ...enemy, disruption: undefined };
+    const cleanState: GameState = {
+      ...state,
+      enemies: state.enemies.map((candidate) => candidate.id === enemy.id ? cleanEnemy : candidate),
+    };
+    const original = calculateUndisruptedEnemyIntent(cleanState, cleanEnemy, resolvedOrder);
+    return {
+      enemyId: enemy.id,
+      enemyKind: enemy.kind,
+      order: resolvedOrder,
+      action: "hold",
+      from: clonePosition(enemy.position),
+      path: [],
+      destination: clonePosition(enemy.position),
+      targets: [],
+      area: [],
+      damage: 0,
+      special: "system-shutdown",
+      disruption: "blackout",
+      damageReduction: original.damage,
+      originalAction: original.action === "hold" ? "idle" : original.action,
+    };
   }
+
+  if (enemy.disruption?.kind === "jam") {
+    const reducedDamage = Math.max(0, enemy.attackDamage - 2);
+    const reducedEnemy: Enemy = { ...enemy, attackDamage: reducedDamage };
+    return {
+      ...calculateUndisruptedEnemyIntent(state, reducedEnemy, resolvedOrder),
+      disruption: "jam",
+      damageReduction: enemy.attackDamage - reducedDamage,
+    };
+  }
+
+  return calculateUndisruptedEnemyIntent(state, enemy, resolvedOrder);
 };
 
 interface TargetDamageResult {
@@ -1268,7 +1382,7 @@ const applyEnemyIntent = (
     }
   }
 
-  if (intent.action === "guard" && enemy.kind === "sentinel" && emitEvents) {
+  if (intent.action === "guard" && enemy.kind === "sentinel" && !enemy.disruption && emitEvents) {
     events.push({
       type: "sentinel-fortified",
       enemyId: enemy.id,
@@ -1343,6 +1457,33 @@ const applyEnemyIntent = (
       ),
     };
     if (emitEvents) events.push({ type: "whale-staggered", enemyId: enemy.id });
+  }
+
+  if (enemy.disruption) {
+    const disruption = enemy.disruption;
+    nextState = {
+      ...nextState,
+      enemies: nextState.enemies.map((candidate) => {
+        if (candidate.id !== enemy.id) return candidate;
+        if (disruption.kind === "blackout" && candidate.kind === "whale") {
+          return {
+            ...candidate,
+            disruption: undefined,
+            whaleState: "ready",
+            lockedArea: [],
+            facing: undefined,
+          };
+        }
+        return { ...candidate, disruption: undefined };
+      }),
+    };
+    if (emitEvents) {
+      events.push({
+        type: "enemy-disruption-resolved",
+        enemyId: enemy.id,
+        kind: disruption.kind,
+      });
+    }
   }
 
   return { state: nextState, events };

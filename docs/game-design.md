@@ -2,7 +2,7 @@
 
 ## Design intent
 
-Degen Tactics is a short, deterministic tactical puzzle. Its tension comes from choosing positions and trades with complete information, not from hidden rolls. The opening operations teach three core verbs - block, shoot, and push - through authored boards and optional short training chapters.
+Degen Tactics is a short, deterministic tactical puzzle. Its tension comes from choosing positions and trades with complete information, not from hidden rolls. The opening operations teach three core verbs - block, shoot, and push - through authored boards and short training chapters; the optional specialist lab adds exact enemy-plan control.
 
 Core pillars:
 
@@ -13,7 +13,7 @@ Core pillars:
 
 ## Player journey
 
-The player lands on the Title screen and can deploy immediately as a guest. Operations exposes the three authored missions and their local completion state. Field Training is optional and split into three player-controlled chapters, so it teaches the rules without blocking the game behind one long tutorial.
+The player lands on the Title screen and can deploy immediately as a guest. Operations exposes the three authored missions and their local completion state. Field Training is player-controlled and split into three core chapters plus optional Chapter 4, **System Override**, so it teaches the rules without blocking the game behind one long tutorial. Completing chapters 1-3 satisfies onboarding; chapter 4 is a specialist certification and never gates campaign play.
 
 The current sequence is:
 
@@ -30,7 +30,7 @@ Completing Operation 01 adds `protect-the-vault` to local completion progress an
 - Movement range uses breadth-first search. Equal path choices expand in north, east, south, west order.
 - Board edges, obstacles, the protected structure, all combatants, and the Data Block block player movement.
 - A unit may choose to remain on its tile and act.
-- Obstacles, the protected structure, and the Data Block block Sniper line of sight. Player units and enemies do not.
+- Obstacles, the protected structure, and the Data Block block Sniper and Hacker line of sight. Player units and enemies do not.
 - Occupancy changes are applied before recalculating intents, so a moved squad member can deliberately block a lane.
 
 ## Player turn and activation economy
@@ -51,6 +51,7 @@ Undo restores only the most recent legal movement. It is available until an atta
 | Guardian | Frontline / protector | 12 | 2 | Strike: adjacent target, 2 damage | Shield Wall: one mission charge |
 | Sniper | Ranged damage | 7 | 3 | Shot: cardinal range 1-3, 3 damage | Deadeye: one mission charge |
 | Pusher | Position control | 9 | 2 | Strike: adjacent target, 1 damage | Batter Up: one mission charge |
+| Hacker | Plan control / disruption | 6 | 3 | Jam: reusable, cardinal range 1-3 | Blackout: one mission charge |
 
 #### Guardian - Shield Wall
 
@@ -74,6 +75,28 @@ Undo restores only the most recent legal movement. It is available until an atta
 - Board edges, obstacles, the protected structure, combatants, the reserved breach, and the Data Block block a pushed enemy. Only the pushed enemy can take collision damage. The blocker, structure, allied units, and other enemies never take collision damage.
 - The Data Block has no HP. It can move through free tiles, blocks movement and Sniper line of sight in its new position, and takes or deals no damage when a push is blocked.
 - Successfully displacing a charging Whale cancels its locked cone and marks it staggered for its next activation. A blocked push that only causes collision damage does not interrupt the charge.
+
+#### Hacker - Jam and Blackout
+
+- The Hacker has no normal damaging attack. Both control actions use cardinal range 1-3 and the same line-of-sight blockers as the Sniper; combatants do not block the signal.
+- **Jam** is reusable. It reduces the target enemy's damage on its next exact ordered activation by 2, to a minimum of 0. Its stored path, destination, target, area, support relationship, and activation order do not change.
+- **Blackout** has one mission charge. It replaces the target's next exact ordered activation with a stationary `HOLD`: no movement, target, area, damage, healing, or support effect.
+- A Blacked-out Lane Sentinel cannot intercept attacks during that pending activation, so its Interception Grid disappears immediately from the recalculated exact plan.
+- The Hacker may move before Jam or Blackout. Either action ends the Hacker's activation and clears movement undo.
+- Disruption is consumed only after the affected enemy reaches its exact initiative slot. Blackout against a charging Whale consumes that activation, clears its locked cone, and returns it to Ready.
+
+The Hacker is currently available only in System Override. Campaign operations still deploy the proven Guardian, Sniper, and Pusher trio; the next product step is a compact choose-three-from-four deployment flow.
+
+## Field Training
+
+The training menu exposes progress before launch and lets the player stop after any chapter:
+
+1. **First Contact** - move, attack, and read exact enemy intents.
+2. **Squad Turns** - activate the full squad and time one-charge signatures.
+3. **Push Control** - Shove, Batter Up, collision damage, Data Block movement, and Whale interruption.
+4. **System Override (optional specialist)** - Jam a Rugger's exact strike, then Blackout a Lane Sentinel and exploit the disabled grid with the Sniper.
+
+System Override is a two-turn lab rather than a campaign operation. The authored setup places Sniper at A2, Rugger at D1, Hacker at D3, Sentinel at G2, and a Training Relay at D6. On Turn 1, Jam preserves the Rugger's D1-to-D2 route and Hacker target but changes damage from 3 to 1. On Turn 2, Blackout converts the Sentinel intent to `HOLD`; the former grid no longer intercepts the Sniper shot. Completing the second enemy phase validates the specialist chapter.
 
 ## Mission 01: Protect the Vault
 
@@ -272,6 +295,7 @@ Each displayed intent contains:
 - Exact damage.
 - Every affected tile for an area attack.
 - Explicit guarded targets for a support intent.
+- Any active disruption, original action, and exact damage reduction.
 - Special state such as breach, charge, slam, stagger, or `intercept-grid`.
 
 The complete turn plan is recalculated after every successful world-state-changing player command. UI-only selection and hover changes do not alter it. End Turn snapshots that plan; enemy resolution consumes it without retargeting or rerolling. If identical game states are provided, serialized plans must be byte-equivalent.
@@ -283,6 +307,7 @@ The complete turn plan is recalculated after every successful world-state-changi
 - An entity at 0 HP is defeated and no longer blocks, moves, attacks, or receives future turns.
 - Enemy attacks can damage their planned squad target or the mission's protected structure. Collision damage follows the stricter push rules above.
 - Lane Sentinel interception changes only the receiver of a direct player attack. The actual Sentinel receives the full deterministic hit, with no overflow; forced movement and collision retain their normal targets.
+- Jam and Blackout are consumed after the disrupted enemy's exact ordered activation, even when the resulting damage is 0 or the action is `HOLD`.
 - The Vault and Extraction Rig start at 10 integrity; the Break the Breach Seal Generator starts at 4. Track whether the active structure ever lost integrity separately for scoring and medals.
 - Temporary shields expire after the enemy phase for which they were granted.
 
@@ -349,6 +374,7 @@ XP preview is `floor(score / 10)` and is not persisted as progression. Season po
 - Cyan outline marks attack range and targets.
 - Gold arrows mark pushes and the extraction route.
 - A quiet amber cardinal grid, a dominant amber tether, and a `GUARD` badge identify Sentinel support. This is support information, not red danger.
+- Hacker targets use a distinct signal outline and name the exact before/after plan: reduced damage for Jam or `HOLD` for Blackout.
 - Red hatching marks danger; a heavier pulse marks a locked Whale strike.
 - Purple identifies the protected structure or mission-special zone.
 - Color is always paired with shape, outline, pattern, label, icon, or motion.

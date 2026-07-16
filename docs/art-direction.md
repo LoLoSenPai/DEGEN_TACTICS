@@ -71,6 +71,7 @@ Allies are miniature-like tokens contained by a circular or clipped-hex base. A 
 | Guardian | Broad shield arc, squared shoulders, stable vertical core | Teal, thick outer ring, protective chevron |
 | Sniper | Narrow forward axis, long sight line, offset reticle | Cyan, thin ring, precision notch |
 | Pusher | Low wedge, forward mass, ram/hammer glyph | Gold, directional fins, force arrow |
+| Hacker | Slim asymmetric controller, forearm jammer console, folded antenna fins | Electric cyan/cobalt, interrupted signal notch |
 
 HP is presented with countable pips or a clearly labeled bar. Shield adds a temporary outer arc rather than recoloring the entire unit. Selected units receive a controlled halo and strong base outline; completed units lose intensity but remain readable.
 
@@ -98,7 +99,7 @@ Render information from quietest to loudest:
 5. Persistent enemy-danger hatching.
 6. Attack/selection outlines and locked-cone emphasis.
 7. Planned paths, destinations, push arrows, and dominant Sentinel tethers.
-8. Unit/enemy tokens, `GUARD` badges, and readable HP/status.
+8. Unit/enemy tokens, `GUARD`/disruption badges, and readable HP/status.
 9. Short-lived hit flashes, damage values, and turn banners.
 
 When states overlap, preserve both meanings with different visual channels—for example teal fill under red hatching, or a cyan outline around a danger-patterned tile. The locked Whale zone wins emphasis but must not hide a unit standing inside it.
@@ -118,7 +119,8 @@ When states overlap, preserve both meanings with different visual channels—for
 - Disabled future features include a visible “Coming Soon” label or explanatory copy; they never look accidentally broken.
 - Enemy intents show order, path/destination, target or area, damage, and special state without requiring hover.
 - A guarded target always carries a visible `GUARD` badge. Attack preview names the actual Sentinel receiver before commitment; support cells remain amber and never join red danger hatching.
-- Contextual hints are one sentence and react to the player's current state. Do not interrupt with a tutorial modal.
+- Jam preview names the exact damage reduction without changing the enemy path; Blackout replaces the affected intent with a clearly labeled `HOLD` and removes disabled support geometry.
+- Use one centered chapter card only for a lesson intro or debrief, then return control immediately. During play, contextual prompts stay short, spotlight the exact tile/control, and never become a long blocking tutorial sequence.
 - Tooltip content names the effect, legal target, charge state, and commitment cost.
 - Keyboard focus is a visible cyan outline with sufficient offset. Touch/click targets remain at least 40px where layout allows.
 - At widths below 1024px, the battle is replaced by a composed larger-screen message. Never crush the three-column battle HUD into an unreadable phone layout.
@@ -156,8 +158,8 @@ The live game combines SpriteCook pixel characters with authored CSS/SVG tactica
 Priority 1:
 
 - Final SVG logo and favicon variants.
-- Refined Rugger, Drainer, and Whale board silhouettes; the animated Guardian, Sniper, Pusher, and Lane Sentinel sets are complete.
-- Shared action/status icon sheet: move, attack, shield, deadeye, push, collision, charge, stagger.
+- Refined Rugger, Drainer, and Whale board silhouettes; the animated Guardian, Sniper, Pusher, Hacker, and Lane Sentinel sets are complete.
+- Shared action/status icon sheet: move, attack, shield, deadeye, push, collision, charge, stagger, jam, and blackout.
 - Vault, obstacle, Data Block, and breach tile details.
 
 Priority 2:
@@ -190,6 +192,12 @@ Use the shared style prefix below for every raster exploration, then append one 
 **Pusher exploration**
 
 > Low center-of-gravity control-unit miniature, forward ram and mechanical bracing arms, gold force-arrow accents, visibly built for displacement rather than shooting, designed to read at 64 pixels, isolated on transparent background.
+
+**Hacker production record**
+
+> Slim compact systems-control operative in orthographic three-quarter isometric view; warm brown skin, short silver undercut, asymmetric warm-off-white cropped tech jacket over matte graphite armor, restrained electric-cyan and cobalt accents, two short folded backpack antenna fins, and a readable forearm jammer console; stable planted board-piece anchor; transparent background; no gun, shield, projectile, beam, aura, text, or baked visual effects.
+
+The approved 166x166 master is SpriteCook asset `c0608002-9691-4b1b-b6fe-ad812cbc48df`. One grouped isometric run, `c373c196-3c3f-4ca9-9fa2-2405fda93e55`, produced six transparent native-180x180-frame sheets: `idle`, `walk`, custom `jam`, custom `blackout`, `hurt`, and `death`. The complete Hacker pass cost 114 credits and left 454. Tactical range, exact damage reduction, `HOLD`, and disabled support remain authored SVG/CSS overlays rather than baked effects.
 
 **Enemy family exploration**
 

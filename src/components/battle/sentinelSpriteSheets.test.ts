@@ -29,7 +29,7 @@ describe("Lane Sentinel sprite sheet registry", () => {
   });
 
   it("preloads the Sentinel together with every hero animation", () => {
-    expect(BATTLE_SPRITE_SHEET_URLS).toHaveLength(22);
+    expect(BATTLE_SPRITE_SHEET_URLS).toHaveLength(28);
     for (const url of SENTINEL_SPRITE_SHEET_URLS) {
       expect(BATTLE_SPRITE_SHEET_URLS).toContain(url);
     }

@@ -14,9 +14,9 @@ The MVP is guest-first and runs entirely in the browser. There is no wallet requ
 
 - A game-first flow: **Title -> Operations or Training -> Battle -> Results**.
 - A direct **Play as Guest / Continue** action that deploys into the next operation.
-- Three optional field-training chapters covering movement, actions, signatures, collision pushes, exact intents, and the Whale interruption.
-- A visually authored 7x7 DOM battlefield with SpriteCook-animated pixel heroes and Lane Sentinel, readable movement routes, attacks, shields, impacts, deaths, and enemy danger.
-- Guardian, Sniper, and Pusher units with distinct actions and one-charge signature abilities.
+- Three core field-training chapters covering movement, actions, signatures, collision pushes, exact intents, and the Whale interruption, plus the optional **System Override** specialist chapter.
+- A visually authored 7x7 DOM battlefield with four SpriteCook-animated pixel heroes and the Lane Sentinel, readable movement routes, attacks, shields, disruption, impacts, deaths, and enemy danger.
+- Guardian, Sniper, Pusher, and Hacker units with distinct tactical verbs. The Hacker is currently proven in the training lab and is not yet part of the three-operator campaign squad.
 - Deterministic Rugger, Drainer, Lane Sentinel, and two-phase Whale behavior.
 - Exact enemy movement, target, damage, and area previews before End Turn.
 - Three objective types in the pure engine: fixed-horizon survival, object extraction, and breach-target destruction.
@@ -58,13 +58,15 @@ pnpm test
 pnpm build
 ```
 
-The deterministic engine, presentation, asset-registry, and persistence suite currently contains 102 passing tests covering movement, combat, pushes, objective timing, exact intents, interception, scoring, shipped animation geometry, sprite-load fallback, and storage fallback.
+The deterministic engine, presentation, asset-registry, and persistence suite currently contains 110 passing tests covering movement, combat, pushes, disruption, objective timing, exact intents, interception, scoring, shipped animation geometry, sprite-load fallback, and storage fallback.
 
 ## How to play
 
 Each living squad member may move once and then take one action. Acting completes that unit's activation. Select a unit, use the highlighted tiles to move or target, and resolve every unit you need before ending the turn. The game warns before forfeiting unused activations.
 
 Enemy intents are promises: the displayed path, destination, target, damage, and affected tiles are the actions that will resolve.
+
+The optional Hacker lab adds deterministic enemy-plan control. **Jam** is reusable at cardinal range 1-3 and reduces the target's next exact activation damage by 2, to a minimum of 0, without changing its route or target. **Blackout** has one mission charge and replaces that exact activation with a stationary, zero-damage `HOLD`, including disabling a Lane Sentinel's interception for that activation. The Hacker has no normal attack.
 
 - In **Protect the Vault**, keep the 10-integrity Vault online through enemy phase 5.
 - In **Data Extraction**, clear the stationary Lane Sentinel from E3, then use Shove and Batter Up to deliver the Data Block. Its amber Interception Grid redirects direct attacks against an aligned hostile into the Sentinel; pushes and collision damage bypass the link. Delivery wins immediately, while failing to deliver by the end of enemy phase 5 loses the operation.
@@ -76,8 +78,8 @@ Keyboard shortcuts:
 | Key | Action |
 | --- | --- |
 | `1` | Move mode |
-| `2` | Attack mode |
-| `3` | Signature/ability mode |
+| `2` | Attack mode; Hacker Jam |
+| `3` | Signature/ability mode; Hacker Blackout |
 | `S` | Pusher Shove mode |
 | `W` | Wait |
 | `Space` | End turn |
@@ -92,7 +94,7 @@ Battle is designed for viewports at least 1024px wide. Title, Operations, Traini
 | --- | --- |
 | `/` | Title screen and primary game menu |
 | `/operations` | Three-operation selection and local completion status |
-| `/training` | Three optional tutorial chapters |
+| `/training` | Three core tutorial chapters plus optional System Override specialist training |
 | `/battle/[missionId]` | Dynamic battle entry for an authored mission |
 | `/battle/protect-the-vault` | Legacy-compatible direct battle entry |
 | `/results` | Mission-specific outcome, score, medals, Retry, and next operation |
@@ -104,6 +106,8 @@ Opening a valid battle route directly creates a fresh mission. Locked operations
 Only the guest identity, display name, settings, completed training count, `completedMissionIds`, best completed score per operation, and last result are stored in LocalStorage under the versioned `degen-tactics:v1` key. Mid-battle state, selections, animations, timers, and undo history are not persisted. Invalid or incompatible saved data falls back to safe defaults.
 
 Only victories enter `completedMissionIds` and unlock the next operation. A best score never regresses. No account is created and no data leaves the browser in this MVP.
+
+Training progression distinguishes onboarding from specialist certification: completing chapters 1-3 marks the core tutorial complete, while a stored value of 4 additionally records completion of System Override. The fourth chapter never blocks campaign deployment.
 
 ## Architecture
 

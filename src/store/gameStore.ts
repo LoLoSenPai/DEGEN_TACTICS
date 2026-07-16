@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import {
   applyShield,
   attackEnemy,
+  blackoutEnemy,
   calculateEnemyPlan,
   compileEnemyPlayback,
   compilePushPlayback,
@@ -15,6 +16,7 @@ import {
   getMissionDefinition,
   isMissionId,
   isTrainingMissionId,
+  jamEnemy,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
@@ -32,13 +34,15 @@ import {
   type PushKind,
 } from "@/lib/game";
 
-export type ActionMode = "move" | "attack" | "push" | "ability" | null;
+export type ActionMode = "move" | "attack" | "jam" | "push" | "ability" | null;
 
 export type CombatVariant =
   | "guardian-bash"
   | "sniper-shot"
   | "deadeye"
   | "pusher-punch"
+  | "hacker-jam"
+  | "hacker-blackout"
   | "shove"
   | "batter-up"
   | "rugger-charge"
@@ -57,7 +61,7 @@ export interface CombatLogEntry {
 
 export interface BattleEffect {
   id: number;
-  kind: "move" | "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death" | "push" | "heal";
+  kind: "move" | "attack" | "damage" | "shield" | "shield-hit" | "collision" | "heavy" | "death" | "push" | "heal" | "hack";
   sourceId?: string;
   targetId?: string;
   amount?: number;
@@ -93,7 +97,7 @@ interface LastMoveSnapshot {
 interface PersistentSettings {
   soundMuted: boolean;
   tutorialComplete: boolean;
-  trainingCompleted: 0 | 1 | 2 | 3;
+  trainingCompleted: 0 | 1 | 2 | 3 | 4;
 }
 
 interface GameStore {
@@ -125,6 +129,8 @@ interface GameStore {
   setActionMode: (mode: ActionMode) => void;
   moveSelected: (to: Position) => void;
   attackSelected: (enemyId: string, deadeye?: boolean) => void;
+  jamSelected: (enemyId: string) => void;
+  blackoutSelected: (enemyId: string) => void;
   shieldSelected: () => void;
   pushSelected: (targetId: string, batterUp?: boolean) => void;
   waitSelected: () => void;
@@ -133,7 +139,7 @@ interface GameStore {
   clearEffects: () => void;
   clearResult: () => void;
   setTutorialComplete: (completed: boolean) => void;
-  completeTrainingLesson: (lesson: 1 | 2 | 3) => void;
+  completeTrainingLesson: (lesson: 1 | 2 | 3 | 4) => void;
 }
 
 const initialProfile: PlayerIdentity = {
@@ -310,6 +316,18 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
       tone = "warning";
       text = `INTERCEPTED: ${event.interceptorId.toUpperCase()} took the ${event.damage}-damage hit meant for ${event.intendedEnemyId.toUpperCase()}.`;
       break;
+    case "enemy-disrupted":
+      tone = "ally";
+      text = event.kind === "blackout"
+        ? `BLACKOUT: ${event.enemyId.toUpperCase()} will HOLD its next activation.`
+        : `JAM: ${event.enemyId.toUpperCase()}'s next activation deals ${event.damageReduction} less damage.`;
+      break;
+    case "enemy-disruption-resolved":
+      tone = event.kind === "blackout" ? "reward" : "neutral";
+      text = event.kind === "blackout"
+        ? `${event.enemyId.toUpperCase()} lost its activation to BLACKOUT.`
+        : `${event.enemyId.toUpperCase()} cleared JAM after activating.`;
+      break;
     case "shield-applied":
       tone = "ally";
       text = `SHIELD WALL reinforced ${event.unitIds.length} operator${event.unitIds.length === 1 ? "" : "s"}.`;
@@ -407,7 +425,7 @@ function isDefeated(state: GameState, id: string) {
 function combatVariantForSource(
   state: GameState,
   sourceId?: string,
-  options: { deadeye?: boolean; pushAbility?: PushKind } = {},
+  options: { deadeye?: boolean; pushAbility?: PushKind; disruption?: "jam" | "blackout" } = {},
 ): CombatVariant {
   if (options.pushAbility === "batter-up") return "batter-up";
   if (options.pushAbility === "shove") return "shove";
@@ -416,6 +434,7 @@ function combatVariantForSource(
   if (unit?.role === "guardian") return "guardian-bash";
   if (unit?.role === "sniper") return options.deadeye ? "deadeye" : "sniper-shot";
   if (unit?.role === "pusher") return "pusher-punch";
+  if (unit?.role === "hacker") return options.disruption === "blackout" ? "hacker-blackout" : "hacker-jam";
   const enemy = state.enemies.find((candidate) => candidate.id === sourceId);
   if (enemy?.kind === "rugger") return "rugger-charge";
   if (enemy?.kind === "drainer") return "drain";
@@ -461,6 +480,9 @@ function effectsFromEvents(events: readonly GameEvent[], state: GameState): Batt
     }
     if (event.type === "shield-applied") {
       for (const unitId of event.unitIds) effects.push(nextEffect({ kind: "shield", sourceId: event.sourceId, targetId: unitId, amount: event.value }));
+    }
+    if (event.type === "enemy-disrupted") {
+      effects.push(nextEffect({ kind: "hack", sourceId: event.unitId, targetId: event.enemyId, amount: event.damageReduction }));
     }
   }
   return effects;
@@ -766,6 +788,85 @@ export const useGameStore = create<GameStore>()(
             schedulePresentation(finish, 460);
           }
         }, attackDuration);
+      },
+
+      jamSelected: (enemyId) => {
+        const { game, selectedUnitId, log } = get();
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
+        const transition = jamEnemy(game, selectedUnitId, enemyId);
+        const rejected = hasRejected(transition.events);
+        if (rejected) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: "jam",
+            log: appendEvents(log, transition.events, game.turn),
+            lastEvents: transition.events,
+          });
+          return;
+        }
+        const disruptionEvent = transition.events.find((event): event is Extract<GameEvent, { type: "enemy-disrupted" }> => event.type === "enemy-disrupted");
+        const generation = sessionGeneration;
+        set({
+          game: transition.state,
+          enemyPlan: planFor(transition.state),
+          actionMode: null,
+          lastMove: null,
+          log: appendEvents(log, transition.events, game.turn),
+          effects: effectsFromEvents(transition.events, transition.state),
+          isAnimating: true,
+          combatCue: nextCue("attack", {
+            sourceId: selectedUnitId,
+            targetId: enemyId,
+            amount: disruptionEvent?.damageReduction ?? 0,
+            variant: combatVariantForSource(game, selectedUnitId, { disruption: "jam" }),
+          }),
+          lastEvents: [],
+        });
+        schedulePresentation(() => {
+          if (generation === sessionGeneration) {
+            set({ isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+          }
+        }, 560);
+      },
+
+      blackoutSelected: (enemyId) => {
+        const { game, selectedUnitId, log } = get();
+        if (!game || !selectedUnitId || get().isResolving || get().isAnimating) return;
+        const transition = blackoutEnemy(game, selectedUnitId, enemyId);
+        const rejected = hasRejected(transition.events);
+        if (rejected) {
+          set({
+            game: transition.state,
+            enemyPlan: planFor(transition.state),
+            actionMode: "ability",
+            log: appendEvents(log, transition.events, game.turn),
+            lastEvents: transition.events,
+          });
+          return;
+        }
+        const generation = sessionGeneration;
+        set({
+          game: transition.state,
+          enemyPlan: planFor(transition.state),
+          actionMode: null,
+          lastMove: null,
+          log: appendEvents(log, transition.events, game.turn),
+          effects: effectsFromEvents(transition.events, transition.state),
+          isAnimating: true,
+          combatCue: nextCue("status", {
+            sourceId: selectedUnitId,
+            targetId: enemyId,
+            statusKind: "blackout-cast",
+            variant: combatVariantForSource(game, selectedUnitId, { disruption: "blackout" }),
+          }),
+          lastEvents: [],
+        });
+        schedulePresentation(() => {
+          if (generation === sessionGeneration) {
+            set({ isAnimating: false, effects: [], combatCue: null, lastEvents: transition.events });
+          }
+        }, 760);
       },
 
       shieldSelected: () => {
@@ -1081,12 +1182,12 @@ export const useGameStore = create<GameStore>()(
         },
       })),
       completeTrainingLesson: (lesson) => set((state) => {
-        const trainingCompleted = Math.max(state.settings.trainingCompleted, lesson) as 0 | 1 | 2 | 3;
+        const trainingCompleted = Math.max(state.settings.trainingCompleted, lesson) as 0 | 1 | 2 | 3 | 4;
         return {
           settings: {
             ...state.settings,
             trainingCompleted,
-            tutorialComplete: trainingCompleted === 3,
+            tutorialComplete: trainingCompleted >= 3,
           },
         };
       }),
@@ -1108,8 +1209,8 @@ export const useGameStore = create<GameStore>()(
         const persistedTraining = typeof persistedSettings?.trainingCompleted === "number"
           && Number.isInteger(persistedSettings.trainingCompleted)
           && persistedSettings.trainingCompleted >= 0
-          && persistedSettings.trainingCompleted <= 3
-          ? persistedSettings.trainingCompleted as 0 | 1 | 2 | 3
+          && persistedSettings.trainingCompleted <= 4
+          ? persistedSettings.trainingCompleted as 0 | 1 | 2 | 3 | 4
           : 0;
         const validProfile = persisted.profile && typeof persisted.profile.guestId === "string" && typeof persisted.profile.displayName === "string";
         const validScores = Boolean(
@@ -1150,7 +1251,7 @@ export const useGameStore = create<GameStore>()(
             soundMuted: typeof persistedSettings?.soundMuted === "boolean"
               ? persistedSettings.soundMuted
               : currentState.settings.soundMuted,
-            tutorialComplete: persistedTraining === 3,
+            tutorialComplete: persistedTraining >= 3,
             trainingCompleted: persistedTraining,
           },
         };

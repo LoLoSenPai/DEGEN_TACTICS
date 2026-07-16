@@ -104,7 +104,7 @@ export function TitleScreen() {
           </button>
           <button type="button" className="title-button title-button-training" onClick={() => router.push("/training")} disabled={!hydrated}>
             <BookOpen weight="fill" aria-hidden="true" />
-            <span>Field Training <small>{hydrated ? `${trainingCompleted} / 3 chapters cleared` : "Loading…"}</small></span>
+            <span>Field Training <small>{hydrated ? (trainingCompleted >= 4 ? "3 / 3 core · Hacker certified" : `${Math.min(trainingCompleted, 3)} / 3 core cleared`) : "Loading…"}</small></span>
           </button>
           <button type="button" className="title-button title-button-wallet" disabled title="Coming soon">
             <Wallet weight="fill" aria-hidden="true" />
@@ -141,7 +141,7 @@ export function TitleScreen() {
               </button>
               <button type="button" className="option-row" onClick={() => router.push("/training")}>
                 <span><strong>Field training</strong><small>Choose a short chapter whenever you want</small></span>
-                <b>{trainingCompleted} / 3</b>
+                <b>{Math.min(trainingCompleted, 3)} / 3 core{trainingCompleted >= 4 ? " + Hacker" : ""}</b>
               </button>
               <button type="button" className="option-row" onClick={toggleFullscreen}>
                 <span><strong>Fullscreen</strong><small>Keyboard shortcut: F</small></span>
@@ -169,7 +169,7 @@ export function TitleScreen() {
             <div className="launch-warning-body">
               <Warning weight="fill" aria-hidden="true" />
               <div>
-                <strong>{trainingCompleted} of 3 chapters complete</strong>
+                <strong>{Math.min(trainingCompleted, 3)} of 3 core chapters complete</strong>
                 <p>You can deploy now, but the remaining chapters explain hero powers, collision pushes and the Whale charge.</p>
               </div>
             </div>

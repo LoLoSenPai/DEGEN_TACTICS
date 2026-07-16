@@ -17,6 +17,9 @@ export type CombatPlaybackStatusKind =
   | "charge-cancelled"
   | "staggered"
   | "drain-heal"
+  | "jam-cleared"
+  | "blackout-hold"
+  | "blackout-cast"
   | "push-blocked"
   | "push-stopped"
   | "vault-breached";
@@ -175,6 +178,19 @@ export const applyPresentationEvent = (
       return copyEnemyFromFinalState(state, finalState, event.enemyId);
     case "breach-warning":
       return { ...state, breach: finalState.breach };
+    case "enemy-disruption-resolved":
+      return {
+        ...state,
+        enemies: state.enemies.map((enemy) => enemy.id === event.enemyId
+          ? {
+              ...enemy,
+              disruption: undefined,
+              ...(event.kind === "blackout" && enemy.kind === "whale"
+                ? { whaleState: "ready" as const, lockedArea: [], facing: undefined }
+                : undefined),
+            }
+          : enemy),
+      };
     default:
       return state;
   }
@@ -315,6 +331,20 @@ export const compileEnemyPlayback = (
     if (event.type === "enemy-healed") {
       visualState = applyPresentationEvent(visualState, event, finalState);
       beats.push({ stage: "status", state: visualState, event, duration: 520, sourceId: event.enemyId, amount: event.amount, statusKind: "drain-heal" });
+      continue;
+    }
+
+    if (event.type === "enemy-disruption-resolved") {
+      beats.push({
+        stage: "status",
+        state: visualState,
+        event,
+        duration: event.kind === "blackout" ? 760 : 440,
+        sourceId: event.enemyId,
+        targetId: event.enemyId,
+        statusKind: event.kind === "blackout" ? "blackout-hold" : "jam-cleared",
+      });
+      visualState = applyPresentationEvent(visualState, event, finalState);
       continue;
     }
 

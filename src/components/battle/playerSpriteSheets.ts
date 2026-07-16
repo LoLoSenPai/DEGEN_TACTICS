@@ -29,6 +29,14 @@ export const PLAYER_SPRITE_SHEETS: Readonly<
     hurt: "/assets/sprites/spritecook/pusher-hurt.png",
     death: "/assets/sprites/spritecook/pusher-death.png",
   },
+  hacker: {
+    idle: "/assets/sprites/spritecook/hacker-idle.png",
+    walk: "/assets/sprites/spritecook/hacker-walk.png",
+    attack: "/assets/sprites/spritecook/hacker-jam.png",
+    ability: "/assets/sprites/spritecook/hacker-blackout.png",
+    hurt: "/assets/sprites/spritecook/hacker-hurt.png",
+    death: "/assets/sprites/spritecook/hacker-death.png",
+  },
 };
 
 export const PLAYER_SPRITE_SHEET_URLS = [...new Set(

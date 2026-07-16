@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "workflow": "three squad character batches, one Sniper Deadeye request, and one Lane Sentinel master plus grouped idle/hurt/death/custom guard batch; no standalone /animate calls",
+  "workflow": "four squad character batches, one Sniper Deadeye request, one Lane Sentinel grouped batch, and one Hacker master plus grouped idle/walk/hurt/death/custom Jam/custom Blackout batch; no standalone /animate calls",
   "credits": {
     "before": 926,
-    "used": 358,
-    "remaining": 568
+    "used": 472,
+    "remaining": 454
   },
   "characters": {
     "sniper": {
@@ -42,6 +42,22 @@
         "hurt": { "asset_id": "5576e26b-c583-491d-aba5-629ae894495d", "sha12": "f0e8b2e1057b" },
         "death": { "asset_id": "3cc094f2-0c52-48ce-a049-ac98d830a1d8", "sha12": "657646936743" },
         "batter-up": { "asset_id": "4e0cd292-7368-47f9-843d-65d9dc1c8265", "sha12": "b7993708eb7b" }
+      }
+    },
+    "hacker": {
+      "master": { "asset_id": "c0608002-9691-4b1b-b6fe-ad812cbc48df", "sha12": "8b72ec330be6" },
+      "runs": ["c373c196-3c3f-4ca9-9fa2-2405fda93e55"],
+      "perspective": "isometric",
+      "nativeMasterSize": "166x166",
+      "nativeFrameSize": "180x180",
+      "creditsUsed": 114,
+      "animations": {
+        "idle": { "asset_id": "f7c4fe78-2254-45b1-9eec-4ee19ace5cdb", "sha12": "c103c882819b" },
+        "walk": { "asset_id": "9029d337-53f4-44b2-8511-78dbab750eaf", "sha12": "d238e2e73a84" },
+        "jam": { "asset_id": "4061324b-99de-4bbf-8e39-b830ebc9dd17", "sha12": "24a4b6ecfba4" },
+        "blackout": { "asset_id": "dae330ec-3755-4708-bc0d-5a18ed10c9ce", "sha12": "33ba2ee46068" },
+        "hurt": { "asset_id": "6267378d-4765-4168-abb2-35958fb9ef42", "sha12": "afc87ead0f29" },
+        "death": { "asset_id": "c86d6060-9ef5-4e1a-ad05-226c6241f717", "sha12": "f7775139d950" }
       }
     },
     "sentinel": {

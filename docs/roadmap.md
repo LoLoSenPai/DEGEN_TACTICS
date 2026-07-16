@@ -33,13 +33,13 @@ The playable product now uses a focused **Title -> Operations or Training -> Bat
 
 ### Current quality gates
 
-- Game-first title screen, optional chapter-based training, operation selection, dynamic battle routes, and mission-aware results.
+- Game-first title screen, three core training chapters plus optional System Override specialist training, operation selection, dynamic battle routes, and mission-aware results.
 - A real win/lose/retry/next-operation loop for all three objective types.
 - Exact previews that match deterministic enemy resolution.
 - Animated movement, attacks, shields, impacts, damage, KO, heavy hits, and turn/result transitions.
 - Local guest identity, training progress, per-operation best scores, completion unlocks, last result, and safe storage fallback.
 - Desktop/tablet battle, phone notice, keyboard support, focus visibility, and reduced motion.
-- 102 passing deterministic engine/presentation/asset-registry/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review as release gates.
+- 110 passing deterministic engine/presentation/asset-registry/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review as release gates.
 
 ## Next content sequence
 
@@ -51,20 +51,19 @@ The engine exposes an exact `guard` / `intercept-grid` intent and ordered interc
 
 Its approved SpriteCook set is now live: one canonical pixel master plus grouped idle, hit, custom guard, and 12-frame death sheets. All battle sheets share the title/direct-entry predecode gate, so the first intercepted hit cannot disappear on a cold cache.
 
-### 1. Fourth hero
+### Completed - Fourth hero
 
-Create one new squad role with a complete pixel-art state set and a mechanically distinct verb. Hacker or support/control remain stronger candidates than another direct attacker.
+The fourth role is now the Hacker: a 6-HP, Move-3 enemy-plan controller with no normal attack. Reusable Jam reduces the target's next exact activation damage by 2, minimum 0, without changing its route or target. One-charge Blackout replaces that activation with a stationary zero-damage `HOLD` and disables Lane Sentinel interception while pending.
 
-Definition of done:
+The optional two-turn **System Override** lab teaches both verbs after the three core onboarding chapters. Core completion remains `trainingCompleted >= 3`; value 4 records specialist certification. Browser QA completed the chapter at 1440px and 1024px, verified the phone notice, and captured zero console errors.
 
-- Idle, walk, attack/ability, hit, and death states.
-- Basic action, one-charge signature, exact rule text, and deterministic tests.
-- Clear interaction with existing enemies and objectives.
-- Readable selection state and action preview at the current board scale.
+The approved SpriteCook set uses master `c0608002-9691-4b1b-b6fe-ad812cbc48df` plus one grouped run, `c373c196-3c3f-4ca9-9fa2-2405fda93e55`, for `idle`, `walk`, `jam`, `blackout`, `hurt`, and `death`. The pass cost 114 credits, left 454, and brings the shared battle preload registry to 28 sheets.
 
-### 2. Three-of-four squad selection
+The Hacker is intentionally still confined to the training lab. This proves the mechanics and production art without silently changing the balance or canonical solutions of the three shipped operations.
 
-After the fourth hero is proven, allow the player to choose three operators before deployment. Keep this as a compact game screen or pre-battle choice, not a stat-heavy loadout dashboard.
+### 1. Three-of-four squad selection
+
+With the fourth hero proven in the specialist lab, allow the player to choose three operators before deployment. Keep this as a compact game screen or pre-battle choice, not a stat-heavy loadout dashboard.
 
 - No gear score, rarity, stat upgrade, or permanent power grind.
 - Each authored operation remains solvable by more than one valid trio or clearly communicates a recommended squad.

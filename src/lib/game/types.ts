@@ -3,8 +3,9 @@ export const BOARD_SIZE = 7 as const;
 export type Position = Readonly<{ x: number; y: number }>;
 export type Direction = "north" | "east" | "south" | "west";
 export type GamePhase = "player" | "enemy" | "victory" | "defeat";
-export type UnitRole = "guardian" | "sniper" | "pusher";
+export type UnitRole = "guardian" | "sniper" | "pusher" | "hacker";
 export type EnemyKind = "rugger" | "drainer" | "whale" | "sentinel";
+export type EnemyDisruptionKind = "jam" | "blackout";
 export type PushKind = "shove" | "batter-up";
 export type PushTargetKind = "enemy" | "object";
 export type MissionOutcome = "victory" | "defeat";
@@ -125,6 +126,10 @@ export interface Enemy {
   readonly whaleState?: "ready" | "charging" | "staggered";
   readonly lockedArea?: readonly Position[];
   readonly facing?: Direction;
+  readonly disruption?: Readonly<{
+    kind: EnemyDisruptionKind;
+    sourceUnitId: string;
+  }>;
 }
 
 export interface PushableObject {
@@ -182,11 +187,21 @@ export type EnemySupportTarget = Readonly<{
   effect: EnemySupportEffect;
 }>;
 
+export type EnemyIntentAction =
+  | "advance"
+  | "attack"
+  | "charge"
+  | "slam"
+  | "staggered"
+  | "guard"
+  | "idle"
+  | "hold";
+
 export interface EnemyIntent {
   readonly enemyId: string;
   readonly enemyKind: EnemyKind;
   readonly order: number;
-  readonly action: "advance" | "attack" | "charge" | "slam" | "staggered" | "guard" | "idle";
+  readonly action: EnemyIntentAction;
   readonly from: Position;
   readonly path: readonly Position[];
   readonly destination: Position;
@@ -194,7 +209,10 @@ export interface EnemyIntent {
   readonly targets: readonly IntentTarget[];
   readonly area: readonly Position[];
   readonly damage: number;
-  readonly special?: "drain" | "lock-cone" | "ground-slam" | "stagger-skip" | "intercept-grid";
+  readonly special?: "drain" | "lock-cone" | "ground-slam" | "stagger-skip" | "intercept-grid" | "system-shutdown";
+  readonly disruption?: EnemyDisruptionKind;
+  readonly damageReduction?: number;
+  readonly originalAction?: Exclude<EnemyIntentAction, "hold">;
   readonly guardedEnemyIds?: readonly string[];
   readonly supportTargets?: readonly EnemySupportTarget[];
   readonly facing?: Direction;
@@ -219,6 +237,8 @@ export type GameEvent =
   | Readonly<{ type: "damage"; sourceId: string; targetId: string; amount: number; absorbed: number }>
   | Readonly<{ type: "enemy-healed"; enemyId: string; amount: number }>
   | Readonly<{ type: "attack-intercepted"; unitId: string; intendedEnemyId: string; interceptorId: string; damage: number }>
+  | Readonly<{ type: "enemy-disrupted"; unitId: string; enemyId: string; kind: EnemyDisruptionKind; damageReduction: number }>
+  | Readonly<{ type: "enemy-disruption-resolved"; enemyId: string; kind: EnemyDisruptionKind }>
   | Readonly<{ type: "sentinel-fortified"; enemyId: string; area: readonly Position[]; guardedEnemyIds: readonly string[] }>
   | Readonly<{ type: "whale-cone-locked"; enemyId: string; area: readonly Position[]; facing: Direction }>
   | Readonly<{ type: "whale-charge-cancelled"; enemyId: string }>

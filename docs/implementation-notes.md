@@ -8,7 +8,7 @@
 - Vitest 4 for pure game and persistence tests.
 - A semantic 7x7 DOM grid; no canvas engine, Phaser, database, RPC, or wallet runtime.
 
-The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current 102-test deterministic suite covers the pure engine, mission content, presentation, scoring, mastery, shipped animation geometry, sprite-load fallback, and persistence boundary.
+The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current 110-test deterministic suite covers the pure engine, mission content, presentation, scoring, mastery, disruption, shipped animation geometry, sprite-load fallback, and persistence boundary.
 
 ## Current product surface
 
@@ -27,7 +27,7 @@ There is no required HQ, campaign map, or loadout step. The old mission and load
 | --- | --- |
 | `/` | Hydrates local progress, shows the title menu, and deploys to the next operation |
 | `/operations` | Shows all three operations, including prerequisite, completion, and best score state |
-| `/training` | Shows three optional chapters and their local completion state |
+| `/training` | Shows three core chapters, optional System Override specialist training, and local completion state |
 | `/battle/[missionId]` | Validates the registry ID, starts that mission fresh, mounts controls/serializer, and rejects a locked operation |
 | `/battle/protect-the-vault` | Legacy-compatible battle entry |
 | `/results` | Reads `lastResult`, renders operation-specific scoring/medals, retries the same mission, or continues to the next unlocked operation |
@@ -99,6 +99,7 @@ createInitialGameState(mission?)
 getValidMoves(state, unitId)
 getAttackableTargets(state, unitId)
 getPushTargets(state, unitId)
+getHackableTargets(state, unitId)
 getSentinelGuardArea(state, sentinelId)
 getEnemyInterceptor(state, targetEnemyId)
 moveUnit(state, unitId, destination)
@@ -107,6 +108,8 @@ activateDeadeye(state, unitId, enemyId)
 pushTarget(state, unitId, targetId, pushKind)
 pushEnemy(state, unitId, enemyId, pushKind)
 applyShield(state, unitId)
+jamEnemy(state, unitId, enemyId)
+blackoutEnemy(state, unitId, enemyId)
 waitUnit(state, unitId)
 calculateEnemyIntent(state, enemyId)
 calculateEnemyPlan(state)
@@ -166,9 +169,19 @@ Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn
 
 Sentinel planning returns an exact zero-damage intent with `action: "guard"`, `special: "intercept-grid"`, the complete support `area`, `guardedEnemyIds`, and stable `supportTargets`. Resolution uses that same snapshot and emits `sentinel-fortified`; it does not create a hidden persistent buff. A later player transition derives the next grid and interception relationship from the new board.
 
+### Hacker disruption
+
+The Hacker is a 6-HP, Move-3 specialist with no normal attack. `getHackableTargets` applies cardinal range 1-3 with the same line-of-sight blockers as the Sniper: terrain, the protected structure, and pushable objects stop a ray, while combatants do not.
+
+`jamEnemy` stores a `jam` disruption on the target, consumes the Hacker action, and immediately recalculates the complete plan. Planning preserves the target enemy's exact route, destination, target, area, support relationship, and order while reducing its next activation damage by 2 with a floor of 0. `blackoutEnemy` consumes its one mission charge and replaces the target's next exact activation with `action: "hold"`, empty path/area, no target, zero damage, and no support. A disrupted Sentinel is excluded from interception immediately, so the previewed grid and actual receiver change together.
+
+Both effects are part of the state fingerprint and are removed only after the affected enemy reaches its stored initiative slot in shadow planning or real resolution. This keeps later enemy occupancy deterministic. Blackout against a charging Whale consumes the slam activation, clears the cone, and returns the Whale to Ready. Jam against a Drainer can reduce damage to 0, in which case no healing occurs.
+
+The optional `training-override` mission proves the contract in two turns: Jam rewrites the Rugger's D1-to-D2 strike from 3 damage to 1 without retargeting, then Blackout turns the Lane Sentinel into `HOLD` so the Sniper can attack through its former grid. The three core tutorial chapters remain the campaign onboarding threshold.
+
 ## Events and animation
 
-Engine events describe movement, attack, damage, shield, push, collision, defeat, spawn, Whale state, Sentinel interception/fortification, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
+Engine events describe movement, attack, damage, shield, push, collision, disruption, defeat, spawn, Whale state, Sentinel interception/fortification, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
 
 The store applies player transitions immediately and derives combat log, sprite state, path travel, impacts, shields, damage numbers, KO sequences, and banners from those ordered events. Terminal player attacks and collision pushes persist their result, best score, and completed mission only after their readable impact/death playback finishes; the already-computed engine result never changes. A skipped animation, slow device, or reduced-motion preference cannot change a rule result.
 
@@ -210,6 +223,8 @@ The Zustand slice stores these as sibling fields; the grouped type only document
 
 Storage reads use version/schema guards and `try/catch`. Missing, corrupt, incompatible, or unavailable storage produces default guest data without blocking startup. Active battle state is never persisted.
 
+`settings.trainingCompleted` accepts integers from 0 through 4. Values 0-3 represent the completed prefix of the core chapters; 4 records the optional System Override specialist certification. `tutorialComplete` becomes true once the core threshold reaches 3 and does not require chapter 4.
+
 ## Development state serializer
 
 Battle exposes `window.render_game_to_text()` in development/test builds. The deterministic JSON string includes:
@@ -217,8 +232,9 @@ Battle exposes `window.render_game_to_text()` in development/test builds. The de
 - Mission ID, board size, phase, turn, and completed enemy phases.
 - The objective kind; extraction snapshots include object ID, destination, and delivered state, while breach snapshots include target ID, spawned/defeated state, anvil object, and anvil destination.
 - Protected structure coordinate, integrity, and pristine/damaged state.
-- Squad state, signature availability, enemies, objects, breach, selection, action mode, highlights, and interaction lock.
-- Exact intent order, path, destination, target, damage, area, guarded enemy IDs, support targets, and special state.
+- Squad state, signature availability, enemies and their disruption, objects, breach, selection, action mode, highlights, and interaction lock.
+- Exact intent order, path, destination, target, damage, area, guarded enemy IDs, support targets, disruption modifier, original action, and special state.
+- Hacker target previews, including exact before/after damage or the resulting `HOLD` activation.
 - Terminal outcome when present.
 
 Coordinates use board notation consistently. Arrays are stably ordered; timestamps, DOM IDs, and animation elapsed time are excluded.
@@ -229,6 +245,7 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 - Movement, attack, push, danger, locked area, cargo route, and token overlays remain separate channels.
 - Sentinel support uses a quiet amber cardinal grid plus a stronger amber source-to-target tether and `GUARD` badge. It never enters the red danger-tile set.
 - Hovering a direct attack against a guarded hostile previews the actual receiver and damage as `INTERCEPT -> SENTINEL`; the shot and impact playback land on that same Sentinel.
+- Jam and Blackout previews are derived from the pure transitions and their recalculated plans. The UI names reduced damage versus `HOLD`; it never estimates those outcomes independently.
 - Data Extraction renders its destination and route from `game.objective`; it never hard-codes E3 in the component.
 - Break the Breach renders its setup route and contextual coaching from `anvilObjectId` and `anvilDestination`; it never hard-codes F2 in presentation code.
 - Action controls derive legality from engine selectors. Components do not duplicate range, line-of-sight, charge, extraction, or activation rules.
@@ -239,24 +256,27 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 
 ## Testing strategy
 
-The current 102-test deterministic suite covers:
+The current 110-test deterministic suite covers:
 
 - Movement, occupancy, bounds, obstacles, shortest paths, and no diagonal traversal.
 - Melee/Sniper targeting, line of sight, activation limits, Wait, signatures, and undo invalidation.
 - Shields, damage, deaths, collision boundaries, Data Block movement, and Whale interruption.
 - Rugger/Drainer targeting, Sentinel area/blockers/interception/tie-breakers, sequential occupancy, stable initiative, and exact-plan equivalence.
+- Hacker stats and targeting, movement/action economy, Jam damage floors and byte-equivalent plans, Blackout `HOLD`, Sentinel bypass, disruption consumption, Drainer zero-damage healing prevention, and Whale charge/slam interactions.
 - Protect's breach warning, Whale spawn/charge/slam/cancel/stagger, phase-5 timing, and defeat precedence.
 - Data Extraction registry/unlock/routing, the E2 Rugger/E3 Sentinel setup, direct-attack redirection and push bypass, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
 - Break the Breach registry/unlock/routing, immutable anvil data, no pre-spawn auto-win, exact Turn-2 spawn and cone, canonical charge break/stagger/anvil kill, blocked-push Seal destruction, fatal attack/collision terminalization, timeout, scoring, and medals.
 - Storage fallback, completed-operation migration, unlock persistence, and best-score non-regression.
 
-Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review.
+Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review. System Override has additionally been completed through the real DOM at 1440px and 1024px; the phone route shows the designed larger-screen notice, and all three captures reported zero console errors.
 
-## Lane Sentinel asset status
+## SpriteCook asset status
 
 The live board piece is the SpriteCook pixel master at `public/assets/sprites/sentinel.png`. Runtime animation uses four transparent horizontal sheets under `public/assets/sprites/spritecook`: `idle`, `hurt`, and custom `guard` contain eight native 180x180 frames; `death` contains twelve. The `intercept-grid` status cue selects `guard`, damage selects `hurt`, and a fatal event holds the complete death sheet before entity removal. The immobile, zero-damage support enemy intentionally has no walk or attack sheet.
 
-`battleSpritePreloader.ts` combines the 18 squad sheets and four Sentinel sheets into one shared decode cache. Title entry preloads opportunistically; direct battle entry keeps controls locked until every URL has either decoded or reported failure, preventing a first-use animation from replacing idle with an unavailable background. A failed sheet uses the shipped static character master for that state rather than hiding the piece or locking the game forever. Reduced-motion mode freezes each Sentinel state on a distinct semantic frame rather than hiding it. Exact guard cells, tethers, badges, and receiver previews remain state-driven SVG/CSS overlays and are never baked into the raster art.
+The Hacker master is SpriteCook asset `c0608002-9691-4b1b-b6fe-ad812cbc48df`, delivered at 166x166. One grouped run, `c373c196-3c3f-4ca9-9fa2-2405fda93e55`, produced six transparent sheets with native 180x180 frames: `idle`, `walk`, custom `jam`, custom `blackout`, `hurt`, and `death`. The master plus single grouped batch cost 114 credits and left a balance of 454; no per-animation generation loop was used.
+
+`battleSpritePreloader.ts` combines the 24 four-hero sheets and four Sentinel sheets into one shared 28-sheet decode cache. Title entry preloads opportunistically; direct battle entry keeps controls locked until every URL has either decoded or reported failure, preventing a first-use animation from replacing idle with an unavailable background. A failed sheet uses the shipped static character master for that state rather than hiding the piece or locking the game forever. Reduced-motion mode freezes each Sentinel/Hacker state on a distinct semantic frame rather than hiding it. Exact guard cells, tethers, disruption badges, and receiver previews remain state-driven SVG/CSS overlays and are never baked into the raster art.
 
 ## Safe extension points
 

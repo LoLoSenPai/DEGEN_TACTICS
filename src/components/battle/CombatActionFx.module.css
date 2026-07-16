@@ -233,6 +233,84 @@
 
 .shieldWall { color: #53f2dc; }
 
+.hackerJam { color: #54ecd8; }
+.hackerJam .traceOuter { stroke: #062822; stroke-width: 17; }
+.hackerJam .traceInner {
+  stroke: #66f3df;
+  stroke-width: 6;
+  stroke-dasharray: 11 10;
+  filter: drop-shadow(0 0 7px #28bfae);
+  animation: hacker-signal-flow 420ms linear both;
+}
+
+.hackerBlackout { color: #b96cff; }
+.hackerBlackout .traceOuter { stroke: #21082f; stroke-width: 23; }
+.hackerBlackout .traceInner {
+  stroke: #c981ff;
+  stroke-width: 9;
+  stroke-dasharray: 7 13;
+  filter: drop-shadow(0 0 10px #8e3ed3);
+  animation: hacker-blackout-flow 620ms steps(6, end) both;
+}
+
+.hackerJamOuter,
+.hackerJamInner,
+.hackerBlackoutOuter,
+.hackerBlackoutInner {
+  fill: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.hackerJamOuter {
+  stroke: #50e9d6;
+  stroke-dasharray: 13 8;
+  stroke-width: 7;
+  filter: drop-shadow(0 0 8px #28bfae);
+  animation: hacker-jam-ring 420ms ease-out both;
+}
+
+.hackerJamInner {
+  fill: rgb(42 213 191 / 12%);
+  stroke: #c7fff7;
+  stroke-width: 4;
+  animation: hacker-jam-ring 360ms ease-out 70ms both;
+}
+
+.hackerJamMinus {
+  fill: none;
+  stroke: #effffb;
+  stroke-linecap: square;
+  stroke-width: 9;
+  filter: drop-shadow(0 0 5px #2bd8c3);
+  animation: hacker-jam-minus 340ms steps(3, end) 90ms both;
+}
+
+.hackerBlackoutOuter {
+  fill: rgb(141 56 207 / 10%);
+  stroke: #b761ff;
+  stroke-dasharray: 9 11;
+  stroke-width: 10;
+  filter: drop-shadow(0 0 12px #8531c7);
+  animation: hacker-blackout-ring 640ms cubic-bezier(0.16, 0.84, 0.32, 1) both;
+}
+
+.hackerBlackoutInner {
+  fill: rgb(30 8 45 / 64%);
+  stroke: #e0b6ff;
+  stroke-width: 5;
+  animation: hacker-blackout-core 520ms steps(5, end) 90ms both;
+}
+
+.hackerBlackoutCut {
+  fill: none;
+  stroke: #fff2ff;
+  stroke-linecap: square;
+  stroke-width: 8;
+  filter: drop-shadow(0 0 7px #bc6eff);
+  animation: hacker-blackout-cut 430ms steps(4, end) 150ms both;
+}
+
 .shieldAuraOuter,
 .shieldAuraMiddle,
 .shieldCore {
@@ -376,6 +454,48 @@
   to { stroke-dashoffset: 52; }
 }
 
+@keyframes hacker-signal-flow {
+  from { opacity: 0; stroke-dashoffset: 72; }
+  24%, 78% { opacity: 1; }
+  to { opacity: 0.22; stroke-dashoffset: 0; }
+}
+
+@keyframes hacker-blackout-flow {
+  from { opacity: 0; stroke-dashoffset: 80; }
+  32%, 72% { opacity: 1; }
+  to { opacity: 0.16; stroke-dashoffset: 0; }
+}
+
+@keyframes hacker-jam-ring {
+  from { opacity: 0; transform: scale(1.55); stroke-dashoffset: 32; }
+  58% { opacity: 1; }
+  to { opacity: 0.28; transform: scale(0.92); stroke-dashoffset: 0; }
+}
+
+@keyframes hacker-jam-minus {
+  from { opacity: 0; transform: scaleX(0.15); }
+  55% { opacity: 1; }
+  to { opacity: 0.4; transform: scaleX(1); }
+}
+
+@keyframes hacker-blackout-ring {
+  from { opacity: 0; transform: scale(1.75) rotate(-28deg); stroke-dashoffset: 40; }
+  58% { opacity: 1; }
+  to { opacity: 0.34; transform: scale(0.88) rotate(0); stroke-dashoffset: 0; }
+}
+
+@keyframes hacker-blackout-core {
+  from { opacity: 0; transform: scale(0.25); }
+  60% { opacity: 0.95; transform: scale(1.08); }
+  to { opacity: 0.72; transform: scale(1); }
+}
+
+@keyframes hacker-blackout-cut {
+  from { opacity: 0; transform: scale(1.35); }
+  55% { opacity: 1; }
+  to { opacity: 0.45; transform: scale(0.88); }
+}
+
 @keyframes combat-source-pulse {
   from { opacity: 0; transform: scale(0.4); }
   45% { opacity: 1; }
@@ -418,7 +538,13 @@
   .batterImpact,
   .shieldAuraOuter,
   .shieldAuraMiddle,
-  .shieldCore {
+  .shieldCore,
+  .hackerJamOuter,
+  .hackerJamInner,
+  .hackerJamMinus,
+  .hackerBlackoutOuter,
+  .hackerBlackoutInner,
+  .hackerBlackoutCut {
     animation: none;
     opacity: 1;
     transform: none;

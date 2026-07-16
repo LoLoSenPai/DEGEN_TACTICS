@@ -4,6 +4,7 @@ type GlyphKind =
   | "guardian"
   | "sniper"
   | "pusher"
+  | "hacker"
   | "rugger"
   | "drainer"
   | "whale"
@@ -50,6 +51,16 @@ export function BattleGlyph({ kind, className }: BattleGlyphProps) {
       <svg {...shared}>
         <path d="m8 24 9-13h13l10 13-10 13H17L8 24Z" stroke="currentColor" strokeWidth="2.5" />
         <path d="M13 24h21m-7-7 7 7-7 7" stroke="currentColor" strokeWidth="3" strokeLinecap="square" />
+      </svg>
+    );
+  }
+
+  if (kind === "hacker") {
+    return (
+      <svg {...shared}>
+        <path d="M10 12h28v24H10V12Z" fill="currentColor" opacity=".16" />
+        <path d="M12 14h24v20H12V14Zm5 5h14M17 24h14M17 29h8" stroke="currentColor" strokeWidth="2.5" />
+        <path d="m24 4 4 6h-8l4-6Zm0 40-4-6h8l-4 6Z" fill="currentColor" />
       </svg>
     );
   }
