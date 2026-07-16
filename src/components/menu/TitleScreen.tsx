@@ -15,7 +15,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useGameStore } from "@/store/gameStore";
-import { preloadPlayerSpriteSheets } from "@/components/battle/playerSpriteSheets";
+import { preloadBattleSpriteSheets } from "@/components/battle/battleSpritePreloader";
 import { getBattleHref, getNextOperationId, getOperationMetadata, PLAYABLE_OPERATIONS } from "@/lib/game";
 
 export function TitleScreen() {
@@ -28,7 +28,7 @@ export function TitleScreen() {
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
-    void preloadPlayerSpriteSheets();
+    void preloadBattleSpriteSheets();
   }, []);
 
   const nextOperationId = getNextOperationId(completedMissionIds);

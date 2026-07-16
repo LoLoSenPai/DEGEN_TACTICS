@@ -19,8 +19,10 @@ import {
   getFollowingOperationId,
   getNextOperationId,
   getAttackableTargets,
+  getEnemyInterceptor,
   getMovementPath,
   getPushTargets,
+  getSentinelGuardArea,
   getStateFingerprint,
   getValidMoves,
   isTrainingMissionId,
@@ -443,6 +445,284 @@ describe("Data Extraction objective", () => {
     const first = createInitialGameState(DATA_EXTRACTION);
     const second = createInitialGameState(DATA_EXTRACTION);
     expect(JSON.stringify(calculateEnemyPlan(first))).toBe(JSON.stringify(calculateEnemyPlan(second)));
+  });
+});
+
+describe("Lane Sentinel interception", () => {
+  it("authors an exact stationary guard plan after the Rugger intent", () => {
+    const state = createInitialGameState(DATA_EXTRACTION);
+    const first = calculateEnemyPlan(state);
+    const second = calculateEnemyPlan(createInitialGameState(DATA_EXTRACTION));
+
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(state.enemies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "rugger-extraction",
+          kind: "rugger",
+          position: at(4, 1),
+          hp: 6,
+        }),
+        expect.objectContaining({
+          id: "sentinel-extraction",
+          kind: "sentinel",
+          position: at(4, 2),
+          hp: 6,
+          moveRange: 0,
+          attackDamage: 0,
+          initiative: 20,
+        }),
+      ]),
+    );
+    expect(first.intents).toHaveLength(2);
+    expect(first.intents[0]).toMatchObject({
+      enemyId: "rugger-extraction",
+      action: "attack",
+      path: [],
+      destination: at(4, 1),
+      target: { id: "guardian", expectedDamage: 3 },
+    });
+    expect(first.intents[1]).toMatchObject({
+      enemyId: "sentinel-extraction",
+      action: "guard",
+      path: [],
+      destination: at(4, 2),
+      damage: 0,
+      special: "intercept-grid",
+      guardedEnemyIds: ["rugger-extraction"],
+      supportTargets: [
+        {
+          id: "rugger-extraction",
+          kind: "enemy",
+          position: at(4, 1),
+          effect: "intercept-direct-attack",
+        },
+      ],
+    });
+    expect(getSentinelGuardArea(state, "sentinel-extraction")).toEqual([
+      at(4, 1),
+      at(4, 0),
+      at(4, 3),
+      at(4, 4),
+      at(4, 5),
+      at(4, 6),
+      at(3, 2),
+      at(2, 2),
+      at(1, 2),
+      at(0, 2),
+    ]);
+  });
+
+  it("redirects basic attacks to the exact Sentinel receiver", () => {
+    const state = createInitialGameState(DATA_EXTRACTION);
+    const transition = attackEnemy(state, "guardian", "rugger-extraction");
+
+    expect(transition.state.enemies.find((enemy) => enemy.id === "rugger-extraction")?.hp).toBe(6);
+    expect(transition.state.enemies.find((enemy) => enemy.id === "sentinel-extraction")?.hp).toBe(4);
+    expect(transition.events.slice(0, 2)).toEqual([
+      {
+        type: "attack-intercepted",
+        unitId: "guardian",
+        intendedEnemyId: "rugger-extraction",
+        interceptorId: "sentinel-extraction",
+        damage: 2,
+      },
+      {
+        type: "unit-attacked",
+        unitId: "guardian",
+        enemyId: "sentinel-extraction",
+        damage: 2,
+        deadeye: false,
+      },
+    ]);
+  });
+
+  it("redirects Deadeye without refunding its action or mission charge", () => {
+    let state = createInitialGameState(DATA_EXTRACTION);
+    state = updateUnit(state, "sniper", { position: at(4, 4) });
+
+    const transition = activateDeadeye(state, "sniper", "rugger-extraction");
+    const sniper = transition.state.units.find((unit) => unit.id === "sniper");
+
+    expect(transition.state.enemies.find((enemy) => enemy.id === "rugger-extraction")?.hp).toBe(6);
+    expect(transition.state.enemies.find((enemy) => enemy.id === "sentinel-extraction")?.hp).toBe(2);
+    expect(sniper).toMatchObject({
+      hasMoved: true,
+      hasActed: true,
+      signatureAvailable: false,
+    });
+    expect(transition.events[0]).toMatchObject({
+      type: "attack-intercepted",
+      intendedEnemyId: "rugger-extraction",
+      interceptorId: "sentinel-extraction",
+      damage: 4,
+    });
+  });
+
+  it("loses interception when alignment or terrain/object line of sight breaks", () => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    expect(getEnemyInterceptor(initial, "rugger-extraction")?.id).toBe("sentinel-extraction");
+
+    const misaligned: GameState = {
+      ...initial,
+      enemies: initial.enemies.map((enemy) =>
+        enemy.id === "rugger-extraction"
+          ? { ...enemy, position: at(3, 1) }
+          : enemy,
+      ),
+    };
+    expect(getEnemyInterceptor(misaligned, "rugger-extraction")).toBeUndefined();
+    const misalignedAttack = attackEnemy(
+      updateUnit(misaligned, "guardian", { position: at(3, 2) }),
+      "guardian",
+      "rugger-extraction",
+    );
+    expect(misalignedAttack.state.enemies.find((enemy) => enemy.id === "rugger-extraction")?.hp).toBe(4);
+    expect(misalignedAttack.events.some((event) => event.type === "attack-intercepted")).toBe(false);
+
+    const blocked: GameState = {
+      ...initial,
+      enemies: initial.enemies.map((enemy) =>
+        enemy.id === "rugger-extraction"
+          ? { ...enemy, position: at(4, 0) }
+          : enemy,
+      ),
+      objects: [
+        ...initial.objects,
+        { id: "guard-blocker", name: "Guard Blocker", position: at(4, 1) },
+      ],
+    };
+    expect(getEnemyInterceptor(blocked, "rugger-extraction")).toBeUndefined();
+    expect(getSentinelGuardArea(blocked, "sentinel-extraction")).not.toContainEqual(at(4, 0));
+    const blockedAttack = attackEnemy(
+      updateUnit(blocked, "sniper", { position: at(1, 0) }),
+      "sniper",
+      "rugger-extraction",
+    );
+    expect(blockedAttack.state.enemies.find((enemy) => enemy.id === "rugger-extraction")?.hp).toBe(3);
+    expect(blockedAttack.state.enemies.find((enemy) => enemy.id === "sentinel-extraction")?.hp).toBe(6);
+  });
+
+  it("chooses the nearest interceptor, then initiative and stable ID", () => {
+    const initial = createInitialGameState(DATA_EXTRACTION);
+    const sentinel = initial.enemies.find((enemy) => enemy.kind === "sentinel")!;
+    const rugger = initial.enemies.find((enemy) => enemy.kind === "rugger")!;
+    const state: GameState = {
+      ...initial,
+      obstacles: [],
+      objects: [],
+      vault: { ...initial.vault, position: at(0, 0) },
+      enemies: [
+        { ...rugger, position: at(3, 3) },
+        { ...sentinel, id: "sentinel-far", position: at(3, 6), initiative: 1 },
+        { ...sentinel, id: "sentinel-near-z", position: at(3, 2), initiative: 5 },
+        { ...sentinel, id: "sentinel-near-a", position: at(3, 5), initiative: 5 },
+      ],
+    };
+
+    expect(getEnemyInterceptor(state, "rugger-extraction")?.id).toBe("sentinel-near-z");
+    const initiativeTie: GameState = {
+      ...state,
+      enemies: state.enemies.map((enemy) =>
+        enemy.id === "sentinel-near-z"
+          ? { ...enemy, position: at(1, 3), initiative: 4 }
+          : enemy.id === "sentinel-near-a"
+            ? { ...enemy, position: at(5, 3) }
+            : enemy,
+      ),
+    };
+    expect(getEnemyInterceptor(initiativeTie, "rugger-extraction")?.id).toBe("sentinel-near-z");
+    const stableIdTie: GameState = {
+      ...initiativeTie,
+      enemies: initiativeTie.enemies.map((enemy) =>
+        enemy.id === "sentinel-near-z" ? { ...enemy, initiative: 5 } : enemy,
+      ),
+    };
+    expect(getEnemyInterceptor(stableIdTie, "rugger-extraction")?.id).toBe("sentinel-near-a");
+  });
+
+  it("lets push collision damage bypass the interception grid", () => {
+    let state = createInitialGameState(DATA_EXTRACTION);
+    state = updateUnit(state, "pusher", { position: at(3, 1) });
+
+    const transition = pushTarget(state, "pusher", "rugger-extraction", "shove");
+
+    expect(getEnemyInterceptor(state, "rugger-extraction")?.id).toBe("sentinel-extraction");
+    expect(transition.state.enemies.find((enemy) => enemy.id === "rugger-extraction")?.hp).toBe(5);
+    expect(transition.state.enemies.find((enemy) => enemy.id === "sentinel-extraction")?.hp).toBe(6);
+    expect(transition.events).toContainEqual({
+      type: "collision",
+      sourceId: "pusher",
+      targetId: "rugger-extraction",
+      targetKind: "enemy",
+      damage: 1,
+      ability: "shove",
+    });
+    expect(transition.events.some((event) => event.type === "attack-intercepted")).toBe(false);
+  });
+
+  it("emits the exact fortified grid without changing state", () => {
+    const state = createInitialGameState(DATA_EXTRACTION);
+    const plan = calculateEnemyPlan(state);
+    const transition = resolveEnemyTurn(state, plan);
+    const guardIntent = plan.intents.find((intent) => intent.enemyKind === "sentinel")!;
+
+    expect(transition.events).toContainEqual({
+      type: "sentinel-fortified",
+      enemyId: "sentinel-extraction",
+      area: guardIntent.area,
+      guardedEnemyIds: ["rugger-extraction"],
+    });
+    expect(transition.state.enemies.find((enemy) => enemy.id === "sentinel-extraction")).toMatchObject({
+      position: at(4, 2),
+      hp: 6,
+    });
+  });
+
+  it("keeps the authored Turn 4 extraction solution valid", () => {
+    let state = createInitialGameState(DATA_EXTRACTION);
+    const endEnemyPhase = () => {
+      state = resolveEnemyTurn(state, calculateEnemyPlan(state)).state;
+    };
+
+    state = moveUnit(state, "sniper", at(1, 2)).state;
+    state = attackEnemy(state, "sniper", "sentinel-extraction").state;
+    state = applyShield(state, "guardian").state;
+    state = pushTarget(state, "pusher", "data-block", "shove").state;
+    endEnemyPhase();
+    expect(state.units.find((unit) => unit.id === "guardian")?.hp).toBe(11);
+
+    state = attackEnemy(state, "sniper", "sentinel-extraction").state;
+    state = attackEnemy(state, "guardian", "rugger-extraction").state;
+    state = moveUnit(state, "pusher", at(2, 4)).state;
+    state = pushTarget(state, "pusher", "data-block", "shove").state;
+    endEnemyPhase();
+    expect(state.units.find((unit) => unit.id === "guardian")?.hp).toBe(8);
+
+    state = attackEnemy(state, "guardian", "rugger-extraction").state;
+    state = moveUnit(state, "sniper", at(0, 2)).state;
+    state = waitUnit(state, "sniper").state;
+    state = moveUnit(state, "pusher", at(1, 3)).state;
+    state = waitUnit(state, "pusher").state;
+    endEnemyPhase();
+    expect(state.units.find((unit) => unit.id === "guardian")?.hp).toBe(5);
+
+    state = attackEnemy(state, "guardian", "rugger-extraction").state;
+    state = moveUnit(state, "pusher", at(1, 2)).state;
+    const extracted = pushTarget(state, "pusher", "data-block", "batter-up");
+
+    expect(extracted.state).toMatchObject({
+      phase: "victory",
+      outcomeReason: "data-extracted",
+      completedEnemyPhases: 3,
+      defeatedEnemies: 2,
+      vault: { hp: 10 },
+      objects: [expect.objectContaining({ id: "data-block", position: at(4, 2) })],
+    });
+    expect(extracted.events.slice(-2)).toEqual([
+      { type: "object-extracted", objectId: "data-block", position: at(4, 2) },
+      { type: "mission-ended", outcome: "victory", reason: "data-extracted" },
+    ]);
   });
 });
 

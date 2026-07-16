@@ -43,6 +43,7 @@ export type CombatVariant =
   | "batter-up"
   | "rugger-charge"
   | "drain"
+  | "sentinel-grid"
   | "whale-slam"
   | "shield-wall"
   | "generic";
@@ -305,6 +306,10 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
       tone = "ally";
       text = `${event.deadeye ? "DEADEYE" : event.unitId.toUpperCase()} hit ${event.enemyId.toUpperCase()} for ${event.damage}.`;
       break;
+    case "attack-intercepted":
+      tone = "warning";
+      text = `INTERCEPTED: ${event.interceptorId.toUpperCase()} took the ${event.damage}-damage hit meant for ${event.intendedEnemyId.toUpperCase()}.`;
+      break;
     case "shield-applied":
       tone = "ally";
       text = `SHIELD WALL reinforced ${event.unitIds.length} operator${event.unitIds.length === 1 ? "" : "s"}.`;
@@ -332,6 +337,10 @@ function eventToLog(event: GameEvent, turn: number): CombatLogEntry {
     case "enemy-healed":
       tone = "enemy";
       text = `${event.enemyId.toUpperCase()} drained ${event.amount} integrity.`;
+      break;
+    case "sentinel-fortified":
+      tone = "warning";
+      text = `${event.enemyId.toUpperCase()} fortified its interception grid around ${event.guardedEnemyIds.length} hostile${event.guardedEnemyIds.length === 1 ? "" : "s"}.`;
       break;
     case "whale-cone-locked":
       tone = "warning";
@@ -410,6 +419,7 @@ function combatVariantForSource(
   const enemy = state.enemies.find((candidate) => candidate.id === sourceId);
   if (enemy?.kind === "rugger") return "rugger-charge";
   if (enemy?.kind === "drainer") return "drain";
+  if (enemy?.kind === "sentinel") return "sentinel-grid";
   if (enemy?.kind === "whale") return "whale-slam";
   return "generic";
 }
@@ -683,9 +693,12 @@ export const useGameStore = create<GameStore>()(
         }
 
         const generation = sessionGeneration;
-        const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === attack.enemyId)
-          || isDefeated(transition.state, attack.enemyId);
-        const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, attack.enemyId) : transition.state;
+        // The engine records the post-interception receiver on unit-attacked. Drive every
+        // presentation stage from that resolved id, never from the tile the player clicked.
+        const actualTargetId = attack.enemyId;
+        const fatal = transition.events.some((event) => event.type === "enemy-defeated" && event.enemyId === actualTargetId)
+          || isDefeated(transition.state, actualTargetId);
+        const impactState = fatal ? withDefeatedEnemyGhost(game, transition.state, actualTargetId) : transition.state;
         const variant = combatVariantForSource(game, attack.unitId, { deadeye });
         const attackingUnit = game.units.find((unit) => unit.id === attack.unitId);
         const attackDuration = deadeye ? 760 : attackingUnit ? 520 : 260;
@@ -693,8 +706,8 @@ export const useGameStore = create<GameStore>()(
           actionMode: null,
           lastMove: null,
           isAnimating: true,
-          effects: [nextEffect({ kind: "attack", sourceId: attack.unitId, targetId: attack.enemyId })],
-          combatCue: nextCue("attack", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal, variant }),
+          effects: [nextEffect({ kind: "attack", sourceId: attack.unitId, targetId: actualTargetId })],
+          combatCue: nextCue("attack", { sourceId: attack.unitId, targetId: actualTargetId, amount: attack.damage, fatal, variant }),
           lastEvents: [],
         });
 
@@ -706,7 +719,7 @@ export const useGameStore = create<GameStore>()(
             enemyPlan: planFor(transition.state),
             log: appendEvents(log, transition.events, game.turn),
             effects: impactEffects,
-            combatCue: nextCue("impact", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal, variant }),
+            combatCue: nextCue("impact", { sourceId: attack.unitId, targetId: actualTargetId, amount: attack.damage, fatal, variant }),
           });
 
           const finish = () => {
@@ -744,8 +757,8 @@ export const useGameStore = create<GameStore>()(
             schedulePresentation(() => {
               if (generation !== sessionGeneration) return;
               set({
-                effects: [nextEffect({ kind: "death", sourceId: attack.unitId, targetId: attack.enemyId })],
-                combatCue: nextCue("death", { sourceId: attack.unitId, targetId: attack.enemyId, amount: attack.damage, fatal: true, variant }),
+                effects: [nextEffect({ kind: "death", sourceId: attack.unitId, targetId: actualTargetId })],
+                combatCue: nextCue("death", { sourceId: attack.unitId, targetId: actualTargetId, amount: attack.damage, fatal: true, variant }),
               });
               schedulePresentation(finish, 760);
             }, 330);

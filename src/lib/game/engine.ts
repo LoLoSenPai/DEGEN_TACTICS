@@ -304,6 +304,67 @@ const hasLineOfSight = (
   return true;
 };
 
+const blocksCardinalLineOfSight = (
+  state: GameState,
+  candidate: Position,
+): boolean =>
+  state.obstacles.some((position) => samePosition(position, candidate)) ||
+  samePosition(state.vault.position, candidate) ||
+  state.objects.some((object) => samePosition(object.position, candidate));
+
+/**
+ * Returns every tile covered by a Sentinel's four clear cardinal rays.
+ * Terrain, the protected structure, and pushable objects stop a ray before
+ * their tile; combatants intentionally do not block the interception grid.
+ */
+export const getSentinelGuardArea = (
+  state: GameState,
+  sentinelId: string,
+): Position[] => {
+  const sentinel = getEnemy(state, sentinelId);
+  if (!sentinel || sentinel.kind !== "sentinel") return [];
+
+  const area: Position[] = [];
+  for (const { delta } of CARDINAL_DIRECTIONS) {
+    let cursor = addPositions(sentinel.position, delta);
+    while (isInBounds(cursor)) {
+      if (blocksCardinalLineOfSight(state, cursor)) break;
+      area.push(clonePosition(cursor));
+      cursor = addPositions(cursor, delta);
+    }
+  }
+  return area;
+};
+
+/**
+ * Finds the exact Sentinel that receives a direct player attack for a target.
+ * Multiple valid interceptors resolve by distance, initiative, then stable ID.
+ */
+export const getEnemyInterceptor = (
+  state: GameState,
+  targetEnemyId: string,
+): Enemy | undefined => {
+  const target = getEnemy(state, targetEnemyId);
+  if (!target || target.kind === "sentinel") return undefined;
+
+  return state.enemies
+    .filter(
+      (candidate) =>
+        candidate.hp > 0 &&
+        candidate.kind === "sentinel" &&
+        getSentinelGuardArea(state, candidate.id).some((position) =>
+          samePosition(position, target.position),
+        ),
+    )
+    .sort(
+      (left, right) =>
+        manhattanDistance(left.position, target.position) -
+          manhattanDistance(right.position, target.position) ||
+        left.initiative - right.initiative ||
+        left.id.localeCompare(right.id),
+    )[0];
+};
+
 export const getAttackableTargets = (
   state: GameState,
   unitId: string,
@@ -428,22 +489,33 @@ const performPlayerAttack = (
   }
 
   const requestedDamage = deadeye ? 4 : unit.attackDamage;
-  const result = damageEnemy(state, enemyId, requestedDamage);
+  const interceptor = getEnemyInterceptor(state, enemyId);
+  const actualEnemyId = interceptor?.id ?? enemyId;
+  const result = damageEnemy(state, actualEnemyId, requestedDamage);
   const nextState = markUnitActed(result.state, unitId, {
     ...(deadeye
       ? { signatureAvailable: false, hasMoved: true }
       : undefined),
   });
-  const events: GameEvent[] = [
-    {
-      type: "unit-attacked",
+  const events: GameEvent[] = [];
+  if (interceptor) {
+    events.push({
+      type: "attack-intercepted",
       unitId,
-      enemyId,
+      intendedEnemyId: enemyId,
+      interceptorId: interceptor.id,
       damage: result.damage,
-      deadeye,
-    },
-  ];
-  if (result.defeated) events.push({ type: "enemy-defeated", enemyId });
+    });
+  }
+  events.push({
+    type: "unit-attacked",
+    unitId,
+    enemyId: actualEnemyId,
+    damage: result.damage,
+    deadeye,
+  });
+  if (result.defeated)
+    events.push({ type: "enemy-defeated", enemyId: actualEnemyId });
 
   return terminalizePlayerObjective(nextState, events);
 };
@@ -918,6 +990,50 @@ const calculateDrainerIntent = (
   );
 };
 
+const calculateSentinelIntent = (
+  state: GameState,
+  enemy: Enemy,
+  order: number,
+): EnemyIntent => {
+  const area = getSentinelGuardArea(state, enemy.id);
+  const guardedEnemies = state.enemies
+    .filter(
+      (candidate) =>
+        candidate.hp > 0 &&
+        candidate.kind !== "sentinel" &&
+        getEnemyInterceptor(state, candidate.id)?.id === enemy.id,
+    )
+    .sort(
+      (left, right) =>
+        manhattanDistance(enemy.position, left.position) -
+          manhattanDistance(enemy.position, right.position) ||
+        left.initiative - right.initiative ||
+        left.id.localeCompare(right.id),
+    );
+  const guardedEnemyIds = guardedEnemies.map((candidate) => candidate.id);
+
+  return {
+    enemyId: enemy.id,
+    enemyKind: enemy.kind,
+    order,
+    action: "guard",
+    from: clonePosition(enemy.position),
+    path: [],
+    destination: clonePosition(enemy.position),
+    targets: [],
+    area,
+    damage: 0,
+    special: "intercept-grid",
+    guardedEnemyIds,
+    supportTargets: guardedEnemies.map((candidate) => ({
+      id: candidate.id,
+      kind: "enemy",
+      position: clonePosition(candidate.position),
+      effect: "intercept-direct-attack",
+    })),
+  };
+};
+
 const chooseWhaleFacing = (
   origin: Position,
   vaultPosition: Position,
@@ -1039,11 +1155,16 @@ export const calculateEnemyIntent = (
       .findIndex((candidate) => candidate.id === enemyId) +
       1;
 
-  if (enemy.kind === "rugger")
-    return calculateRuggerIntent(state, enemy, resolvedOrder);
-  if (enemy.kind === "drainer")
-    return calculateDrainerIntent(state, enemy, resolvedOrder);
-  return calculateWhaleIntent(state, enemy, resolvedOrder);
+  switch (enemy.kind) {
+    case "rugger":
+      return calculateRuggerIntent(state, enemy, resolvedOrder);
+    case "drainer":
+      return calculateDrainerIntent(state, enemy, resolvedOrder);
+    case "sentinel":
+      return calculateSentinelIntent(state, enemy, resolvedOrder);
+    case "whale":
+      return calculateWhaleIntent(state, enemy, resolvedOrder);
+  }
 };
 
 interface TargetDamageResult {
@@ -1145,6 +1266,15 @@ const applyEnemyIntent = (
       if (emitEvents && healed > 0)
         events.push({ type: "enemy-healed", enemyId: enemy.id, amount: healed });
     }
+  }
+
+  if (intent.action === "guard" && enemy.kind === "sentinel" && emitEvents) {
+    events.push({
+      type: "sentinel-fortified",
+      enemyId: enemy.id,
+      area: intent.area.map(clonePosition),
+      guardedEnemyIds: [...(intent.guardedEnemyIds ?? [])],
+    });
   }
 
   if (intent.action === "charge" && intent.facing) {

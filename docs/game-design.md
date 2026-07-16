@@ -128,9 +128,9 @@ The `W` mark is explanatory only: G4 starts as a normal free tile. It becomes an
 
 ```text
     A B C D E F G
-1   . D . . R . .
-2   # . # . . G #
-3   . . . . X I .
+1   . . . . . . .
+2   # . # . R G #
+3   . . . . S I .
 4   . . . # . . .
 5   . N B # . . .
 6   . . P . . . .
@@ -142,26 +142,36 @@ The `W` mark is explanatory only: G4 starts as a normal free tile. It becomes an
 | `G` | Guardian | F2 |
 | `N` | Sniper | B5 |
 | `P` | Pusher | C6 |
-| `R` | Rig Breaker (Rugger) | E1 |
-| `D` | Data Leech (Drainer) | B1 |
+| `R` | Rig Breaker (Rugger) | E2 |
+| `S` | Lane Sentinel, 6 HP; standing on the extraction zone | E3 |
 | `I` | Extraction Rig, 10 integrity | F3 |
 | `B` | Data Block | C5 |
-| `X` | Extraction zone | E3 |
+| `X` | Extraction zone beneath the Lane Sentinel | E3 |
 | `#` | Obstacle | A2, C2, G2, D4, D5 |
 
-This operation has no active Whale breach. The two enemies use the same deterministic Rugger and Drainer rules as Operation 01.
+This operation has no active Whale breach. The Rig Breaker uses the Rugger rules from Operation 01. The stationary Lane Sentinel replaces the former Data Leech and begins directly on the cargo destination, turning interception into the operation's opening positional problem.
 
 ### Puzzle spine and timing
 
-The readable cargo route is deliberately short:
+The readable cargo route is deliberately short, but the Sentinel must be handled before the destination can receive cargo:
 
-1. Push the Data Block north from C5 to C4.
-2. Push it north again from C4 to C3.
-3. Reposition the Pusher to B3 and use Batter Up to send the block east through D3 onto E3.
+1. Break the amber Interception Grid by defeating or displacing the Lane Sentinel on E3.
+2. Push the Data Block north from C5 to C4.
+3. Push it north again from C4 to C3.
+4. Reposition the Pusher to B3 and use Batter Up to send the block east through D3 onto E3.
 
 Enemy pressure determines when the squad can safely execute those steps; the sequence above describes the authored route, not a requirement to ignore attacks, shields, or lane blocking. A one-tile final Shove also succeeds if the block is already adjacent to E3 and the Pusher is correctly aligned.
 
 The extraction check is exact: only the configured `data-block` at E3 completes the objective. The engine emits `object-extracted` followed by `mission-ended`, and the run enters victory without waiting for another enemy phase. If the objective is still incomplete after enemy phase 5, the result is `extraction-timeout`. Structure or squad defeat takes priority at the phase boundary.
+
+### Canonical solution
+
+1. **Turn 1 - Break the grid:** Guardian uses Shield Wall. Sniper moves B5 to B3 and shoots the Sentinel from 6 to 3 HP. Pusher Shoves the Data Block from C5 to C4. In the enemy phase, the Rugger attacks Guardian at F2; Shield absorbs 2 and Guardian falls from 12 to 11 HP. The Sentinel fortifies its exact support link.
+2. **Turn 2 - Clear the lane:** Sniper defeats the Sentinel before Guardian attacks, so Guardian's 2 damage reaches the Rugger instead of being intercepted. Pusher moves C6 to C5 and Shoves the Block from C4 to C3. The Rugger leaves Guardian at 8 HP.
+3. **Turn 3 - Turn the corner:** Guardian reduces the Rugger to 2 HP. Sniper moves B3 to A3 and Waits; Pusher moves C5 to B4 and Waits. The Rugger leaves Guardian at 5 HP.
+4. **Turn 4 - Extract:** Guardian defeats the Rugger, Sniper Waits, and Pusher moves B4 to B3. Batter Up sends the Block C3 to D3 to E3 and completes delivery immediately.
+
+This line finishes with Rig 10/10, Guardian 5/12, Sniper 7/7, Pusher 9/9, two defeated enemies, and three completed enemy phases. It earns all three medals and scores 1,300 for rank S.
 
 ## Mission 03: Break the Breach
 
@@ -214,6 +224,7 @@ Enemies act by mission-defined initiative, then stable entity ID. Planning uses 
 | --- | ---: | ---: | ---: | ---: | --- |
 | Rugger | 6 | 2 | 3 | 10 | Advances down a deterministic structure lane; attacks a squad member blocking that lane when adjacent |
 | Drainer | 4 | 3 | 2 | 20 | Hunts the living unit with the lowest current HP; falls back to the protected structure when no unit is reachable |
+| Lane Sentinel | 6 | 0 | 0 | 20 | Holds position and redirects direct player attacks against hostiles aligned with its cardinal support grid |
 | Whale | 10; 12 in Break the Breach | 1 | 4 | 30 | Alternates a telegraphed cone lock with a later slam |
 
 ### Rugger
@@ -228,6 +239,16 @@ Enemies act by mission-defined initiative, then stable entity ID. Planning uses 
 - Equal-HP candidates are ordered by reachable path length, then stable entity ID.
 - If no squad target is reachable, it routes toward the protected structure.
 - After dealing at least 1 actual damage, it heals 1 HP without exceeding its maximum. A fully shielded hit causes no healing.
+
+### Lane Sentinel
+
+- Holds its tile and projects a clear cardinal support grid north, east, south, and west.
+- Terrain, the protected structure, and the Data Block stop a ray. Combatants do not block it.
+- A direct player attack against another living hostile on a clear ray redirects all of that attack's damage to the Sentinel. Damage never overflows back to the intended target when the Sentinel has less remaining HP.
+- Direct attacks against the Sentinel resolve normally. Shove, Batter Up, and collision damage bypass interception.
+- The relationship is derived from the current board every time state changes. Displacing either enemy or inserting a terrain/object blocker can break the link without a hidden status timer.
+- If more than one Sentinel can intercept, choose the nearest one, then lower initiative, then stable entity ID.
+- Its exact enemy intent is `guard` with special state `intercept-grid`, zero damage, the complete cardinal area, and explicit guarded target IDs. Resolution emits `sentinel-fortified`; a redirected player attack emits `attack-intercepted` before `unit-attacked` and any resulting `enemy-defeated` event against the actual Sentinel.
 
 ### Whale
 
@@ -250,7 +271,8 @@ Each displayed intent contains:
 - Target identity, when the action has a single target.
 - Exact damage.
 - Every affected tile for an area attack.
-- Special state such as breach, charge, slam, or stagger.
+- Explicit guarded targets for a support intent.
+- Special state such as breach, charge, slam, stagger, or `intercept-grid`.
 
 The complete turn plan is recalculated after every successful world-state-changing player command. UI-only selection and hover changes do not alter it. End Turn snapshots that plan; enemy resolution consumes it without retargeting or rerolling. If identical game states are provided, serialized plans must be byte-equivalent.
 
@@ -260,6 +282,7 @@ The complete turn plan is recalculated after every successful world-state-changi
 - Shields are applied before HP damage. `actualDamage` is the amount that reaches HP.
 - An entity at 0 HP is defeated and no longer blocks, moves, attacks, or receives future turns.
 - Enemy attacks can damage their planned squad target or the mission's protected structure. Collision damage follows the stricter push rules above.
+- Lane Sentinel interception changes only the receiver of a direct player attack. The actual Sentinel receives the full deterministic hit, with no overflow; forced movement and collision retain their normal targets.
 - The Vault and Extraction Rig start at 10 integrity; the Break the Breach Seal Generator starts at 4. Track whether the active structure ever lost integrity separately for scoring and medals.
 - Temporary shields expire after the enemy phase for which they were granted.
 
@@ -294,6 +317,8 @@ Its medals are:
 - **Rig Untouched:** finish without damaging the Extraction Rig.
 - **Full Escort:** keep every operator alive.
 
+The canonical Turn-4 victory defeats the Sentinel and Rugger, preserves Rig 10/10 and all three operators, completes three enemy phases, and scores 1,300 for rank S.
+
 ### Break the Breach scoring
 
 Break the Breach keeps the shared +500 victory, +75 per enemy, +50 per survivor, +100 full-squad, +100 untouched-structure, and -50 casualty rules, with two boss-operation adjustments:
@@ -323,6 +348,7 @@ XP preview is `floor(score / 10)` and is not persisted as progression. Season po
 - Teal fill marks valid movement.
 - Cyan outline marks attack range and targets.
 - Gold arrows mark pushes and the extraction route.
+- A quiet amber cardinal grid, a dominant amber tether, and a `GUARD` badge identify Sentinel support. This is support information, not red danger.
 - Red hatching marks danger; a heavier pulse marks a locked Whale strike.
 - Purple identifies the protected structure or mission-special zone.
 - Color is always paired with shape, outline, pattern, label, icon, or motion.

@@ -19,6 +19,7 @@ The playable product now uses a focused **Title -> Operations or Training -> Bat
 - Unlocks after a Protect the Vault victory through persisted `completedMissionIds`.
 - Uses the `extract-object` objective variant: deliver the Data Block to E3 before enemy phase 5 ends.
 - Wins immediately on exact delivery and emits extraction/mission-end events from the pure engine.
+- Places a stationary 6-HP Lane Sentinel on E3. Its exact amber Interception Grid redirects direct attacks against the aligned E2 Rugger, while push/collision remains a bypass and positional counter.
 - Adds extraction route readability, tempo scoring, and Express Transfer, Rig Untouched, and Full Escort medals.
 - Reuses the proven battlefield art while validating that the new push-routing puzzle is fun before commissioning another complete arena.
 
@@ -38,17 +39,19 @@ The playable product now uses a focused **Title -> Operations or Training -> Bat
 - Animated movement, attacks, shields, impacts, damage, KO, heavy hits, and turn/result transitions.
 - Local guest identity, training progress, per-operation best scores, completion unlocks, last result, and safe storage fallback.
 - Desktop/tablet battle, phone notice, keyboard support, focus visibility, and reduced motion.
-- 88 passing deterministic engine/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review.
+- 102 passing deterministic engine/presentation/asset-registry/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review as release gates.
 
 ## Next content sequence
 
-### 1. One new enemy
+### Completed - One new enemy
 
-Add a single enemy only if its intent is readable at a glance and creates a new positioning question. Extend domain rules, serializer, AI tests, VFX/sprite states, and player-facing intent language together.
+The Lane Sentinel now anchors Data Extraction rather than adding another damage-focused chaser. Its clear cardinal support grid redirects direct player attacks from an aligned hostile into the nearest Sentinel; terrain, the protected structure, and the Data Block stop the link, while combatants do not. Push and collision bypass it.
 
-Candidate direction: a unit that anchors, redirects, or protects a lane, rather than another damage-focused chaser.
+The engine exposes an exact `guard` / `intercept-grid` intent and ordered interception/fortification events. Presentation pairs a quiet amber grid with a dominant tether, `GUARD` badge, actual-receiver attack preview, inspector copy, and deterministic serializer fields.
 
-### 2. Fourth hero
+Its approved SpriteCook set is now live: one canonical pixel master plus grouped idle, hit, custom guard, and 12-frame death sheets. All battle sheets share the title/direct-entry predecode gate, so the first intercepted hit cannot disappear on a cold cache.
+
+### 1. Fourth hero
 
 Create one new squad role with a complete pixel-art state set and a mechanically distinct verb. Hacker or support/control remain stronger candidates than another direct attacker.
 
@@ -59,7 +62,7 @@ Definition of done:
 - Clear interaction with existing enemies and objectives.
 - Readable selection state and action preview at the current board scale.
 
-### 3. Three-of-four squad selection
+### 2. Three-of-four squad selection
 
 After the fourth hero is proven, allow the player to choose three operators before deployment. Keep this as a compact game screen or pre-battle choice, not a stat-heavy loadout dashboard.
 

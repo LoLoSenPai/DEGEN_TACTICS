@@ -40,6 +40,7 @@ Signal colors are semantic and scarce. Do not color a panel merely to make it fe
 - Teal is paired with filled reachable tiles and ally geometry.
 - Cyan is paired with a thin range outline or reticle.
 - Gold is paired with a directional arrow/wedge.
+- Lane Sentinel support uses a warm amber derived from gold: a quiet cardinal grid plus one dominant source-to-target tether and a labeled shield badge. It must never read as red damage danger.
 - Red is paired with diagonal hatching; a locked Whale strike adds a heavy border and pulse.
 - Violet is paired with the Vault's concentric core geometry.
 
@@ -81,6 +82,7 @@ Enemies use angular, broken silhouettes and a red allegiance treatment. They sho
 | --- | --- | --- |
 | Rugger | Hooked shard, forward lean, torn trailing edge | Fast red wedge with a blunt striking face |
 | Drainer | Needle/proboscis, hollow center, asymmetric tendrils | Purple-red diamond with a visible siphon line |
+| Lane Sentinel | Stationary armored signal pylon, split shield face, four restrained projector fins | Amber-linked defensive anchor, clearly immobile and distinct from the cubic Data Block |
 | Whale | Wide armored mass, low black-red shell, small hot core | Oversized silhouette that visually breaks its single-cell frame |
 
 The Whale still occupies exactly one grid tile. Its art may overhang the cell without obscuring coordinates, adjacent tokens, or target overlays. Charge state uses a braced pose and expanding ground marks; the locked cone remains a board overlay, never baked into the creature art.
@@ -92,11 +94,12 @@ Render information from quietest to loudest:
 1. Base tile and subtle grid structure.
 2. Terrain, obstacle, breach, and Vault identity.
 3. Reachable movement fill.
-4. Persistent enemy-danger hatching.
-5. Attack/selection outlines and locked-cone emphasis.
-6. Planned paths, destinations, and push arrows.
-7. Unit/enemy tokens and readable HP/status.
-8. Short-lived hit flashes, damage values, and turn banners.
+4. Quiet Sentinel support-grid cells.
+5. Persistent enemy-danger hatching.
+6. Attack/selection outlines and locked-cone emphasis.
+7. Planned paths, destinations, push arrows, and dominant Sentinel tethers.
+8. Unit/enemy tokens, `GUARD` badges, and readable HP/status.
+9. Short-lived hit flashes, damage values, and turn banners.
 
 When states overlap, preserve both meanings with different visual channels—for example teal fill under red hatching, or a cyan outline around a danger-patterned tile. The locked Whale zone wins emphasis but must not hide a unit standing inside it.
 
@@ -114,6 +117,7 @@ When states overlap, preserve both meanings with different visual channels—for
 - Primary buttons use clear contrast and a mechanical press state. Secondary actions do not imitate primary emphasis.
 - Disabled future features include a visible “Coming Soon” label or explanatory copy; they never look accidentally broken.
 - Enemy intents show order, path/destination, target or area, damage, and special state without requiring hover.
+- A guarded target always carries a visible `GUARD` badge. Attack preview names the actual Sentinel receiver before commitment; support cells remain amber and never join red danger hatching.
 - Contextual hints are one sentence and react to the player's current state. Do not interrupt with a tutorial modal.
 - Tooltip content names the effect, legal target, charge state, and commitment cost.
 - Keyboard focus is a visible cyan outline with sufficient offset. Touch/click targets remain at least 40px where layout allows.
@@ -134,11 +138,11 @@ Motion communicates state change; it does not run continuously for spectacle.
 | Victory / defeat | Short authored reveal; no looping confetti or prolonged lockout |
 | Panel changes | Opacity plus a few pixels of travel; no large sliding dashboard cards |
 
-Controls lock while enemy events are replayed. Timers are cancelled when their screen unmounts. The pure game state resolves independently of animation, so presentation cannot change outcomes. Under `prefers-reduced-motion: reduce`, replace travel/shake/pulse with near-instant state changes and static emphasis.
+Controls lock while enemy events are replayed. Timers are cancelled when their screen unmounts. The pure game state resolves independently of animation, so presentation cannot change outcomes. Under `prefers-reduced-motion: reduce`, suppress decorative travel/shake/pulse while retaining a distinct static frame for every essential combat state.
 
 ## Asset production rules
 
-The current CSS/SVG token system is an intentional miniature prototype style, not a collection of missing images. Any new asset must pass these checks:
+The live game combines SpriteCook pixel characters with authored CSS/SVG tactical overlays. Those overlays communicate exact rules and are not substitutes for character art. Any new asset must pass these checks:
 
 - Original silhouette and symbols; no recognizable existing-game factions or characters.
 - Consistent three-quarter/orthographic camera, value range, rim light, and material treatment.
@@ -152,7 +156,7 @@ The current CSS/SVG token system is an intentional miniature prototype style, no
 Priority 1:
 
 - Final SVG logo and favicon variants.
-- Refined Guardian, Sniper, Pusher, Rugger, Drainer, and Whale board silhouettes.
+- Refined Rugger, Drainer, and Whale board silhouettes; the animated Guardian, Sniper, Pusher, and Lane Sentinel sets are complete.
 - Shared action/status icon sheet: move, attack, shield, deadeye, push, collision, charge, stagger.
 - Vault, obstacle, Data Block, and breach tile details.
 
@@ -189,7 +193,13 @@ Use the shared style prefix below for every raster exploration, then append one 
 
 **Enemy family exploration**
 
-> Cohesive hostile-process silhouette sheet containing a hooked red Rugger shard, a hollow purple-red Drainer needle, and a massive black-red armored Whale with a small hot core; shared angular construction and enemy allegiance marks; each clearly distinct at 64 pixels; isolated on neutral dark background.
+> Cohesive hostile-process silhouette sheet containing a hooked red Rugger shard, a hollow purple-red Drainer needle, a stationary amber-projector Lane Sentinel, and a massive black-red armored Whale with a small hot core; shared angular construction and enemy allegiance marks; each clearly distinct at 64 pixels; isolated on neutral dark background.
+
+**Lane Sentinel production record**
+
+> Stationary hostile interception pylon for a dark tactical science-fiction game; compact low-and-wide non-cubic silhouette, matte graphite armored body, split kite-shield front plate, four short amber projector fins, narrow amber aperture, restrained red enemy accents, and four planted clamp feet; readable at board scale; stable isometric ground anchor; transparent background; no weapon, projectile, grid, tether, aura, text, or baked visual effects.
+
+The approved SpriteCook result is live at `public/assets/sprites/sentinel.png`, with native 180-pixel-frame sheets for `idle`, `hurt`, `death`, and the custom `guard` state under `public/assets/sprites/spritecook`. One master request and one grouped character-animation run cost 74 credits total with no rejected retries. The Sentinel has no walk or attack sheet because its deterministic rules make it stationary and non-damaging; the board continues to draw exact guard cells and tethers separately.
 
 **HQ diorama exploration**
 

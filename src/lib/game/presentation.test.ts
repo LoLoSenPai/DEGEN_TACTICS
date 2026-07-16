@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateEnemyPlan, createInitialGameState, pushTarget, resolveEnemyTurn } from "./engine";
-import { TRAINING_BASICS, TRAINING_MOMENTUM, TRAINING_SQUAD } from "./mission";
+import { DATA_EXTRACTION, TRAINING_BASICS, TRAINING_MOMENTUM, TRAINING_SQUAD } from "./mission";
 import {
   compileEnemyPlayback,
   compilePushPlayback,
@@ -123,6 +123,31 @@ describe("combat presentation playback", () => {
       duration: 820,
     });
     expect(beats[0].state.enemies[0].whaleState).toBe("staggered");
+  });
+
+  it("presents the Sentinel interception grid without mutating combat state", () => {
+    const state = createInitialGameState(DATA_EXTRACTION);
+    const area = [{ x: 4, y: 1 }, { x: 4, y: 3 }, { x: 4, y: 4 }];
+    const event = {
+      type: "sentinel-fortified" as const,
+      enemyId: "sentinel-extraction",
+      area,
+      guardedEnemyIds: ["rugger-extraction"],
+    };
+    const beats = compileEnemyPlayback(state, state, [event]);
+
+    expect(beats).toHaveLength(1);
+    expect(beats[0]).toMatchObject({
+      stage: "status",
+      sourceId: "sentinel-extraction",
+      targetId: "rugger-extraction",
+      area,
+      statusKind: "intercept-grid",
+      duration: 520,
+    });
+    expect(beats[0].state.enemies).toEqual(state.enemies);
+    expect(beats[0].state.units).toEqual(state.units);
+    expect(beats[0].state.vault).toEqual(state.vault);
   });
 
   it("keeps every lethal Whale target visible in one shared death beat", () => {

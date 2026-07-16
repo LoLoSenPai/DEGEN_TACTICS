@@ -29,10 +29,12 @@ import {
   getOperationMetadata,
   getMissionDefinition,
   getAttackableTargets,
+  getEnemyInterceptor,
   getMovementPath,
   getPlayerMovementPresentationDuration,
   getReducedPlayerMovementPresentationDuration,
   getPushTargets,
+  getSentinelGuardArea,
   getValidMoves,
   isTrainingMissionId,
   isMissionId,
@@ -40,6 +42,7 @@ import {
   isPlayableMissionId,
   pushTarget as simulatePushTarget,
   type Enemy,
+  type EnemyTurnPlan,
   type GameState,
   type MissionMedalId,
   type PlayerUnit,
@@ -51,12 +54,20 @@ import { BattleTutorial, type BattleTutorialStep } from "@/components/battle/Bat
 import { CombatActionFx } from "@/components/battle/CombatActionFx";
 import { EnemyIntentPath } from "@/components/battle/EnemyIntentPath";
 import { PlayerMovePath } from "@/components/battle/PlayerMovePath";
+import { buildAttackOutcomePreview, type AttackOutcomePreview } from "@/components/battle/attackPresentation";
 import {
   PLAYER_SPRITE_SHEETS,
-  playerSpriteSheetsAreReady,
-  preloadPlayerSpriteSheets,
   type PlayerBattleSpriteMotion,
 } from "@/components/battle/playerSpriteSheets";
+import {
+  battleSpriteSheetIsAvailable,
+  battleSpriteSheetsAreReady,
+  preloadBattleSpriteSheets,
+} from "@/components/battle/battleSpritePreloader";
+import {
+  SENTINEL_SPRITE_SHEETS,
+  type SentinelBattleSpriteMotion,
+} from "@/components/battle/sentinelSpriteSheets";
 import {
   initialTutorialStep,
   tutorialAction,
@@ -80,6 +91,7 @@ const SPRITE_ASSETS = {
   rugger: "/assets/sprites/rugger.png",
   drainer: "/assets/sprites/drainer.png",
   whale: "/assets/sprites/whale.png",
+  sentinel: "/assets/sprites/sentinel.png",
   vault: "/assets/sprites/vault.png",
   "data-block": "/assets/sprites/data-block.png",
   obstacle: "/assets/sprites/blast-barricade.png",
@@ -96,6 +108,7 @@ type EnemyBattleSpriteMotion =
   | "charge"
   | "hurt"
   | "stagger"
+  | "guard"
   | "spawn"
   | "death";
 
@@ -103,6 +116,13 @@ type BattleSpriteState<Motion extends string> = {
   motion: Motion;
   effectId: number;
 };
+
+function sentinelBattleSpriteMotion(motion: EnemyBattleSpriteMotion): SentinelBattleSpriteMotion {
+  if (motion === "death") return "death";
+  if (motion === "hurt" || motion === "stagger") return "hurt";
+  if (motion === "guard") return "guard";
+  return "idle";
+}
 
 let activeBattleClients = 0;
 
@@ -175,6 +195,9 @@ function CombatCallout({ game, cue }: { game: GameState; cue: CombatCue | null }
     } else if (cue.statusKind === "push-stopped") {
       kicker = "PUSH STOPPED";
       message = `${target} moved, then hit an obstacle`;
+    } else if (cue.statusKind === "intercept-grid") {
+      kicker = "INTERCEPTION GRID";
+      message = cue.targetId ? `${source} protects ${target}` : `${source} locks its guard lanes`;
     } else {
       kicker = "STATUS";
       message = `${source} changes state`;
@@ -306,6 +329,7 @@ function enemyBattleSpriteState(
   if (statusBelongsToEnemy) {
     if (cue.statusKind === "drain-heal") return { motion: "heal", effectId: cue.id };
     if (cue.statusKind === "cone-locked") return { motion: "lock", effectId: cue.id };
+    if (enemy.kind === "sentinel" && cue.statusKind === "intercept-grid") return { motion: "guard", effectId: cue.id };
     if (cue.statusKind === "charge-cancelled" || cue.statusKind === "staggered") return { motion: "stagger", effectId: cue.id };
     return { motion: "idle", effectId: cue.id };
   }
@@ -326,27 +350,62 @@ function enemyBattleSpriteState(
 function PlayerBattleSprite({ name, role, state }: { name: string; role: PlayerUnit["role"]; state: BattleSpriteState<PlayerBattleSpriteMotion> }) {
   const frames = state.motion === "death" ? 12 : 8;
   const spriteSheet = PLAYER_SPRITE_SHEETS[role][state.motion];
+  const sheetAvailable = battleSpriteSheetIsAvailable(spriteSheet);
   return (
     <span
-      className={clsx("sprite-art", `sprite-${role}`, "board-sprite", "player-spritecook", `role-${role}`, `is-${state.motion}`)}
-      data-sprite-source="spritecook-pixel"
+      className={clsx("sprite-art", `sprite-${role}`, "board-sprite", "player-spritecook", `role-${role}`, `is-${state.motion}`, !sheetAvailable && "is-static-fallback")}
+      data-sprite-source={sheetAvailable ? "spritecook-pixel" : "authored-static-fallback"}
       data-sprite-role={role}
       data-sprite-motion={state.motion}
       data-sprite-effect-id={state.effectId}
-      data-sprite-frames={frames}
+      data-sprite-frames={sheetAvailable ? frames : 1}
     >
-      <span
-        key={`${state.motion}-${state.effectId}`}
-        className="player-spritecook-frames"
-        style={{ backgroundImage: `url("${spriteSheet}")` }}
-        aria-hidden="true"
-      />
+      {sheetAvailable ? (
+        <span
+          key={`${state.motion}-${state.effectId}`}
+          className="player-spritecook-frames"
+          style={{ backgroundImage: `url("${spriteSheet}")` }}
+          aria-hidden="true"
+        />
+      ) : (
+        <Image src={SPRITE_ASSETS[role]} alt="" fill sizes="130px" priority className="sprite-image" />
+      )}
       <span className="sr-only">{name}</span>
     </span>
   );
 }
 
 function EnemyBattleSprite({ enemy, state }: { enemy: Enemy; state: BattleSpriteState<EnemyBattleSpriteMotion> }) {
+  if (enemy.kind === "sentinel") {
+    const motion = sentinelBattleSpriteMotion(state.motion);
+    const spriteSheet = SENTINEL_SPRITE_SHEETS[motion];
+    const sheetAvailable = battleSpriteSheetIsAvailable(spriteSheet.src);
+
+    return (
+      <span
+        className={clsx("sprite-art", "sprite-sentinel", "board-sprite", "enemy-battle-sprite", "sentinel-spritecook", `kind-${enemy.kind}`, `is-${motion}`, !sheetAvailable && "is-static-fallback")}
+        data-sprite-source={sheetAvailable ? "spritecook-pixel" : "authored-static-fallback"}
+        data-sprite-kind={enemy.kind}
+        data-sprite-motion={motion}
+        data-sprite-effect-id={state.effectId}
+        data-sprite-frames={sheetAvailable ? spriteSheet.frames : 1}
+      >
+        {sheetAvailable ? (
+          <span
+            key={`${motion}-${state.effectId}`}
+            className="sentinel-spritecook-frames"
+            style={{ backgroundImage: `url("${spriteSheet.src}")` }}
+            aria-hidden="true"
+          />
+        ) : (
+          <Image src={SPRITE_ASSETS.sentinel} alt="" fill sizes="150px" priority className="sprite-image enemy-battle-image" />
+        )}
+        <span className="enemy-motion-accent" aria-hidden="true" />
+        <span className="sr-only">{enemy.name}</span>
+      </span>
+    );
+  }
+
   return (
     <span
       className={clsx("sprite-art", `sprite-${enemy.kind}`, "board-sprite", "enemy-battle-sprite", `kind-${enemy.kind}`, `is-${state.motion}`)}
@@ -365,9 +424,21 @@ function EnemyBattleSprite({ enemy, state }: { enemy: Enemy; state: BattleSprite
 type HighlightState = {
   moves: readonly Position[];
   attackIds: ReadonlySet<string>;
+  attackPreviews: ReadonlyMap<string, AttackOutcomePreview>;
   pushTargets: readonly PushTarget[];
   pushPreviews: ReadonlyMap<string, PushOutcomePreview>;
 };
+
+export function exactAttackPreview(
+  game: GameState,
+  unit: PlayerUnit,
+  target: Enemy,
+  deadeye: boolean,
+): AttackOutcomePreview {
+  const interceptor = getEnemyInterceptor(game, target.id);
+  const receiver = interceptor ?? target;
+  return buildAttackOutcomePreview(unit, target, receiver, deadeye);
+}
 
 type PushOutcomePreview = {
   targetId: string;
@@ -433,6 +504,16 @@ function PushPreviewBadge({ preview }: { preview: PushOutcomePreview }) {
     <span className={clsx("game-push-preview", collision && "is-collision")} aria-hidden="true">
       <strong>{collision ? "CRASH" : `PUSH ${preview.distance}`}</strong>
       <small>{collision ? `−${preview.collisionDamage} HP` : "0 DAMAGE"}</small>
+    </span>
+  );
+}
+
+function AttackPreviewBadge({ preview }: { preview: AttackOutcomePreview }) {
+  if (!preview.intercepted) return null;
+  return (
+    <span className="game-attack-preview is-intercepted" aria-hidden="true">
+      <strong>INTERCEPT</strong>
+      <small>→ {preview.receiverName.toUpperCase()} · −{preview.damage} HP</small>
     </span>
   );
 }
@@ -666,7 +747,12 @@ function MissionIntro({ game }: { game: GameState }) {
       <h1>{presentation.title}</h1>
       <p>{presentation.objective}</p>
       {game.objective.kind === "extract-object" ? (
-        <div className="mission-intro-rule"><HandGrabbing weight="fill" /> Only Pusher moves cargo <span>Shove 1 · Batter Up 2</span></div>
+        <>
+          <div className="mission-intro-rule"><HandGrabbing weight="fill" /> Only Pusher moves cargo <span>Shove 1 · Batter Up 2</span></div>
+          {game.enemies.some((enemy) => enemy.kind === "sentinel") ? (
+            <div className="mission-intro-rule is-interception"><ShieldCheck weight="fill" /> Interception Grid <span>Direct attacks redirect to Sentinel</span></div>
+          ) : null}
+        </>
       ) : game.objective.kind === "break-breach" ? (
         <div className="mission-intro-rule"><Lightning weight="fill" /> Break the locked charge <span>Use the Data Block as an anvil</span></div>
       ) : null}
@@ -701,6 +787,15 @@ function objectiveCoach(game: GameState): string | null {
   const objective = game.objective;
   const cargo = game.objects.find((object) => object.id === objective.objectId);
   const pusher = game.units.find((unit) => unit.role === "pusher" && unit.hp > 0);
+  const sentinel = game.enemies.find((enemy) => enemy.hp > 0 && enemy.kind === "sentinel");
+  if (sentinel) {
+    const guardedNames = game.enemies
+      .filter((enemy) => getEnemyInterceptor(game, enemy.id)?.id === sentinel.id)
+      .map((enemy) => enemy.name);
+    return guardedNames.length > 0
+      ? `Interception Grid · Clear Sentinel at ${coordinate(sentinel.position)} to expose ${guardedNames.join(", ")}`
+      : `Extraction blocked · Clear Sentinel from ${coordinate(objective.destination)}`;
+  }
   if (!cargo || !pusher) return null;
   if (cargo.position.y > objective.destination.y) {
     return `Cargo ${coordinate(cargo.position)} → lift it north to row ${objective.destination.y + 1}`;
@@ -772,6 +867,70 @@ function CargoExtractionRoute({ game }: { game: GameState }) {
   );
 }
 
+type SentinelGuardLink = Readonly<{
+  sentinelId: string;
+  targetId: string;
+  from: Position;
+  to: Position;
+  projected: boolean;
+}>;
+
+function SentinelGuardOverlay({ game, plan }: { game: GameState; plan: EnemyTurnPlan | null }) {
+  const sentinels = game.enemies.filter((enemy) => enemy.hp > 0 && enemy.kind === "sentinel");
+  const activeAreaKeys = new Set(
+    sentinels.flatMap((sentinel) => getSentinelGuardArea(game, sentinel.id).map(positionKey)),
+  );
+  const activeLinks: SentinelGuardLink[] = game.enemies.flatMap((target) => {
+    const sentinel = getEnemyInterceptor(game, target.id);
+    return sentinel
+      ? [{ sentinelId: sentinel.id, targetId: target.id, from: sentinel.position, to: target.position, projected: false }]
+      : [];
+  });
+  const activeLinkKeys = new Set(activeLinks.map((link) => `${link.sentinelId}:${link.targetId}`));
+  const guardIntents = plan?.intents.filter((intent) => intent.special === "intercept-grid") ?? [];
+  const projectedAreaKeys = new Set(
+    guardIntents.flatMap((intent) => intent.area.map(positionKey)).filter((key) => !activeAreaKeys.has(key)),
+  );
+  const projectedLinks: SentinelGuardLink[] = guardIntents.flatMap((intent) =>
+    (intent.supportTargets ?? []).flatMap((target) => {
+      const linkKey = `${intent.enemyId}:${target.id}`;
+      return activeLinkKeys.has(linkKey)
+        ? []
+        : [{ sentinelId: intent.enemyId, targetId: target.id, from: intent.destination, to: target.position, projected: true }];
+    }),
+  );
+  const links = [...activeLinks, ...projectedLinks];
+
+  if (activeAreaKeys.size === 0 && projectedAreaKeys.size === 0 && links.length === 0) return null;
+
+  const guardShield = "M 0 -.29 L .23 -.18 V .02 C .23 .18 .12 .29 0 .35 C -.12 .29 -.23 .18 -.23 .02 V -.18 Z";
+  return (
+    <svg className="sentinel-guard-overlay" viewBox="0 0 7 7" preserveAspectRatio="none" aria-hidden="true" data-sentinel-guard-overlay="true">
+      {[...activeAreaKeys].map((key) => {
+        const [x, y] = key.split(",").map(Number);
+        return <rect key={`active-${key}`} className="sentinel-guard-cell is-active" x={x + 0.08} y={y + 0.08} width="0.84" height="0.84" />;
+      })}
+      {[...projectedAreaKeys].map((key) => {
+        const [x, y] = key.split(",").map(Number);
+        return <rect key={`projected-${key}`} className="sentinel-guard-cell is-projected" x={x + 0.11} y={y + 0.11} width="0.78" height="0.78" />;
+      })}
+      {links.map((link) => (
+        <g
+          key={`${link.projected ? "projected" : "active"}-${link.sentinelId}-${link.targetId}`}
+          className={clsx("sentinel-guard-link", link.projected ? "is-projected" : "is-active")}
+          data-sentinel-id={link.sentinelId}
+          data-guarded-enemy={link.targetId}
+        >
+          <line x1={link.from.x + 0.5} y1={link.from.y + 0.5} x2={link.to.x + 0.5} y2={link.to.y + 0.5} />
+          <g className="sentinel-guard-shield" transform={`translate(${link.to.x + 0.5} ${link.to.y + 0.5})`}>
+            <path d={guardShield} />
+          </g>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 type ReadoutEntity =
   | { category: "unit"; value: PlayerUnit }
   | { category: "enemy"; value: Enemy }
@@ -803,6 +962,8 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
   let damage: number | null = null;
   let subtitle = "Pushable object";
   let signature: ReturnType<typeof signaturePresentation> | null = null;
+  let guardedBy: Enemy | undefined;
+  let guardedEnemies: readonly Enemy[] = [];
 
   if (readout.category === "unit") {
     kind = readout.value.role;
@@ -818,7 +979,15 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
     maxHp = readout.value.maxHp;
     move = readout.value.moveRange;
     damage = readout.value.attackDamage;
-    subtitle = "Hostile";
+    guardedBy = getEnemyInterceptor(game, readout.value.id);
+    guardedEnemies = readout.value.kind === "sentinel"
+      ? game.enemies.filter((enemy) => getEnemyInterceptor(game, enemy.id)?.id === readout.value.id)
+      : [];
+    subtitle = readout.value.kind === "sentinel"
+      ? "Hostile support · Stationary"
+      : guardedBy
+        ? `Guarded by ${guardedBy.name}`
+        : "Hostile";
   } else if (readout.category === "vault") {
     kind = "vault";
     hp = readout.value.hp;
@@ -827,6 +996,9 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
   }
 
   const intent = readout.category === "enemy" ? enemyPlan?.intents.find((entry) => entry.enemyId === readout.value.id) : null;
+  const plannedGuardedIds = intent?.guardedEnemyIds ?? [];
+  const guardedNames = [...new Set([...guardedEnemies.map((enemy) => enemy.id), ...plannedGuardedIds])]
+    .map((enemyId) => entityName(game, enemyId));
   const hpPercent = hp !== null && maxHp ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 0;
 
   return (
@@ -854,11 +1026,28 @@ function SelectedInspector({ game, selectedUnitId, inspectedId }: { game: GameSt
           {signature.reusable ? <small>{signature.reusable}</small> : null}
         </div>
       ) : null}
+      {readout.category === "enemy" && (readout.value.kind === "sentinel" || guardedBy) ? (
+        <div className="inspector-enemy-guard" data-enemy-guard={readout.value.kind === "sentinel" ? "source" : "target"}>
+          <div>
+            <ShieldCheck weight="fill" aria-hidden="true" />
+            <strong>Interception Grid</strong>
+            <span>{guardedBy || guardedEnemies.length > 0 ? "Active" : "Arming"}</span>
+          </div>
+          <p>{readout.value.kind === "sentinel"
+            ? guardedNames.length > 0
+              ? `Direct attacks against ${guardedNames.join(", ")} are redirected here.`
+              : "Aligned hostiles will redirect direct attacks to this Sentinel."
+            : `Direct attacks against ${readout.value.name} hit ${guardedBy?.name ?? "the Sentinel"} instead.`}</p>
+          <small>Pushes and collisions bypass the grid.</small>
+        </div>
+      ) : null}
       {intent ? (
         <div className="inspector-intent">
           <span>Intent #{intent.order}</span>
-          <strong>{intent.action}</strong>
-          <small>{intent.path.length > 0 ? intent.path.map(coordinate).join(" → ") : "Hold"} · {intent.target ? entityName(game, intent.target.id) : intent.area.length > 0 ? `${intent.area.length} tiles` : "No target"}</small>
+          <strong>{intent.special === "intercept-grid" ? "Interception Grid" : intent.action}</strong>
+          <small>{intent.special === "intercept-grid"
+            ? `${intent.path.length > 0 ? intent.path.map(coordinate).join(" → ") : "Hold"} · Guards ${guardedNames.join(", ") || "aligned hostiles"}`
+            : `${intent.path.length > 0 ? intent.path.map(coordinate).join(" → ") : "Hold"} · ${intent.target ? entityName(game, intent.target.id) : intent.area.length > 0 ? `${intent.area.length} tiles` : "No target"}`}</small>
         </div>
       ) : null}
     </aside>
@@ -1079,6 +1268,7 @@ function tileDescription({
   isMove,
   isAttack,
   isPush,
+  attackPreview,
   pushPreview,
   isDanger,
 }: {
@@ -1091,6 +1281,7 @@ function tileDescription({
   isMove: boolean;
   isAttack: boolean;
   isPush: boolean;
+  attackPreview?: AttackOutcomePreview;
   pushPreview?: PushOutcomePreview;
   isDanger: boolean;
 }) {
@@ -1104,9 +1295,16 @@ function tileDescription({
   else if (game.objective.kind === "extract-object" && samePosition(game.objective.destination, position)) details.push("Data Block extraction zone, deliver the configured cargo here");
   else if (game.objective.kind === "break-breach" && samePosition(game.objective.anvilDestination, position)) details.push("collision anvil position, move the Data Block here before the Whale charges");
   else details.push("floor");
+  if (enemy) {
+    const interceptor = getEnemyInterceptor(game, enemy.id);
+    if (enemy.kind === "sentinel") details.push("Sentinel Interception Grid redirects direct attacks against aligned hostiles here");
+    if (interceptor) details.push(`guarded by ${interceptor.name} at ${coordinate(interceptor.position)}; direct attacks are intercepted`);
+    if (game.objective.kind === "extract-object" && samePosition(game.objective.destination, position)) details.push("blocks the Data Block extraction zone");
+  }
   if (isMove) details.push("legal move");
   if (isAttack) details.push("attackable target");
   if (isPush) details.push("pushable target");
+  if (attackPreview?.intercepted) details.push(`exact attack preview: intended target ${entityName(game, attackPreview.intendedId)}, intercepted by ${attackPreview.receiverName} for ${attackPreview.damage} damage`);
   if (pushPreview) {
     const distance = `${pushPreview.distance} tile${pushPreview.distance === 1 ? "" : "s"}`;
     if (pushPreview.targetKind === "enemy") {
@@ -1166,7 +1364,7 @@ function Board({
     const orders = new Map<string, number>();
     for (const intent of enemyPlan?.intents ?? []) {
       orders.set(intent.enemyId, intent.order);
-      intent.area.forEach((position) => danger.add(positionKey(position)));
+      if (intent.special !== "intercept-grid") intent.area.forEach((position) => danger.add(positionKey(position)));
       intent.targets.forEach((target) => danger.add(positionKey(target.position)));
       if (intent.target) danger.add(positionKey(intent.target.position));
       if (intent.action === "slam" || intent.special === "ground-slam") intent.area.forEach((position) => locked.add(positionKey(position)));
@@ -1242,6 +1440,7 @@ function Board({
       <div className="game-board-grid" role="grid" aria-rowcount={BOARD_SIZE} aria-colcount={BOARD_SIZE}>
         <CargoExtractionRoute game={game} />
         <BreachBreakRoute game={game} />
+        <SentinelGuardOverlay game={game} plan={enemyPlan} />
         <EnemyIntentPath plan={enemyPlan} />
         {movePreview && movePreviewPath ? <PlayerMovePath positions={movePreviewPath} destination={coordinate(movePreview)} /> : null}
         <CombatActionFx game={game} cue={combatCue} />
@@ -1259,7 +1458,11 @@ function Board({
           const isMove = moveKeys.has(key) && actionMode === "move";
           const isAttack = Boolean(enemy && highlights.attackIds.has(enemy.id));
           const isPush = Boolean((enemy || object) && pushIds.has((enemy ?? object)?.id ?? ""));
+          const attackPreview = enemy ? highlights.attackPreviews.get(enemy.id) : undefined;
           const pushPreview = (enemy || object) ? highlights.pushPreviews.get((enemy ?? object)!.id) : undefined;
+          const interceptor = enemy ? getEnemyInterceptor(game, enemy.id) : undefined;
+          const isSentinelSource = enemy?.kind === "sentinel";
+          const isExtractionBlocked = Boolean(isExtraction && enemy?.kind === "sentinel");
           const isDanger = intentData.danger.has(key);
           const destinationOrders = intentData.destinations.get(key) ?? [];
           const entityId = unit?.id ?? enemy?.id ?? object?.id ?? (isVault ? game.vault.id : undefined);
@@ -1298,6 +1501,7 @@ function Board({
                 obstacle && "is-obstacle",
                 isVault && "is-vault",
                 isExtraction && "is-extraction-zone",
+                isExtractionBlocked && "is-zone-blocked",
                 isExtraction && game.phase === "victory" && "is-extraction-complete",
                 isBreachAnvil && "is-breach-anvil",
                 isBreachAnvilReady && "is-breach-anvil-ready",
@@ -1327,7 +1531,7 @@ function Board({
                 if (movePreview && samePosition(movePreview, position)) onPreviewMove(null);
               }}
               disabled={disabled || game.phase !== "player" || (tutorialRestricted && !tutorialTileAllowed)}
-              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, pushPreview, isDanger })}
+              aria-label={tileDescription({ position, game, unit, enemy, object, obstacle, isMove, isAttack, isPush, attackPreview, pushPreview, isDanger })}
               aria-selected={isSelected}
               data-coordinate={tileCoordinate}
               data-tutorial-target={isTutorialFocus ? tutorialStep ?? undefined : undefined}
@@ -1337,7 +1541,7 @@ function Board({
               {destinationOrders.length > 0 ? <span className="game-intent-land">{destinationOrders.join("/")}</span> : null}
               {obstacle ? <SpriteArt kind="obstacle" name="Blast Barricade" className="game-prop obstacle-prop" /> : null}
               {isBreach && !enemy ? <span className="breach-marker"><Warning weight="fill" /><small>Incoming</small></span> : null}
-              {isExtraction ? <span className="extraction-zone-marker" aria-hidden="true"><ArrowFatRight weight="fill" /><small>{game.phase === "victory" ? "Secured" : "Extract"}</small></span> : null}
+              {isExtraction ? <span className={clsx("extraction-zone-marker", isExtractionBlocked && "is-blocked")} aria-hidden="true">{isExtractionBlocked ? <Warning weight="fill" /> : <ArrowFatRight weight="fill" />}<small>{game.phase === "victory" ? "Secured" : isExtractionBlocked ? "Zone blocked" : "Extract"}</small></span> : null}
               {isBreachAnvil ? <span className="breach-anvil-marker" aria-hidden="true"><HandFist weight="fill" /><small>{isBreachAnvilReady ? "Armed" : "Anvil"}</small></span> : null}
               {isVault ? (
                 <span className={clsx("game-piece vault-piece", vaultThreatened && "is-threatened", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={game.vault.id}>
@@ -1356,14 +1560,16 @@ function Board({
                 </span>
               ) : null}
               {enemy ? (
-                <span className={clsx("game-piece enemy-piece", `piece-${enemy.kind}`, enemy.kind === "whale" && "is-whale", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={enemy.id}>
+                <span className={clsx("game-piece enemy-piece", `piece-${enemy.kind}`, enemy.kind === "whale" && "is-whale", isSentinelSource && "is-sentinel-source", interceptor && "is-guarded", pieceCombatClass)} style={pieceCombatStyle} data-game-piece={enemy.id} data-guarded-by={interceptor?.id}>
                   <span className="piece-base" />
                   {enemyAnimation ? <EnemyBattleSprite enemy={enemy} state={enemyAnimation} /> : null}
                   <span className="piece-health"><i style={{ width: `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%` }} /></span>
                   {order ? <span className="enemy-order">{order}</span> : null}
+                  {interceptor ? <span className="enemy-guard-badge"><ShieldCheck weight="fill" />GUARD</span> : null}
                 </span>
               ) : null}
               {object ? <span className={clsx("game-piece object-piece", pieceCombatClass)} data-game-piece={object.id}><span className="piece-base" /><SpriteArt kind="data-block" name={object.name} className="board-sprite" /></span> : null}
+              {isAttack && attackPreview ? <AttackPreviewBadge preview={attackPreview} /> : null}
               {isPush && pushPreview && (actionMode === "push" || actionMode === "ability") ? <PushPreviewBadge preview={pushPreview} /> : null}
               {isWhaleSpawnCue ? (
                 <span key={`breach-spawn-${combatCue?.id ?? 0}`} className="game-combat-vfx is-breach-spawn" data-combat-vfx="whale-breach-spawn" aria-hidden="true">
@@ -1557,7 +1763,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [movePreview, setMovePreview] = useState<Position | null>(null);
   const [introVisible, setIntroVisible] = useState(true);
-  const [playerSpritesReady, setPlayerSpritesReady] = useState(playerSpriteSheetsAreReady);
+  const [battleSpritesReady, setBattleSpritesReady] = useState(battleSpriteSheetsAreReady);
   const [tutorialStep, setTutorialStep] = useState<BattleTutorialStep>(null);
   const [endTurnConfirmationOpen, setEndTurnConfirmationOpen] = useState(false);
   const [battleMenuOpen, setBattleMenuOpen] = useState(false);
@@ -1569,7 +1775,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
 
   const selected = game?.units.find((unit) => unit.id === selectedUnitId && unit.hp > 0);
   const remainingUnits = useMemo(() => game?.units.filter((unit) => unit.hp > 0 && !unit.hasActed) ?? [], [game]);
-  const battleTransitionLocked = !playerSpritesReady || isResolving || isAnimating || (introVisible && !isTrainingMission);
+  const battleTransitionLocked = !battleSpritesReady || isResolving || isAnimating || (introVisible && !isTrainingMission);
   const controlsLocked = battleTransitionLocked || endTurnConfirmationOpen || battleMenuOpen || destructiveConfirmation !== null;
   const moves = useMemo(() => game && selected && actionMode === "move" ? getValidMoves(game, selected.id) : [], [actionMode, game, selected]);
   const attackTargets = useMemo(() => {
@@ -1578,6 +1784,13 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (actionMode === "ability" && selected.role === "sniper") return getAttackableTargets(game, selected.id, { deadeye: true });
     return [];
   }, [actionMode, game, selected]);
+  const attackPreviews = useMemo(() => {
+    const previews = new Map<string, AttackOutcomePreview>();
+    if (!game || !selected) return previews;
+    const deadeye = actionMode === "ability" && selected.role === "sniper";
+    for (const target of attackTargets) previews.set(target.id, exactAttackPreview(game, selected, target, deadeye));
+    return previews;
+  }, [actionMode, attackTargets, game, selected]);
   const pushTargets = useMemo(() => game && selected && selected.role === "pusher" && (actionMode === "push" || actionMode === "ability") ? getPushTargets(game, selected.id) : [], [actionMode, game, selected]);
   const pushPreviews = useMemo(() => {
     const previews = new Map<string, PushOutcomePreview>();
@@ -1586,7 +1799,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     for (const target of pushTargets) previews.set(target.id, exactPushPreview(game, selected.id, target, ability));
     return previews;
   }, [actionMode, game, pushTargets, selected]);
-  const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), pushTargets, pushPreviews }), [attackTargets, moves, pushPreviews, pushTargets]);
+  const highlights = useMemo<HighlightState>(() => ({ moves, attackIds: new Set(attackTargets.map((enemy) => enemy.id)), attackPreviews, pushTargets, pushPreviews }), [attackPreviews, attackTargets, moves, pushPreviews, pushTargets]);
   const movePreviewPath = useMemo(() => game && selected && movePreview && actionMode === "move"
     ? getMovementPath(game, selected.id, movePreview)
     : null, [actionMode, game, movePreview, selected]);
@@ -1597,8 +1810,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
 
   useEffect(() => {
     let mounted = true;
-    void preloadPlayerSpriteSheets().then(() => {
-      if (mounted) setPlayerSpritesReady(true);
+    void preloadBattleSpriteSheets().then(() => {
+      if (mounted) setBattleSpritesReady(true);
     });
     return () => {
       mounted = false;
@@ -1644,10 +1857,10 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   }, [hydrated, introDuration, missionId]);
 
   useEffect(() => {
-    if (!hydrated || !playerSpritesReady || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
+    if (!hydrated || !battleSpritesReady || introVisible || !game || !isTrainingMissionId(game.missionId) || tutorialStarted.current === game.missionId || window.innerWidth < 1024) return;
     tutorialStarted.current = game.missionId;
     setTutorialStep(initialTutorialStep(game.missionId));
-  }, [game, hydrated, introVisible, playerSpritesReady]);
+  }, [battleSpritesReady, game, hydrated, introVisible]);
 
   useEffect(() => {
     if (!game || !tutorialStep) return;
@@ -1746,8 +1959,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
     if (process.env.NODE_ENV === "production" || !game) return;
     window.render_game_to_text = () => JSON.stringify({
       coordinateSystem: "A1 is top-left. Columns A-G increase right; rows 1-7 increase down.",
-      screen: !playerSpritesReady
-        ? "loading-squad"
+      screen: !battleSpritesReady
+        ? "loading-battle-animations"
         : introVisible && !isTrainingMission
           ? "mission-intro"
           : destructiveConfirmation === "restart"
@@ -1792,7 +2005,8 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       actionMode,
       resolving: isResolving,
       animating: isAnimating,
-      playerSpriteSheetsReady: playerSpritesReady,
+      battleSpriteSheetsReady: battleSpritesReady,
+      playerSpriteSheetsReady: battleSpritesReady,
       motionPreference: {
         systemReduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         semanticGameplayAnimations: true,
@@ -1815,21 +2029,29 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       } : null,
       playerAnimations: Object.fromEntries(game.units.map((unit) => {
         const spriteState = battleSpriteState(effects, combatCue, unit.id, unit.role);
+        const spriteSheet = PLAYER_SPRITE_SHEETS[unit.role][spriteState.motion];
+        const sheetAvailable = battleSpriteSheetIsAvailable(spriteSheet);
         return [unit.id, {
-          source: "spritecook-pixel",
+          source: sheetAvailable ? "spritecook-pixel" : "authored-static-fallback",
           role: unit.role,
           motion: spriteState.motion,
           effectId: spriteState.effectId,
-          frames: spriteState.motion === "death" ? 12 : 8,
+          frames: sheetAvailable ? (spriteState.motion === "death" ? 12 : 8) : 1,
         }];
       })),
       enemyAnimations: Object.fromEntries(game.enemies.map((enemy) => {
         const spriteState = enemyBattleSpriteState(effects, combatCue, enemy);
+        const sentinelMotion = enemy.kind === "sentinel" ? sentinelBattleSpriteMotion(spriteState.motion) : null;
+        const sentinelSheet = sentinelMotion ? SENTINEL_SPRITE_SHEETS[sentinelMotion] : null;
+        const sentinelSheetAvailable = sentinelSheet ? battleSpriteSheetIsAvailable(sentinelSheet.src) : false;
         return [enemy.id, {
-          source: "authored-pixel-motion",
+          source: enemy.kind === "sentinel"
+            ? sentinelSheetAvailable ? "spritecook-pixel" : "authored-static-fallback"
+            : "authored-pixel-motion",
           kind: enemy.kind,
-          motion: spriteState.motion,
+          motion: sentinelMotion ?? spriteState.motion,
           effectId: spriteState.effectId,
+          frames: sentinelSheet ? sentinelSheetAvailable ? sentinelSheet.frames : 1 : null,
           whaleState: enemy.whaleState ?? null,
         }];
       })),
@@ -1837,11 +2059,13 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
         const sniper = game.units.find((unit) => unit.role === "sniper");
         if (!sniper) return null;
         const spriteState = battleSpriteState(effects, combatCue, sniper.id, sniper.role);
+        const spriteSheet = PLAYER_SPRITE_SHEETS[sniper.role][spriteState.motion];
+        const sheetAvailable = battleSpriteSheetIsAvailable(spriteSheet);
         return {
-          source: "spritecook-pixel",
+          source: sheetAvailable ? "spritecook-pixel" : "authored-static-fallback",
           motion: spriteState.motion,
           effectId: spriteState.effectId,
-          frames: spriteState.motion === "death" ? 12 : 8,
+          frames: sheetAvailable ? (spriteState.motion === "death" ? 12 : 8) : 1,
         };
       })(),
       movePreview: movePreview && movePreviewPath ? {
@@ -1851,7 +2075,18 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       } : null,
       highlights: {
         moves: moves.map(coordinate),
-        attacks: attackTargets.map((target) => ({ id: target.id, at: coordinate(target.position) })),
+        attacks: attackTargets.map((target) => {
+          const preview = attackPreviews.get(target.id);
+          return {
+            id: target.id,
+            intendedId: target.id,
+            at: coordinate(target.position),
+            receiverId: preview?.receiverId ?? target.id,
+            intercepted: preview?.intercepted ?? false,
+            damage: preview?.damage ?? 0,
+            fatal: preview?.fatal ?? false,
+          };
+        }),
         pushes: pushTargets.map((target) => {
           const preview = pushPreviews.get(target.id);
           return {
@@ -1892,9 +2127,30 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
           blockedReason: unit.role === "sniper" && unit.hasMoved && unit.signatureAvailable ? "Requires no prior movement" : null,
         },
       })),
-      enemies: game.enemies.map((enemy) => ({ id: enemy.id, kind: enemy.kind, at: coordinate(enemy.position), hp: enemy.hp, whaleState: enemy.whaleState })),
+      enemies: game.enemies.map((enemy) => ({
+        id: enemy.id,
+        kind: enemy.kind,
+        at: coordinate(enemy.position),
+        hp: enemy.hp,
+        whaleState: enemy.whaleState,
+        guardedBy: getEnemyInterceptor(game, enemy.id)?.id ?? null,
+        guardArea: enemy.kind === "sentinel" ? getSentinelGuardArea(game, enemy.id).map(coordinate) : [],
+      })),
       objects: game.objects.map((object) => ({ id: object.id, at: coordinate(object.position) })),
-      exactEnemyPlan: enemyPlan?.intents.map((intent) => ({ order: intent.order, enemyId: intent.enemyId, action: intent.action, path: intent.path.map(coordinate), destination: coordinate(intent.destination), target: intent.target?.id ?? null, targets: intent.targets.map((target) => ({ id: target.id, at: coordinate(target.position), expectedDamage: target.expectedDamage })), area: intent.area.map(coordinate), damage: intent.damage, special: intent.special })) ?? [],
+      exactEnemyPlan: enemyPlan?.intents.map((intent) => ({
+        order: intent.order,
+        enemyId: intent.enemyId,
+        action: intent.action,
+        path: intent.path.map(coordinate),
+        destination: coordinate(intent.destination),
+        target: intent.target?.id ?? null,
+        targets: intent.targets.map((target) => ({ id: target.id, at: coordinate(target.position), expectedDamage: target.expectedDamage })),
+        area: intent.area.map(coordinate),
+        damage: intent.damage,
+        special: intent.special,
+        guardedEnemyIds: intent.guardedEnemyIds ?? [],
+        supportTargets: (intent.supportTargets ?? []).map((target) => ({ id: target.id, at: coordinate(target.position), effect: target.effect })),
+      })) ?? [],
       tutorial: {
         running: tutorialStep !== null,
         step: tutorialStep,
@@ -1924,7 +2180,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
       delete window.render_game_to_text;
       delete window.advanceTime;
     };
-  }, [actionMode, attackTargets, battleMenuOpen, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, playerSpritesReady, pushPreviews, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
+  }, [actionMode, attackPreviews, attackTargets, battleMenuOpen, battleSpritesReady, combatCue, destructiveConfirmation, effects, endTurnConfirmationOpen, enemyPlan, game, inspectedId, introDuration, introVisible, isAnimating, isResolving, isTrainingMission, movePreview, movePreviewPath, moves, playbackIndex, pushPreviews, pushTargets, queueRemaining, remainingUnits, selectedUnitId, trainingCompleted, tutorialStep]);
 
   const continueTutorial = useCallback(() => {
     if (tutorialStep === "basics-intro") setTutorialStep("basics-select-guardian");
@@ -2162,7 +2418,7 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
   return (
     <div className="game-battle-route">
       <MobileNotice />
-      <main className={clsx("game-battle-stage", tutorialStep && "has-tutorial")} data-player-sprites-ready={playerSpritesReady}>
+      <main className={clsx("game-battle-stage", tutorialStep && "has-tutorial")} data-battle-sprites-ready={battleSpritesReady}>
         {!game ? <div className="game-loading"><Hourglass weight="fill" /> Loading battle…</div> : (
           <>
             <GameHud game={game} />
@@ -2203,9 +2459,9 @@ export function BattleClient({ requestedMissionId }: { requestedMissionId?: stri
           </>
         )}
         {introVisible && game && !isTrainingMissionId(game.missionId) ? <MissionIntro game={game} /> : null}
-        {game && !playerSpritesReady && (!introVisible || isTrainingMission) ? (
+        {game && !battleSpritesReady && (!introVisible || isTrainingMission) ? (
           <div className="game-sprite-loading" role="status" aria-live="polite">
-            <Hourglass weight="fill" /> Preparing squad animations
+            <Hourglass weight="fill" /> Preparing battle animations
           </div>
         ) : null}
         {turnBanner && !introVisible && (!tutorialStep || ["basics-watch-enemy", "squad-watch-shield", "push-watch-charge"].includes(tutorialStep)) ? (

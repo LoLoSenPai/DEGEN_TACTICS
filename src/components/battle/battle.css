@@ -391,6 +391,52 @@
   fill: #ff8654;
 }
 
+.sentinel-guard-overlay {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  shape-rendering: geometricprecision;
+}
+
+.sentinel-guard-cell {
+  fill: rgba(241, 184, 70, 0.035);
+  stroke: rgba(241, 184, 70, 0.22);
+  stroke-width: 0.018;
+}
+
+.sentinel-guard-cell.is-projected {
+  fill: rgba(241, 184, 70, 0.018);
+  stroke-dasharray: 0.08 0.07;
+  opacity: 0.58;
+}
+
+.sentinel-guard-link line {
+  stroke: #f2b842;
+  stroke-linecap: square;
+  stroke-width: 0.075;
+  filter: drop-shadow(0 0 0.05px #160d01) drop-shadow(0 0 0.11px rgba(242, 184, 66, 0.82));
+  animation: sentinel-link-pulse 1.05s steps(4, end) infinite;
+}
+
+.sentinel-guard-link.is-projected line {
+  stroke-dasharray: 0.13 0.08;
+  opacity: 0.65;
+}
+
+.sentinel-guard-shield path {
+  fill: rgba(62, 38, 4, 0.84);
+  stroke: #ffd466;
+  stroke-width: 0.055;
+  filter: drop-shadow(0 0 0.08px rgba(255, 205, 83, 0.9));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sentinel-shield-pulse 1.05s steps(4, end) infinite;
+}
+
 .game-tile {
   position: relative;
   min-width: 0;
@@ -575,6 +621,42 @@
 .game-push-preview.is-delivery small {
   color: #77f5de;
   font-size: 8px;
+}
+
+.game-attack-preview {
+  position: absolute;
+  z-index: 98;
+  bottom: 2%;
+  left: 50%;
+  display: grid;
+  min-width: 94%;
+  transform: translateX(-50%);
+  border: 2px solid #f1b941;
+  padding: 4px 5px 3px;
+  color: #fff0ba;
+  background: rgba(48, 29, 3, 0.97);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.76), 0 0 15px rgba(241, 185, 65, 0.56);
+  font-family: var(--game-font-body);
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.game-attack-preview strong {
+  color: #ffd66c;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.game-attack-preview small {
+  margin-top: 2px;
+  color: #fff2c4;
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
 }
 
 .game-tile.is-selected {
@@ -866,6 +948,52 @@
   height: 121.9%;
 }
 
+.piece-sentinel .board-sprite {
+  right: 0;
+  bottom: 9%;
+  width: 100%;
+  height: 100%;
+}
+
+.piece-sentinel .sentinel-spritecook.board-sprite {
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+
+.sentinel-spritecook-frames {
+  position: absolute;
+  inset: 0;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 800% 100%;
+  filter: brightness(1.08) saturate(1.08) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.76));
+  image-rendering: pixelated;
+  will-change: background-position;
+}
+
+.sentinel-spritecook.is-idle .sentinel-spritecook-frames {
+  animation: spritecook-frames-8 1000ms linear infinite;
+}
+
+.sentinel-spritecook.is-guard .sentinel-spritecook-frames {
+  animation: spritecook-frames-8 520ms linear both;
+}
+
+.sentinel-spritecook.is-hurt .sentinel-spritecook-frames {
+  animation: spritecook-frames-8 460ms linear both;
+}
+
+.sentinel-spritecook.is-death .sentinel-spritecook-frames {
+  background-size: 1200% 100%;
+  animation: spritecook-frames-12 760ms linear both;
+}
+
+.game-piece.is-sentinel-source .piece-base {
+  border-color: #ef754d;
+  background-color: rgba(111, 42, 20, 0.42);
+  box-shadow: 0 0 14px rgba(239, 117, 77, 0.58), inset 0 0 9px rgba(242, 184, 66, 0.24);
+}
+
 .game-piece.is-whale {
   z-index: 24;
 }
@@ -919,6 +1047,10 @@
   animation: enemy-whale-idle 2.1s steps(4, end) infinite;
 }
 
+.game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-sentinel {
+  animation: none;
+}
+
 .game-piece.enemy-piece .enemy-battle-sprite.is-walk.kind-rugger {
   animation: enemy-rugger-walk 360ms steps(4, end) infinite;
 }
@@ -969,6 +1101,17 @@
 
 .game-piece.enemy-piece .enemy-battle-sprite.is-stagger {
   animation: enemy-stagger 900ms steps(6, end) infinite;
+}
+
+.game-piece.enemy-piece.is-sentinel-source .enemy-motion-accent {
+  right: 8%;
+  bottom: 7%;
+  width: 84%;
+  height: 38%;
+  border: 3px solid rgba(244, 185, 66, 0.72);
+  box-shadow: 0 0 14px rgba(244, 185, 66, 0.48), inset 0 0 10px rgba(244, 185, 66, 0.2);
+  opacity: 0.78;
+  animation: sentinel-projector 1.05s steps(4, end) infinite;
 }
 
 .game-piece.enemy-piece .enemy-battle-sprite.is-attack.kind-rugger .enemy-motion-accent {
@@ -1132,6 +1275,30 @@
   box-shadow: 0 0 12px rgba(241, 83, 76, 0.55);
 }
 
+.enemy-guard-badge {
+  position: absolute;
+  z-index: 36;
+  top: 14px;
+  left: -5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 2px solid #f3bf4a;
+  padding: 2px 4px;
+  color: #241603;
+  background-color: #f5c654;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.72), 0 0 12px rgba(243, 191, 74, 0.58);
+  font-size: 7px;
+  font-weight: 1000;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.enemy-guard-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
 .breach-marker {
   position: absolute;
   z-index: 10;
@@ -1181,6 +1348,23 @@
 
 .is-extraction-complete .extraction-zone-marker {
   color: #79f8df;
+}
+
+.game-tile.is-extraction-zone.is-zone-blocked {
+  border-color: #ef754d;
+  background-color: rgba(94, 36, 13, 0.42);
+  box-shadow: inset 0 0 0 3px rgba(255, 154, 81, 0.18), 0 0 18px rgba(239, 117, 77, 0.35);
+}
+
+.extraction-zone-marker.is-blocked {
+  z-index: 38;
+  right: 4%;
+  bottom: 3%;
+  border: 1px solid #f08a52;
+  padding: 2px 3px;
+  color: #ffd49a;
+  background: rgba(63, 19, 5, 0.92);
+  text-shadow: 1px 1px 0 #110500, 0 0 6px rgba(240, 105, 62, 0.7);
 }
 
 .breach-anvil-marker {
@@ -1388,9 +1572,13 @@
   animation: combat-fade 420ms 100ms steps(4, end) both;
 }
 
-.game-piece.ally-piece.is-attacking .player-spritecook.board-sprite,
+.game-piece.ally-piece.is-attacking .player-spritecook.board-sprite:not(.is-static-fallback),
 .game-piece.ally-piece.is-attacking .piece-base,
-.game-piece.ally-piece.is-dying .player-spritecook.board-sprite {
+.game-piece.ally-piece.is-dying .player-spritecook.board-sprite:not(.is-static-fallback) {
+  animation: none;
+}
+
+.game-piece.enemy-piece.is-dying .enemy-battle-sprite.kind-sentinel.board-sprite:not(.is-static-fallback) {
   animation: none;
 }
 
@@ -1916,6 +2104,65 @@
   font-size: 12px;
   font-weight: 900;
   line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.inspector-enemy-guard {
+  border-top: 1px solid #76511a;
+  padding: 9px 10px;
+  color: #fff0bb;
+  background: rgba(53, 34, 5, 0.8);
+}
+
+.inspector-enemy-guard > div {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.inspector-enemy-guard svg {
+  width: 18px;
+  height: 18px;
+  color: #f4bd45;
+}
+
+.inspector-enemy-guard strong {
+  overflow: hidden;
+  color: #ffe39a;
+  font-size: 13px;
+  letter-spacing: 0.055em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.inspector-enemy-guard > div > span {
+  color: #ffc94f;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.inspector-enemy-guard p {
+  margin: 7px 0 0;
+  color: #d8cfb8;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.34;
+}
+
+.inspector-enemy-guard small {
+  display: block;
+  margin-top: 7px;
+  border-left: 3px solid #e7b847;
+  padding: 4px 6px;
+  color: #f0d283;
+  background: rgba(103, 70, 10, 0.28);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.25;
   text-transform: uppercase;
 }
 
@@ -2528,6 +2775,18 @@
   letter-spacing: 0.06em;
 }
 
+.mission-intro-rule.is-interception {
+  margin-top: 7px;
+  border-color: rgba(240, 117, 72, 0.62);
+  color: #ffe4bd;
+  background: rgba(55, 20, 6, 0.76);
+}
+
+.mission-intro-rule.is-interception > svg,
+.mission-intro .mission-intro-rule.is-interception > span {
+  color: #ff9a62;
+}
+
 .intro-masteries {
   width: min(730px, 76vw);
   margin-top: 24px;
@@ -2717,6 +2976,21 @@
 @keyframes enemy-whale-idle {
   0%, 100% { transform: translateY(0) scale(1); filter: brightness(0.96) drop-shadow(0 9px 6px rgba(0, 0, 0, 0.78)); }
   50% { transform: translateY(-1px) scale(1.012, 0.988); filter: brightness(1.08) drop-shadow(0 9px 6px rgba(0, 0, 0, 0.78)); }
+}
+
+@keyframes sentinel-projector {
+  0%, 100% { opacity: 0.46; transform: scale(0.9); }
+  50% { opacity: 0.88; transform: scale(1.06); }
+}
+
+@keyframes sentinel-link-pulse {
+  0%, 100% { opacity: 0.66; }
+  50% { opacity: 1; }
+}
+
+@keyframes sentinel-shield-pulse {
+  0%, 100% { opacity: 0.72; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.08); }
 }
 
 @keyframes enemy-rugger-walk {
@@ -3151,6 +3425,10 @@
   .game-piece.ally-piece .player-spritecook.board-sprite,
   .game-piece.vault-piece .board-sprite,
   .game-piece.object-piece .board-sprite,
+  .game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-sentinel,
+  .game-piece.enemy-piece.is-sentinel-source .enemy-motion-accent,
+  .sentinel-guard-link line,
+  .sentinel-guard-shield path,
   .cargo-extraction-route polyline,
   .breach-break-route line,
   .game-tile.is-extraction-zone::before,
@@ -3200,6 +3478,23 @@
 
   .enemy-motion-accent {
     display: none;
+  }
+
+  .sentinel-spritecook-frames {
+    animation: none !important;
+  }
+
+  .sentinel-spritecook.is-idle .sentinel-spritecook-frames {
+    background-position: 42.8571% 0;
+  }
+
+  .sentinel-spritecook.is-guard .sentinel-spritecook-frames,
+  .sentinel-spritecook.is-hurt .sentinel-spritecook-frames {
+    background-position: 57.1429% 0;
+  }
+
+  .sentinel-spritecook.is-death .sentinel-spritecook-frames {
+    background-position: 100% 0;
   }
 
 }

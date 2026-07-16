@@ -13,6 +13,7 @@ export type CombatPlaybackStage =
 export type CombatPlaybackStatusKind =
   | "breach-warning"
   | "cone-locked"
+  | "intercept-grid"
   | "charge-cancelled"
   | "staggered"
   | "drain-heal"
@@ -314,6 +315,20 @@ export const compileEnemyPlayback = (
     if (event.type === "enemy-healed") {
       visualState = applyPresentationEvent(visualState, event, finalState);
       beats.push({ stage: "status", state: visualState, event, duration: 520, sourceId: event.enemyId, amount: event.amount, statusKind: "drain-heal" });
+      continue;
+    }
+
+    if (event.type === "sentinel-fortified") {
+      beats.push({
+        stage: "status",
+        state: visualState,
+        event,
+        duration: 520,
+        sourceId: event.enemyId,
+        targetId: event.guardedEnemyIds[0],
+        area: event.area,
+        statusKind: "intercept-grid",
+      });
       continue;
     }
 

@@ -4,7 +4,7 @@ export type Position = Readonly<{ x: number; y: number }>;
 export type Direction = "north" | "east" | "south" | "west";
 export type GamePhase = "player" | "enemy" | "victory" | "defeat";
 export type UnitRole = "guardian" | "sniper" | "pusher";
-export type EnemyKind = "rugger" | "drainer" | "whale";
+export type EnemyKind = "rugger" | "drainer" | "whale" | "sentinel";
 export type PushKind = "shove" | "batter-up";
 export type PushTargetKind = "enemy" | "object";
 export type MissionOutcome = "victory" | "defeat";
@@ -173,11 +173,20 @@ export type IntentTarget = Readonly<{
   expectedDamage: number;
 }>;
 
+export type EnemySupportEffect = "intercept-direct-attack";
+
+export type EnemySupportTarget = Readonly<{
+  id: string;
+  kind: "enemy";
+  position: Position;
+  effect: EnemySupportEffect;
+}>;
+
 export interface EnemyIntent {
   readonly enemyId: string;
   readonly enemyKind: EnemyKind;
   readonly order: number;
-  readonly action: "advance" | "attack" | "charge" | "slam" | "staggered" | "idle";
+  readonly action: "advance" | "attack" | "charge" | "slam" | "staggered" | "guard" | "idle";
   readonly from: Position;
   readonly path: readonly Position[];
   readonly destination: Position;
@@ -185,7 +194,9 @@ export interface EnemyIntent {
   readonly targets: readonly IntentTarget[];
   readonly area: readonly Position[];
   readonly damage: number;
-  readonly special?: "drain" | "lock-cone" | "ground-slam" | "stagger-skip";
+  readonly special?: "drain" | "lock-cone" | "ground-slam" | "stagger-skip" | "intercept-grid";
+  readonly guardedEnemyIds?: readonly string[];
+  readonly supportTargets?: readonly EnemySupportTarget[];
   readonly facing?: Direction;
 }
 
@@ -207,6 +218,8 @@ export type GameEvent =
   | Readonly<{ type: "enemy-moved"; enemyId: string; from: Position; to: Position; path: readonly Position[] }>
   | Readonly<{ type: "damage"; sourceId: string; targetId: string; amount: number; absorbed: number }>
   | Readonly<{ type: "enemy-healed"; enemyId: string; amount: number }>
+  | Readonly<{ type: "attack-intercepted"; unitId: string; intendedEnemyId: string; interceptorId: string; damage: number }>
+  | Readonly<{ type: "sentinel-fortified"; enemyId: string; area: readonly Position[]; guardedEnemyIds: readonly string[] }>
   | Readonly<{ type: "whale-cone-locked"; enemyId: string; area: readonly Position[]; facing: Direction }>
   | Readonly<{ type: "whale-charge-cancelled"; enemyId: string }>
   | Readonly<{ type: "whale-staggered"; enemyId: string }>

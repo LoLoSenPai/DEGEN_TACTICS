@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "workflow": "three squad character batches plus one Sniper Deadeye character-animation request; no standalone /animate calls",
+  "workflow": "three squad character batches, one Sniper Deadeye request, and one Lane Sentinel master plus grouped idle/hurt/death/custom guard batch; no standalone /animate calls",
   "credits": {
     "before": 926,
-    "used": 284,
-    "remaining": 642
+    "used": 358,
+    "remaining": 568
   },
   "characters": {
     "sniper": {
@@ -42,6 +42,18 @@
         "hurt": { "asset_id": "5576e26b-c583-491d-aba5-629ae894495d", "sha12": "f0e8b2e1057b" },
         "death": { "asset_id": "3cc094f2-0c52-48ce-a049-ac98d830a1d8", "sha12": "657646936743" },
         "batter-up": { "asset_id": "4e0cd292-7368-47f9-843d-65d9dc1c8265", "sha12": "b7993708eb7b" }
+      }
+    },
+    "sentinel": {
+      "master": { "asset_id": "c82661b3-9a3d-42e6-ba7c-c09c00208512", "sha12": "800d6d15ceb8" },
+      "runs": ["852ae89d-92a4-4186-97fb-e9fd4a01a84f"],
+      "perspective": "isometric",
+      "nativeFrameSize": "180x180",
+      "animations": {
+        "idle": { "asset_id": "bbd08647-053a-4056-8a36-72b3b581220f", "sha12": "23d9d266505c" },
+        "hurt": { "asset_id": "0d9a867a-8d16-4614-abf3-c780b96c7fbe", "sha12": "e973192071ec" },
+        "death": { "asset_id": "bcbb325f-6692-47f3-84d4-a416f396b0f7", "sha12": "ffff114201b7" },
+        "guard": { "asset_id": "82636b84-7ed0-4117-a7d8-c0c2c27afa60", "sha12": "95b41b639207" }
       }
     }
   }

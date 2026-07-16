@@ -7,6 +7,7 @@ type GlyphKind =
   | "rugger"
   | "drainer"
   | "whale"
+  | "sentinel"
   | "vault"
   | "data-block";
 
@@ -80,6 +81,18 @@ export function BattleGlyph({ kind, className }: BattleGlyphProps) {
         <path d="M7 27c3-10 11-15 22-14 2-4 6-7 12-7-1 5-3 8-7 10 5 2 8 6 9 11-7 9-24 12-36 0Z" stroke="currentColor" strokeWidth="2.5" />
         <circle cx="31" cy="22" r="2" fill="currentColor" />
         <path d="M11 31c9 3 19 2 27-3" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (kind === "sentinel") {
+    return (
+      <svg {...shared}>
+        <path d="M11 38V18l6-7h14l6 7v20H11Z" fill="currentColor" opacity=".2" />
+        <path d="M13 37V19l5-6h12l5 6v18H13Z" stroke="currentColor" strokeWidth="2.5" />
+        <path d="M18 13V7h12v6M8 40h32M18 37v5m12-5v5" stroke="currentColor" strokeWidth="2.5" />
+        <path d="M24 18 31 21v6c0 5-3 8-7 10-4-2-7-5-7-10v-6l7-3Z" stroke="currentColor" strokeWidth="2.5" />
+        <circle cx="24" cy="25" r="2.5" fill="currentColor" />
       </svg>
     );
   }

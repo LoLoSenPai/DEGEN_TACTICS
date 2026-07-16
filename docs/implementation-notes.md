@@ -8,7 +8,7 @@
 - Vitest 4 for pure game and persistence tests.
 - A semantic 7x7 DOM grid; no canvas engine, Phaser, database, RPC, or wallet runtime.
 
-The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current suite contains 88 deterministic tests.
+The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current 102-test deterministic suite covers the pure engine, mission content, presentation, scoring, mastery, shipped animation geometry, sprite-load fallback, and persistence boundary.
 
 ## Current product surface
 
@@ -99,6 +99,8 @@ createInitialGameState(mission?)
 getValidMoves(state, unitId)
 getAttackableTargets(state, unitId)
 getPushTargets(state, unitId)
+getSentinelGuardArea(state, sentinelId)
+getEnemyInterceptor(state, targetEnemyId)
 moveUnit(state, unitId, destination)
 attackEnemy(state, unitId, enemyId, attackKind?)
 activateDeadeye(state, unitId, enemyId)
@@ -154,11 +156,19 @@ Enemy intent is a runtime invariant, not decorative UI copy.
 
 Selection, hover, tutorial copy, and animation progress are UI-only and do not trigger replanning. Identical input states produce byte-equivalent serialized plans.
 
-Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn before Turn 3 planning. Data Extraction's inactive breach slot is placed under an existing obstacle and uses unreachable script turns, so it has no visible breach or Whale event. Break the Breach starts with G4 incoming, spawns its 12-HP Whale before Turn 2 planning, and deterministically produces G4 -> F4 with the west cone E4/D3/D4/D5 when the authored setup is followed.
+Protect the Vault adds its breach warning before Turn 2 planning and Whale spawn before Turn 3 planning. Data Extraction's inactive breach slot is placed under an existing obstacle and uses unreachable script turns, so it has no visible breach or Whale event. Its Rugger begins at E2 and the stationary 6-HP Lane Sentinel begins at E3 with initiative 20, move 0, and damage 0. Break the Breach starts with G4 incoming, spawns its 12-HP Whale before Turn 2 planning, and deterministically produces G4 -> F4 with the west cone E4/D3/D4/D5 when the authored setup is followed.
+
+### Lane Sentinel interception
+
+`getSentinelGuardArea` derives four cardinal rays from current immutable state. Obstacles/terrain, the protected structure, and pushable objects stop the ray before their occupied tile; player units and enemies do not. `getEnemyInterceptor` filters living Sentinels that can see the intended hostile, then chooses by Manhattan distance, initiative, and stable ID.
+
+`attackEnemy` and Deadeye use that selector only for direct player attacks. When interception applies, the transition emits `attack-intercepted`, redirects the entire requested damage to the Sentinel, and then emits `unit-attacked` plus an optional `enemy-defeated` against that actual receiver. There is no overflow to the intended target. Attacking a Sentinel directly is unchanged, and `pushTarget` deliberately bypasses interception so forced movement and collision remain positional counters.
+
+Sentinel planning returns an exact zero-damage intent with `action: "guard"`, `special: "intercept-grid"`, the complete support `area`, `guardedEnemyIds`, and stable `supportTargets`. Resolution uses that same snapshot and emits `sentinel-fortified`; it does not create a hidden persistent buff. A later player transition derives the next grid and interception relationship from the new board.
 
 ## Events and animation
 
-Engine events describe movement, attack, damage, shield, push, collision, defeat, spawn, Whale state, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
+Engine events describe movement, attack, damage, shield, push, collision, defeat, spawn, Whale state, Sentinel interception/fortification, extraction, turn change, and mission end. They contain stable entity/tile references and numeric results, never CSS classes or durations.
 
 The store applies player transitions immediately and derives combat log, sprite state, path travel, impacts, shields, damage numbers, KO sequences, and banners from those ordered events. Terminal player attacks and collision pushes persist their result, best score, and completed mission only after their readable impact/death playback finishes; the already-computed engine result never changes. A skipped animation, slow device, or reduced-motion preference cannot change a rule result.
 
@@ -208,7 +218,7 @@ Battle exposes `window.render_game_to_text()` in development/test builds. The de
 - The objective kind; extraction snapshots include object ID, destination, and delivered state, while breach snapshots include target ID, spawned/defeated state, anvil object, and anvil destination.
 - Protected structure coordinate, integrity, and pristine/damaged state.
 - Squad state, signature availability, enemies, objects, breach, selection, action mode, highlights, and interaction lock.
-- Exact intent order, path, destination, target, damage, area, and special state.
+- Exact intent order, path, destination, target, damage, area, guarded enemy IDs, support targets, and special state.
 - Terminal outcome when present.
 
 Coordinates use board notation consistently. Arrays are stably ordered; timestamps, DOM IDs, and animation elapsed time are excluded.
@@ -217,6 +227,8 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 
 - Grid tiles are semantic buttons with descriptive ARIA labels and visible keyboard focus.
 - Movement, attack, push, danger, locked area, cargo route, and token overlays remain separate channels.
+- Sentinel support uses a quiet amber cardinal grid plus a stronger amber source-to-target tether and `GUARD` badge. It never enters the red danger-tile set.
+- Hovering a direct attack against a guarded hostile previews the actual receiver and damage as `INTERCEPT -> SENTINEL`; the shot and impact playback land on that same Sentinel.
 - Data Extraction renders its destination and route from `game.objective`; it never hard-codes E3 in the component.
 - Break the Breach renders its setup route and contextual coaching from `anvilObjectId` and `anvilDestination`; it never hard-codes F2 in presentation code.
 - Action controls derive legality from engine selectors. Components do not duplicate range, line-of-sight, charge, extraction, or activation rules.
@@ -227,18 +239,24 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 
 ## Testing strategy
 
-The current 88-test suite covers:
+The current 102-test deterministic suite covers:
 
 - Movement, occupancy, bounds, obstacles, shortest paths, and no diagonal traversal.
 - Melee/Sniper targeting, line of sight, activation limits, Wait, signatures, and undo invalidation.
 - Shields, damage, deaths, collision boundaries, Data Block movement, and Whale interruption.
-- Rugger/Drainer targeting, sequential occupancy, stable initiative, and exact-plan equivalence.
+- Rugger/Drainer targeting, Sentinel area/blockers/interception/tie-breakers, sequential occupancy, stable initiative, and exact-plan equivalence.
 - Protect's breach warning, Whale spawn/charge/slam/cancel/stagger, phase-5 timing, and defeat precedence.
-- Data Extraction registry/unlock/routing, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
+- Data Extraction registry/unlock/routing, the E2 Rugger/E3 Sentinel setup, direct-attack redirection and push bypass, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
 - Break the Breach registry/unlock/routing, immutable anvil data, no pre-spawn auto-win, exact Turn-2 spawn and cone, canonical charge break/stagger/anvil kill, blocked-push Seal destruction, fatal attack/collision terminalization, timeout, scoring, and medals.
 - Storage fallback, completed-operation migration, unlock persistence, and best-score non-regression.
 
 Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review.
+
+## Lane Sentinel asset status
+
+The live board piece is the SpriteCook pixel master at `public/assets/sprites/sentinel.png`. Runtime animation uses four transparent horizontal sheets under `public/assets/sprites/spritecook`: `idle`, `hurt`, and custom `guard` contain eight native 180x180 frames; `death` contains twelve. The `intercept-grid` status cue selects `guard`, damage selects `hurt`, and a fatal event holds the complete death sheet before entity removal. The immobile, zero-damage support enemy intentionally has no walk or attack sheet.
+
+`battleSpritePreloader.ts` combines the 18 squad sheets and four Sentinel sheets into one shared decode cache. Title entry preloads opportunistically; direct battle entry keeps controls locked until every URL has either decoded or reported failure, preventing a first-use animation from replacing idle with an unavailable background. A failed sheet uses the shipped static character master for that state rather than hiding the piece or locking the game forever. Reduced-motion mode freezes each Sentinel state on a distinct semantic frame rather than hiding it. Exact guard cells, tethers, badges, and receiver previews remain state-driven SVG/CSS overlays and are never baked into the raster art.
 
 ## Safe extension points
 

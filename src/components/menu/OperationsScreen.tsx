@@ -18,7 +18,7 @@ const OPERATION_ART = {
     className: "operation-poster-vault",
   },
   "data-extraction": {
-    hero: "/assets/sprites/pusher.png",
+    hero: "/assets/sprites/sentinel.png",
     prop: "/assets/sprites/data-block.png",
     className: "operation-poster-data",
   },
