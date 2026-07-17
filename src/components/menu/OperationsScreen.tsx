@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Check, LockKey, Play, Trophy } from "@phosphor-icons/react";
 import {
-  getBattleHref,
   getNextOperationId,
+  getSquadHref,
   isOperationUnlocked,
   PLAYABLE_OPERATIONS,
 } from "@/lib/game";
@@ -101,7 +101,7 @@ export function OperationsScreen() {
               {unlocked ? (
                 <Link
                   className="operation-deploy"
-                  href={getBattleHref(operation.id)}
+                  href={getSquadHref(operation.id)}
                   aria-label={`${completed ? "Replay" : highlighted ? "Deploy" : "Play"} ${operation.title}`}
                 >
                   <Play weight="fill" aria-hidden="true" />
@@ -119,7 +119,7 @@ export function OperationsScreen() {
       </section>
 
       <footer className="operations-footer">
-        <span>One squad. Exact enemy intents. No random rolls.</span>
+        <span>Four specialists. Choose three. No random rolls.</span>
         <Link href="/training">Need a refresher? Field Training</Link>
       </footer>
     </main>

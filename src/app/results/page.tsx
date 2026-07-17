@@ -9,6 +9,7 @@ import {
   getFollowingOperationId,
   getMissionDefinition,
   getOperationMetadata,
+  getSquadHref,
 } from "@/lib/game";
 import { useGameStore } from "@/store/gameStore";
 import "@/components/results/results.css";
@@ -110,9 +111,7 @@ export default function ResultsPage() {
   const continueToNextOperation = followingOperationId
     ? () => {
         retrying.current = true;
-        startMission(followingOperationId);
-        const href = getBattleHref(followingOperationId);
-        window.location.replace(`${href}${href.includes("?") ? "&" : "?"}intro=1`);
+        window.location.replace(getSquadHref(followingOperationId));
       }
     : undefined;
 

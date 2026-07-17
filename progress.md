@@ -299,3 +299,12 @@ Original prompt: Build Degen Tactics from scratch as a premium-feeling Next.js 1
 - The full deterministic suite passes all 110 tests. The Hacker remains intentionally limited to the specialist lab; the next content milestone is a compact choose-three-from-four squad-selection flow for authored operations.
 - Added distinct circular Jam/Blackout SVG signal FX, exact reduced-damage callouts, an offline Sentinel inspector state, and a shared accessible modal focus trap. Phone-to-tablet resize now resumes the tutorial instead of bypassing it.
 - Final release gates pass: ESLint with zero warnings, strict TypeScript, all 110 Vitest cases, the optimized Next.js 15.5.12 production build, bundled web-game client capture, full semantic System Override replay, responsive QA, and zero captured console/page errors.
+
+## 2026-07-17 - Three-of-four deployment and campaign Hacker
+
+- Added a full-screen `/squad/[missionId]` deployment scene with four large SpriteCook specialists, three formation slots, concise ability/charge copy, Recommended reset, and one dominant Deploy action.
+- Made squad rules mission-authored and deterministic. Protect the Vault accepts any three roles and recommends Guardian / Sniper / Pusher; Data Extraction requires Pusher and recommends Sniper / Pusher / Hacker; Break the Breach currently locks Guardian / Sniper / Pusher until an alternate boss route is balanced.
+- Persisted one validated squad per operation. Invalid, duplicate, unknown, or forbidden stored roles fall back safely, while reload and Results Retry preserve the player's legal lineup.
+- Integrated Hacker candidate spawns into campaign mission definitions and completed Data Extraction with the recommended Sniper / Pusher / Hacker squad on Turn 4. Jam, Blackout, Sentinel shutdown, cargo delivery, results, Next Operation, and Retry all matched the deterministic engine state.
+- Restored the Lane Sentinel's existing eight-frame idle under Windows reduced-motion settings. The semantic enemy idle now advances while decorative chassis motion may remain reduced; no SpriteCook generation request ran and no credits were spent.
+- Responsive browser QA passed at 1440x900, 1024x768, and 390x844 with no horizontal overflow or captured console/page errors. Final gates pass: ESLint with zero warnings, strict TypeScript, all 116 Vitest cases, `git diff --check`, and the optimized Next.js 15.5.12 production build.

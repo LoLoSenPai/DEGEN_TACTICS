@@ -13,7 +13,7 @@ Core pillars:
 
 ## Player journey
 
-The player lands on the Title screen and can deploy immediately as a guest. Operations exposes the three authored missions and their local completion state. Field Training is player-controlled and split into three core chapters plus optional Chapter 4, **System Override**, so it teaches the rules without blocking the game behind one long tutorial. Completing chapters 1-3 satisfies onboarding; chapter 4 is a specialist certification and never gates campaign play.
+The player lands on the Title screen and can deploy immediately as a guest. Deployment opens a full-screen squad choice before battle; Operations exposes the three authored missions and their local completion state. Field Training is player-controlled and split into three core chapters plus optional Chapter 4, **System Override**, so it teaches the rules without blocking the game behind one long tutorial. Completing chapters 1-3 satisfies onboarding; chapter 4 is a specialist certification and never gates campaign play.
 
 The current sequence is:
 
@@ -85,7 +85,15 @@ Undo restores only the most recent legal movement. It is available until an atta
 - The Hacker may move before Jam or Blackout. Either action ends the Hacker's activation and clears movement undo.
 - Disruption is consumed only after the affected enemy reaches its exact initiative slot. Blackout against a charging Whale consumes that activation, clears its locked cone, and returns it to Ready.
 
-The Hacker is currently available only in System Override. Campaign operations still deploy the proven Guardian, Sniper, and Pusher trio; the next product step is a compact choose-three-from-four deployment flow.
+### Deployment rules
+
+Every operation deploys exactly three living specialists. The selection screen shows all four large animated pieces, three formation slots, concise ability/charge copy, the recommended trio, and any operation constraint before the player commits.
+
+- **Protect the Vault:** any three roles are legal; Guardian / Sniper / Pusher is recommended. The Hacker candidate spawn is E6.
+- **Data Extraction:** Pusher is required; every other pair is legal. Sniper / Pusher / Hacker is recommended, with Hacker spawning at E6.
+- **Break the Breach:** Guardian / Sniper / Pusher are currently required. The Hacker remains unavailable here until a deterministic alternate boss solution is balanced and verified.
+
+The last valid trio is remembered per operation. Retry starts the same mission with the same squad rather than silently restoring the recommendation.
 
 ## Field Training
 
@@ -173,6 +181,8 @@ The `W` mark is explanatory only: G4 starts as a normal free tile. It becomes an
 | `#` | Obstacle | A2, C2, G2, D4, D5 |
 
 This operation has no active Whale breach. The Rig Breaker uses the Rugger rules from Operation 01. The stationary Lane Sentinel replaces the former Data Leech and begins directly on the cargo destination, turning interception into the operation's opening positional problem.
+
+The recommended Sniper / Pusher / Hacker line is a verified Turn-4 solution: Jam limits the Rig Breaker, Blackout creates a zero-damage `HOLD` after the Sentinel falls, and the Pusher completes the C3-to-E3 Batter Up delivery. Guardian-based trios remain legal as long as the Pusher is present.
 
 ### Puzzle spine and timing
 

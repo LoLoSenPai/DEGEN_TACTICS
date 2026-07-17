@@ -9,17 +9,21 @@ import {
   calculateEnemyPlan,
   compileEnemyPlayback,
   compilePushPlayback,
+  canonicalizeSquad,
   createInitialGameState,
   createMissionResult,
   getMovementPath,
   getPlayerMovementPresentationDuration,
   getMissionDefinition,
+  isAllowedSquadSelection,
   isMissionId,
+  isPlayableMissionId,
   isTrainingMissionId,
   jamEnemy,
   moveUnit,
   pushTarget,
   resolveEnemyTurn,
+  sanitizeSquadSelections,
   activateDeadeye,
   waitUnit,
   type EnemyTurnPlan,
@@ -32,6 +36,7 @@ import {
   type PlayerIdentity,
   type Position,
   type PushKind,
+  type UnitRole,
 } from "@/lib/game";
 
 export type ActionMode = "move" | "attack" | "jam" | "push" | "ability" | null;
@@ -118,10 +123,12 @@ interface GameStore {
   profile: PlayerIdentity;
   bestScores: Record<string, number>;
   completedMissionIds: string[];
+  squadSelections: Record<string, UnitRole[]>;
   lastResult: MissionResult | null;
   settings: PersistentSettings;
   hydrated: boolean;
   startMission: (missionId?: string) => void;
+  setSquadSelection: (missionId: string, roles: readonly UnitRole[]) => boolean;
   cancelSession: () => void;
   ensureIdentity: () => void;
   setHydrated: (hydrated: boolean) => void;
@@ -587,6 +594,7 @@ export const useGameStore = create<GameStore>()(
       profile: initialProfile,
       bestScores: {},
       completedMissionIds: [],
+      squadSelections: {},
       lastResult: null,
       settings: { soundMuted: true, tutorialComplete: false, trainingCompleted: 0 },
       hydrated: false,
@@ -596,7 +604,11 @@ export const useGameStore = create<GameStore>()(
         sessionGeneration += 1;
         const generation = sessionGeneration;
         const definition = getMissionDefinition(missionId);
-        const game = createInitialGameState(definition);
+        const storedSquad = get().squadSelections[definition.id];
+        const squad = storedSquad && isAllowedSquadSelection(definition, storedSquad)
+          ? storedSquad
+          : undefined;
+        const game = createInitialGameState(definition, squad);
         logId += 1;
         set({
           game,
@@ -619,6 +631,19 @@ export const useGameStore = create<GameStore>()(
           if (generation === sessionGeneration) set({ turnBanner: null });
           bannerTimer = null;
         }, 650);
+      },
+
+      setSquadSelection: (missionId, roles) => {
+        const definition = getMissionDefinition(missionId);
+        if (!isPlayableMissionId(definition.id) || !isAllowedSquadSelection(definition, roles)) return false;
+        const squad = canonicalizeSquad(roles);
+        set((state) => ({
+          squadSelections: {
+            ...state.squadSelections,
+            [definition.id]: squad,
+          },
+        }));
+        return true;
       },
 
       cancelSession: () => {
@@ -1199,6 +1224,7 @@ export const useGameStore = create<GameStore>()(
         profile: state.profile,
         bestScores: state.bestScores,
         completedMissionIds: state.completedMissionIds,
+        squadSelections: state.squadSelections,
         lastResult: state.lastResult,
         settings: state.settings,
       }),
@@ -1234,6 +1260,7 @@ export const useGameStore = create<GameStore>()(
                 && !isTrainingMissionId(missionId),
             )
           : [];
+        const squadSelections = sanitizeSquadSelections(persisted.squadSelections);
         const completedMissionIds = Array.from(new Set([
           ...persistedCompleted,
           ...Object.entries(safeScores)
@@ -1246,6 +1273,7 @@ export const useGameStore = create<GameStore>()(
           profile: validProfile ? persisted.profile! : currentState.profile,
           bestScores: safeScores,
           completedMissionIds,
+          squadSelections,
           lastResult: validResult ? (persisted.lastResult ?? null) : null,
           settings: {
             soundMuted: typeof persistedSettings?.soundMuted === "boolean"

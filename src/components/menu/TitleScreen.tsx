@@ -16,7 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { useGameStore } from "@/store/gameStore";
 import { preloadBattleSpriteSheets } from "@/components/battle/battleSpritePreloader";
-import { getBattleHref, getNextOperationId, getOperationMetadata, PLAYABLE_OPERATIONS } from "@/lib/game";
+import { getNextOperationId, getOperationMetadata, getSquadHref, PLAYABLE_OPERATIONS } from "@/lib/game";
 
 export function TitleScreen() {
   const router = useRouter();
@@ -40,7 +40,7 @@ export function TitleScreen() {
 
   const startMission = () => {
     setLaunchWarningOpen(false);
-    router.push(getBattleHref(nextOperationId));
+    router.push(getSquadHref(nextOperationId));
   };
 
   const play = () => {
@@ -58,7 +58,7 @@ export function TitleScreen() {
       setLaunchWarningOpen(true);
       window.history.replaceState({}, "", "/");
     } else {
-      router.replace(getBattleHref(nextOperationId));
+      router.replace(getSquadHref(nextOperationId));
     }
   }, [hydrated, nextOperationId, router, trainingCompleted]);
 

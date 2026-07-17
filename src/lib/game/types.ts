@@ -50,6 +50,13 @@ export interface UnitDefinition {
   readonly signatureName: string;
 }
 
+export interface MissionSquadRules {
+  readonly size: 3;
+  readonly candidatePositions: Readonly<Partial<Record<UnitRole, Position>>>;
+  readonly recommended: readonly UnitRole[];
+  readonly allowedCompositions: readonly (readonly UnitRole[])[];
+}
+
 export interface EnemyDefinition {
   readonly id: string;
   readonly name: string;
@@ -81,6 +88,7 @@ export interface MissionDefinition {
     maxHp: number;
   }>;
   readonly units: readonly UnitDefinition[];
+  readonly squad?: MissionSquadRules;
   readonly enemies: readonly EnemyDefinition[];
   readonly objects: readonly PushableObjectDefinition[];
   readonly breach: Readonly<{

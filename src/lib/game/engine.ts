@@ -1,4 +1,5 @@
 import { DEFAULT_MISSION, getMissionDefinition } from "./mission";
+import { resolveMissionSquad } from "./squad";
 import {
   CARDINAL_DIRECTIONS,
   addPositions,
@@ -28,6 +29,7 @@ import type {
   PushKind,
   PushTarget,
   PushTargetKind,
+  UnitRole,
 } from "./types";
 
 const clonePosition = ({ x, y }: Position): Position => ({ x, y });
@@ -143,7 +145,10 @@ const isOccupied = (
 
 export const createInitialGameState = (
   definition: MissionDefinition = DEFAULT_MISSION,
-): GameState => ({
+  squadRoles?: readonly UnitRole[],
+): GameState => {
+  const unitDefinitions = resolveMissionSquad(definition, squadRoles);
+  return ({
   missionId: definition.id,
   turn: 1,
   maxTurns: definition.maxTurns,
@@ -160,7 +165,7 @@ export const createInitialGameState = (
     : { ...definition.objective },
   completedEnemyPhases: 0,
   phase: "player",
-  units: definition.units.map((unit) => ({
+  units: unitDefinitions.map((unit) => ({
     ...unit,
     position: clonePosition(unit.position),
     hp: unit.maxHp,
@@ -189,10 +194,11 @@ export const createInitialGameState = (
     status: definition.breach.warningTurn === 1 ? "incoming" : "dormant",
   },
   defeatedEnemies: 0,
-  initialSquadSize: definition.units.length,
+  initialSquadSize: unitDefinitions.length,
   vaultEverDamaged: false,
   whaleChargeCancelled: false,
-});
+  });
+};
 
 export const getStateFingerprint = (state: GameState): string =>
   JSON.stringify({

@@ -115,6 +115,7 @@ When states overlap, preserve both meanings with different visual channels—for
 ## HUD and interaction rules
 
 - Every panel has one job and one primary reading order.
+- Squad deployment is a full-screen game scene: four large animated specialists around three readable formation slots, with compact ability copy and one dominant Deploy action. It must never regress into a grid of dashboard stat cards.
 - Primary buttons use clear contrast and a mechanical press state. Secondary actions do not imitate primary emphasis.
 - Disabled future features include a visible “Coming Soon” label or explanatory copy; they never look accidentally broken.
 - Enemy intents show order, path/destination, target or area, damage, and special state without requiring hover.
@@ -140,7 +141,7 @@ Motion communicates state change; it does not run continuously for spectacle.
 | Victory / defeat | Short authored reveal; no looping confetti or prolonged lockout |
 | Panel changes | Opacity plus a few pixels of travel; no large sliding dashboard cards |
 
-Controls lock while enemy events are replayed. Timers are cancelled when their screen unmounts. The pure game state resolves independently of animation, so presentation cannot change outcomes. Under `prefers-reduced-motion: reduce`, suppress decorative travel/shake/pulse while retaining a distinct static frame for every essential combat state.
+Controls lock while enemy events are replayed. Timers are cancelled when their screen unmounts. The pure game state resolves independently of animation, so presentation cannot change outcomes. Under `prefers-reduced-motion: reduce`, suppress decorative travel/shake/pulse while preserving semantic state communication. The Lane Sentinel's restrained eight-frame idle remains active so a live guard cannot look like a missing or frozen asset; decorative chassis motion may stop.
 
 ## Asset production rules
 
@@ -207,7 +208,7 @@ The approved 166x166 master is SpriteCook asset `c0608002-9691-4b1b-b6fe-ad812cb
 
 > Stationary hostile interception pylon for a dark tactical science-fiction game; compact low-and-wide non-cubic silhouette, matte graphite armored body, split kite-shield front plate, four short amber projector fins, narrow amber aperture, restrained red enemy accents, and four planted clamp feet; readable at board scale; stable isometric ground anchor; transparent background; no weapon, projectile, grid, tether, aura, text, or baked visual effects.
 
-The approved SpriteCook result is live at `public/assets/sprites/sentinel.png`, with native 180-pixel-frame sheets for `idle`, `hurt`, `death`, and the custom `guard` state under `public/assets/sprites/spritecook`. One master request and one grouped character-animation run cost 74 credits total with no rejected retries. The Sentinel has no walk or attack sheet because its deterministic rules make it stationary and non-damaging; the board continues to draw exact guard cells and tethers separately.
+The approved SpriteCook result is live at `public/assets/sprites/sentinel.png`, with native 180-pixel-frame sheets for `idle`, `hurt`, `death`, and the custom `guard` state under `public/assets/sprites/spritecook`. One master request and one grouped character-animation run cost 74 credits total with no rejected retries. The Sentinel has no walk or attack sheet because its deterministic rules make it stationary and non-damaging; the board continues to draw exact guard cells and tethers separately. The deployment milestone only corrected playback of the existing idle sheet under reduced motion: no new generation request ran and no credits were spent.
 
 **HQ diorama exploration**
 

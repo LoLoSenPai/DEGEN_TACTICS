@@ -1044,7 +1044,7 @@
 }
 
 .sentinel-spritecook.is-idle .sentinel-spritecook-frames {
-  animation: spritecook-frames-8 1000ms linear infinite;
+  animation: spritecook-frames-8 820ms linear infinite;
 }
 
 .sentinel-spritecook.is-guard .sentinel-spritecook-frames {
@@ -1120,7 +1120,7 @@
 }
 
 .game-piece.enemy-piece .enemy-battle-sprite.is-idle.kind-sentinel {
-  animation: none;
+  animation: sentinel-idle-chassis 1.3s steps(4, end) infinite;
 }
 
 .game-piece.enemy-piece .enemy-battle-sprite.is-walk.kind-rugger {
@@ -3128,6 +3128,13 @@
   50% { transform: translateY(1px) scale(1.015, 0.985); filter: brightness(1.08) drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
 }
 
+@keyframes sentinel-idle-chassis {
+  0%, 100% { transform: translateY(0) scale(1); filter: brightness(1); }
+  25% { transform: translateY(-1.5%) scale(1.012, 0.99); filter: brightness(1.08); }
+  50% { transform: translateY(-3%) scale(1.02, 0.985); filter: brightness(1.14); }
+  75% { transform: translateY(-1%) scale(1.008, 0.995); filter: brightness(1.05); }
+}
+
 @keyframes enemy-drainer-idle {
   0%, 100% { transform: translateY(1px) rotate(-0.6deg); filter: brightness(1) drop-shadow(0 8px 5px rgba(0, 0, 0, 0.75)); }
   50% { transform: translateY(-4px) rotate(0.8deg); filter: brightness(1.16) drop-shadow(0 0 8px rgba(203, 79, 238, 0.35)); }
@@ -3638,23 +3645,6 @@
 
   .enemy-motion-accent {
     display: none;
-  }
-
-  .sentinel-spritecook-frames {
-    animation: none !important;
-  }
-
-  .sentinel-spritecook.is-idle .sentinel-spritecook-frames {
-    background-position: 42.8571% 0;
-  }
-
-  .sentinel-spritecook.is-guard .sentinel-spritecook-frames,
-  .sentinel-spritecook.is-hurt .sentinel-spritecook-frames {
-    background-position: 57.1429% 0;
-  }
-
-  .sentinel-spritecook.is-death .sentinel-spritecook-frames {
-    background-position: 100% 0;
   }
 
 }

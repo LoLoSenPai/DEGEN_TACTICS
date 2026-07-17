@@ -4,12 +4,12 @@ The roadmap protects the quality of the tactical core. New content is gated by r
 
 ## Current vertical slice - Three Fracture Zone operations
 
-The playable product now uses a focused **Title -> Operations or Training -> Battle -> Results** flow.
+The playable product now uses a focused **Title -> Squad -> Battle -> Results** flow, with Operations and Training as optional branches.
 
 ### Operation 01 - Protect the Vault
 
 - Authored five-turn survival puzzle on a 7x7 board.
-- Guardian, Sniper, and Pusher activation economy.
+- Choose any three of Guardian, Sniper, Pusher, and Hacker; the original trio remains recommended.
 - Shield Wall, Deadeye, Shove, Batter Up, collision damage, and movable Data Block.
 - Deterministic Rugger, Drainer, and two-phase Whale with exact intents.
 - Vault/squad defeat precedence, operation-specific scoring, and three medals.
@@ -20,6 +20,7 @@ The playable product now uses a focused **Title -> Operations or Training -> Bat
 - Uses the `extract-object` objective variant: deliver the Data Block to E3 before enemy phase 5 ends.
 - Wins immediately on exact delivery and emits extraction/mission-end events from the pure engine.
 - Places a stationary 6-HP Lane Sentinel on E3. Its exact amber Interception Grid redirects direct attacks against the aligned E2 Rugger, while push/collision remains a bypass and positional counter.
+- Requires the Pusher and recommends Sniper / Pusher / Hacker; Jam and Blackout are verified in the complete extraction solution.
 - Adds extraction route readability, tempo scoring, and Express Transfer, Rig Untouched, and Full Escort medals.
 - Reuses the proven battlefield art while validating that the new push-routing puzzle is fun before commissioning another complete arena.
 
@@ -30,16 +31,17 @@ The playable product now uses a focused **Title -> Operations or Training -> Bat
 - Turns one existing object into both setup puzzle and collision anvil. A blocked push does damage but leaves the charge active; the following slam destroys the 4-integrity Seal Generator.
 - Adds immediate attack/collision terminal outcomes, boss tempo scoring, and Charge Broken, Breach Window, and Full Squad medals.
 - Reuses the exact-intent, Whale, Pusher, combat-playback, persistence, and results systems without adding randomness or permanent power.
+- Keeps Guardian / Sniper / Pusher required until a Hacker boss route is deliberately balanced and verified.
 
 ### Current quality gates
 
-- Game-first title screen, three core training chapters plus optional System Override specialist training, operation selection, dynamic battle routes, and mission-aware results.
+- Game-first title screen, full-screen squad deployment, three core training chapters plus optional System Override specialist training, operation selection, dynamic battle routes, and mission-aware results.
 - A real win/lose/retry/next-operation loop for all three objective types.
 - Exact previews that match deterministic enemy resolution.
 - Animated movement, attacks, shields, impacts, damage, KO, heavy hits, and turn/result transitions.
-- Local guest identity, training progress, per-operation best scores, completion unlocks, last result, and safe storage fallback.
+- Local guest identity, training progress, per-operation squad choice and best scores, completion unlocks, last result, and safe storage fallback.
 - Desktop/tablet battle, phone notice, keyboard support, focus visibility, and reduced motion.
-- 110 passing deterministic engine/presentation/asset-registry/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review as release gates.
+- 116 passing deterministic engine/presentation/asset-registry/persistence tests plus lint, strict typecheck, production build, serialized-state browser checks, screenshot inspection, and console review as release gates.
 
 ## Next content sequence
 
@@ -59,15 +61,21 @@ The optional two-turn **System Override** lab teaches both verbs after the three
 
 The approved SpriteCook set uses master `c0608002-9691-4b1b-b6fe-ad812cbc48df` plus one grouped run, `c373c196-3c3f-4ca9-9fa2-2405fda93e55`, for `idle`, `walk`, `jam`, `blackout`, `hurt`, and `death`. The pass cost 114 credits, left 454, and brings the shared battle preload registry to 28 sheets.
 
-The Hacker is intentionally still confined to the training lab. This proves the mechanics and production art without silently changing the balance or canonical solutions of the three shipped operations.
+The Hacker now joins campaign deployment where the authored puzzle supports it. Protect the Vault allows any trio; Data Extraction requires Pusher and recommends Sniper / Pusher / Hacker; Break the Breach keeps the proven Guardian / Sniper / Pusher trio locked until its boss route is rebalanced.
 
-### 1. Three-of-four squad selection
+### Completed - Three-of-four squad selection
 
-With the fourth hero proven in the specialist lab, allow the player to choose three operators before deployment. Keep this as a compact game screen or pre-battle choice, not a stat-heavy loadout dashboard.
+The full-screen `/squad/[missionId]` hangar now lets the player choose three operators before deployment. Large animated pieces, three formation slots, compact exact ability copy, authored recommendations, and required-role messaging keep the screen game-like rather than turning it into a stat-heavy loadout dashboard.
 
 - No gear score, rarity, stat upgrade, or permanent power grind.
-- Each authored operation remains solvable by more than one valid trio or clearly communicates a recommended squad.
-- Selection persistence is local and never required for the existing default squad flow.
+- Protect the Vault permits all four choose-three combinations; Data Extraction requires Pusher; Break the Breach explicitly locks its currently proven trio.
+- Selection persists locally per mission, survives reload, and is reused by Retry. Invalid or outdated combinations fall back safely.
+
+### Next - Composition balance and a new authored decision
+
+- Run novice playtests across the legal Protect and Data Extraction trios, then adjust recommendation copy or mission rules without adding permanent power.
+- Unlock Hacker for Break the Breach only after a deterministic alternate boss solution meets the same readability and scoring bar.
+- Build the next operation around a genuinely new terrain, enemy, or composition decision rather than adding a cosmetic map reskin.
 
 ## Later offline depth
 

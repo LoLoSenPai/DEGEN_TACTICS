@@ -8,7 +8,7 @@
 - Vitest 4 for pure game and persistence tests.
 - A semantic 7x7 DOM grid; no canvas engine, Phaser, database, RPC, or wallet runtime.
 
-The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current 110-test deterministic suite covers the pure engine, mission content, presentation, scoring, mastery, disruption, shipped animation geometry, sprite-load fallback, and persistence boundary.
+The package manager is pinned in `package.json`. Application behavior must pass `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. The current 116-test deterministic suite covers the pure engine, mission content, squad validation, presentation, scoring, mastery, disruption, shipped animation geometry, sprite-load fallback, and persistence boundary.
 
 ## Current product surface
 
@@ -16,8 +16,8 @@ The active product flow is intentionally game-first:
 
 ```text
 Title
-  |-- Continue / Play as Guest --> dynamic Battle --> Results
-  |-- Operations ---------------> dynamic Battle --> Results
+  |-- Continue / Play as Guest --> Squad --> dynamic Battle --> Results
+  |-- Operations ---------------> Squad --> dynamic Battle --> Results
   `-- Field Training -----------> training Battle --> Training
 ```
 
@@ -28,12 +28,13 @@ There is no required HQ, campaign map, or loadout step. The old mission and load
 | `/` | Hydrates local progress, shows the title menu, and deploys to the next operation |
 | `/operations` | Shows all three operations, including prerequisite, completion, and best score state |
 | `/training` | Shows three core chapters, optional System Override specialist training, and local completion state |
+| `/squad/[missionId]` | Validates unlock state and renders the operation's full-screen choose-three deployment |
 | `/battle/[missionId]` | Validates the registry ID, starts that mission fresh, mounts controls/serializer, and rejects a locked operation |
 | `/battle/protect-the-vault` | Legacy-compatible battle entry |
 | `/results` | Reads `lastResult`, renders operation-specific scoring/medals, retries the same mission, or continues to the next unlocked operation |
 | `/missions`, `/loadout/protect-the-vault` | Redirect to `/operations` |
 
-`getBattleHref(missionId)` is the single route builder. Battle presentation and results resolve mission copy through operation metadata rather than branching on a page pathname.
+`getSquadHref(missionId)` builds deployment links and `getBattleHref(missionId)` builds battle links. Battle presentation and results resolve mission copy through operation metadata rather than branching on a page pathname.
 
 ## System boundaries
 
@@ -62,7 +63,7 @@ Game rules never depend on React, the router, DOM APIs, animation timing, LocalS
 
 ## Domain model
 
-`MissionDefinition` and `GameState` carry a discriminated objective union:
+`MissionDefinition` carries immutable squad rules and, together with `GameState`, a discriminated objective union. Squad rules define allowed three-role combinations, a recommended trio, required roles, and authored spawn candidates; `resolveMissionSquad` validates and orders the requested roles deterministically before state creation.
 
 ```ts
 type MissionObjective =
@@ -95,7 +96,7 @@ Other core values are `Tile`, `PlayerUnit`, `Enemy`, `PushableObject`, `Vault`, 
 ### Pure public rules
 
 ```ts
-createInitialGameState(mission?)
+createInitialGameState(mission?, squadRoles?)
 getValidMoves(state, unitId)
 getAttackableTargets(state, unitId)
 getPushTargets(state, unitId)
@@ -210,6 +211,7 @@ type PersistedProfile = {
   identity: PlayerIdentity;
   bestScores: Record<string, number>;
   completedMissionIds: string[];
+  squadSelections: Record<string, UnitRole[]>;
   lastResult?: MissionResult;
   settings: {
     soundMuted: boolean;
@@ -219,9 +221,11 @@ type PersistedProfile = {
 };
 ```
 
-The Zustand slice stores these as sibling fields; the grouped type only documents the persistence boundary. Only victories append a mission ID, duplicates are removed, and unlocks follow Protect the Vault -> Data Extraction -> Break the Breach. Existing best scores can also safely migrate into completion progress. A new score replaces a mission best only when higher.
+The Zustand slice stores these as sibling fields; the grouped type only documents the persistence boundary. `squadSelections` stores only valid mission IDs and canonicalized legal three-role combinations; stale, duplicate, unknown, or mission-forbidden values are discarded. Only victories append a mission ID, duplicates are removed, and unlocks follow Protect the Vault -> Data Extraction -> Break the Breach. Existing best scores can also safely migrate into completion progress. A new score replaces a mission best only when higher.
 
 Storage reads use version/schema guards and `try/catch`. Missing, corrupt, incompatible, or unavailable storage produces default guest data without blocking startup. Active battle state is never persisted.
+
+Deployment writes the chosen trio before starting the session. Mission reset and Results Retry resolve that stored mission-specific trio, so a player can immediately replay the same tactical composition.
 
 `settings.trainingCompleted` accepts integers from 0 through 4. Values 0-3 represent the completed prefix of the core chapters; 4 records the optional System Override specialist certification. `tutorialComplete` becomes true once the core threshold reaches 3 and does not require chapter 4.
 
@@ -242,6 +246,7 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 ## UI implementation rules
 
 - Grid tiles are semantic buttons with descriptive ARIA labels and visible keyboard focus.
+- Squad selection uses semantic operator cards and three formation slots; authored required/unavailable roles are explained before Deploy rather than failing in battle.
 - Movement, attack, push, danger, locked area, cargo route, and token overlays remain separate channels.
 - Sentinel support uses a quiet amber cardinal grid plus a stronger amber source-to-target tether and `GUARD` badge. It never enters the red danger-tile set.
 - Hovering a direct attack against a guarded hostile previews the actual receiver and damage as `INTERCEPT -> SENTINEL`; the shot and impact playback land on that same Sentinel.
@@ -256,7 +261,7 @@ Coordinates use board notation consistently. Arrays are stably ordered; timestam
 
 ## Testing strategy
 
-The current 110-test deterministic suite covers:
+The current 116-test deterministic suite covers:
 
 - Movement, occupancy, bounds, obstacles, shortest paths, and no diagonal traversal.
 - Melee/Sniper targeting, line of sight, activation limits, Wait, signatures, and undo invalidation.
@@ -267,8 +272,9 @@ The current 110-test deterministic suite covers:
 - Data Extraction registry/unlock/routing, the E2 Rugger/E3 Sentinel setup, direct-attack redirection and push bypass, exact object/destination acceptance, four approach directions, immediate success events, timeout, deterministic intents, scoring, and medals.
 - Break the Breach registry/unlock/routing, immutable anvil data, no pre-spawn auto-win, exact Turn-2 spawn and cone, canonical charge break/stagger/anvil kill, blocked-push Seal destruction, fatal attack/collision terminalization, timeout, scoring, and medals.
 - Storage fallback, completed-operation migration, unlock persistence, and best-score non-regression.
+- Default/recommended squads, required-role constraints, duplicate/unknown/forbidden rejection, deterministic spawn positions, and persisted squad sanitization.
 
-Browser QA exercises Title -> Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry, next-operation launch, reload persistence, exact serialized state, and console-error review. System Override has additionally been completed through the real DOM at 1440px and 1024px; the phone route shows the designed larger-screen notice, and all three captures reported zero console errors.
+Browser QA exercises Title -> Squad/Operations/Training -> Battle -> Results at desktop/tablet sizes and the phone battle notice. Important flows include squad swapping and reload persistence, required/locked roles, direct dynamic mission entry, locked-operation rejection, canonical victory, deliberate defeat, Data Block delivery, the Break the Breach canonical Turn-4 win and blocked-push slam defeat, Retry with the same lineup, next-operation deployment, exact serialized state, and console-error review. The recommended Sniper / Pusher / Hacker squad completed Data Extraction on Turn 4 through the real DOM with Jam and Blackout affecting the exact plans as previewed.
 
 ## SpriteCook asset status
 
@@ -276,7 +282,7 @@ The live board piece is the SpriteCook pixel master at `public/assets/sprites/se
 
 The Hacker master is SpriteCook asset `c0608002-9691-4b1b-b6fe-ad812cbc48df`, delivered at 166x166. One grouped run, `c373c196-3c3f-4ca9-9fa2-2405fda93e55`, produced six transparent sheets with native 180x180 frames: `idle`, `walk`, custom `jam`, custom `blackout`, `hurt`, and `death`. The master plus single grouped batch cost 114 credits and left a balance of 454; no per-animation generation loop was used.
 
-`battleSpritePreloader.ts` combines the 24 four-hero sheets and four Sentinel sheets into one shared 28-sheet decode cache. Title entry preloads opportunistically; direct battle entry keeps controls locked until every URL has either decoded or reported failure, preventing a first-use animation from replacing idle with an unavailable background. A failed sheet uses the shipped static character master for that state rather than hiding the piece or locking the game forever. Reduced-motion mode freezes each Sentinel/Hacker state on a distinct semantic frame rather than hiding it. Exact guard cells, tethers, disruption badges, and receiver previews remain state-driven SVG/CSS overlays and are never baked into the raster art.
+`battleSpritePreloader.ts` combines the 24 four-hero sheets and four Sentinel sheets into one shared 28-sheet decode cache. Title entry preloads opportunistically; direct battle entry keeps controls locked until every URL has either decoded or reported failure, preventing a first-use animation from replacing idle with an unavailable background. A failed sheet uses the shipped static character master for that state rather than hiding the piece or locking the game forever. The Sentinel's existing eight-frame idle remains active under reduced-motion because it communicates the enemy's live semantic state; decorative chassis motion can still stop, and other combat states retain readable poses. Exact guard cells, tethers, disruption badges, and receiver previews remain state-driven SVG/CSS overlays and are never baked into the raster art. This fix reused the shipped sheet: no SpriteCook request ran and no credits were spent.
 
 ## Safe extension points
 

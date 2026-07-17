@@ -3,6 +3,7 @@ export * from "./mission";
 export * from "./presentation";
 export * from "./pathfinding";
 export * from "./mastery";
+export * from "./squad";
 export {
   activateDeadeye,
   applyShield,

@@ -50,6 +50,22 @@ export const PROTECT_THE_VAULT = {
       signatureName: "Batter Up",
     },
   ],
+  squad: {
+    size: 3,
+    candidatePositions: {
+      guardian: position(3, 2),
+      sniper: position(1, 4),
+      pusher: position(5, 5),
+      hacker: position(4, 5),
+    },
+    recommended: ["guardian", "sniper", "pusher"],
+    allowedCompositions: [
+      ["guardian", "sniper", "pusher"],
+      ["guardian", "sniper", "hacker"],
+      ["guardian", "pusher", "hacker"],
+      ["sniper", "pusher", "hacker"],
+    ],
+  },
   enemies: [
     {
       id: "rugger-north",
@@ -436,6 +452,21 @@ export const DATA_EXTRACTION = {
       signatureName: "Batter Up",
     },
   ],
+  squad: {
+    size: 3,
+    candidatePositions: {
+      guardian: position(5, 1),
+      sniper: position(1, 4),
+      pusher: position(2, 5),
+      hacker: position(4, 5),
+    },
+    recommended: ["sniper", "pusher", "hacker"],
+    allowedCompositions: [
+      ["guardian", "sniper", "pusher"],
+      ["guardian", "pusher", "hacker"],
+      ["sniper", "pusher", "hacker"],
+    ],
+  },
   enemies: [
     {
       id: "rugger-extraction",
@@ -545,6 +576,19 @@ export const BREAK_THE_BREACH = {
       signatureName: "Batter Up",
     },
   ],
+  squad: {
+    size: 3,
+    candidatePositions: {
+      guardian: position(3, 2),
+      sniper: position(1, 2),
+      pusher: position(5, 4),
+      hacker: position(4, 5),
+    },
+    recommended: ["guardian", "sniper", "pusher"],
+    allowedCompositions: [
+      ["guardian", "sniper", "pusher"],
+    ],
+  },
   enemies: [],
   objects: [
     {
